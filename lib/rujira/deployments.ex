@@ -214,7 +214,7 @@ defmodule Rujira.Deployments do
     target =
       targets
       |> Map.get(protocol)
-      |> Enum.find(&(&1["id"] == id))
+      |> Enum.find(&(Map.get(&1, "id") == id))
 
     creator = target |> Map.get("creator") |> interpolate_string(ctx)
     salt = build_address_salt(protocol, id)
