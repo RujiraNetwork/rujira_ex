@@ -1,58 +1,61 @@
 defmodule Rujira.Thorchain.EventsTest do
   use ExUnit.Case, async: true
 
+  alias Rujira.Events.Event
   alias Rujira.Thorchain.Events
 
+  defp event(type, attrs), do: Event.new(type, attrs)
+
   test "parses swap" do
-    assert %Events.Swap{pool: "BTC.BTC", id: "abc"} =
-             Events.parse(%{type: "swap", attributes: %{"pool" => "BTC.BTC", "id" => "abc"}})
+    assert {:ok, %Events.Swap{pool: "BTC.BTC", id: "abc"}} =
+             Events.parse(event("swap", %{"pool" => "BTC.BTC", "id" => "abc"}))
   end
 
   test "parses transfer" do
-    assert %Events.Transfer{sender: "a", recipient: "b", amount: "100rune"} =
-             Events.parse(%{
-               type: "transfer",
-               attributes: %{"sender" => "a", "recipient" => "b", "amount" => "100rune"}
-             })
+    assert {:ok, %Events.Transfer{sender: "a", recipient: "b", amount: 100}} =
+             Events.parse(
+               event("transfer", %{"sender" => "a", "recipient" => "b", "amount" => "100"})
+             )
   end
 
   test "parses add_liquidity" do
-    assert %Events.AddLiquidity{pool: "BTC.BTC"} =
-             Events.parse(%{type: "add_liquidity", attributes: %{"pool" => "BTC.BTC"}})
+    assert {:ok, %Events.AddLiquidity{pool: "BTC.BTC"}} =
+             Events.parse(event("add_liquidity", %{"pool" => "BTC.BTC"}))
   end
 
   test "parses withdraw" do
-    assert %Events.Withdraw{pool: "ETH.ETH"} =
-             Events.parse(%{type: "withdraw", attributes: %{"pool" => "ETH.ETH"}})
+    assert {:ok, %Events.Withdraw{pool: "ETH.ETH"}} =
+             Events.parse(event("withdraw", %{"pool" => "ETH.ETH"}))
   end
 
   test "parses pending_liquidity" do
-    assert %Events.PendingLiquidity{pool: "BTC.BTC"} =
-             Events.parse(%{type: "pending_liquidity", attributes: %{"pool" => "BTC.BTC"}})
+    assert {:ok, %Events.PendingLiquidity{pool: "BTC.BTC"}} =
+             Events.parse(event("pending_liquidity", %{"pool" => "BTC.BTC"}))
   end
 
   test "parses oracle_price" do
-    assert %Events.OraclePrice{symbol: "ETH.ETH", price: "3800"} =
-             Events.parse(%{
-               type: "oracle_price",
-               attributes: %{"symbol" => "ETH.ETH", "price" => "3800"}
-             })
+    assert {:ok, %Events.OraclePrice{symbol: "ETH.ETH", price: price}} =
+             Events.parse(event("oracle_price", %{"symbol" => "ETH.ETH", "price" => "3800"}))
+
+    assert Decimal.equal?(price, Decimal.new("3800"))
   end
 
   test "parses bond" do
-    assert %Events.Bond{type: :bond} = Events.parse(%{type: "bond", attributes: %{}})
+    assert {:ok, %Events.Bond{type: :bond}} =
+             Events.parse(event("bond", %{}))
   end
 
   test "parses rebond" do
-    assert %Events.Bond{type: :rebond} = Events.parse(%{type: "rebond", attributes: %{}})
+    assert {:ok, %Events.Bond{type: :rebond}} =
+             Events.parse(event("rebond", %{}))
   end
 
   test "parses set_mimir" do
-    assert %Events.SetMimir{key: "Halt", value: "1"} =
-             Events.parse(%{type: "set_mimir", attributes: %{"key" => "Halt", "value" => "1"}})
+    assert {:ok, %Events.SetMimir{key: "Halt", value: "1"}} =
+             Events.parse(event("set_mimir", %{"key" => "Halt", "value" => "1"}))
   end
 
-  test "returns nil for unknown" do
-    assert nil == Events.parse(%{type: "unknown", attributes: %{}})
+  test "returns default event for unknown" do
+    assert {:ok, %Event{type: "unknown"}} = Events.parse(event("unknown", %{}))
   end
 end
