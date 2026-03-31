@@ -6,6 +6,7 @@ defmodule Rujira.Coin do
   in smallest units. Asset is always resolved at construction time.
   """
 
+  alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Assets.Asset
 
@@ -13,7 +14,7 @@ defmodule Rujira.Coin do
 
   @type t :: %__MODULE__{
           asset: Asset.t(),
-          amount: non_neg_integer()
+          amount: Amount.t()
         }
 
   @doc "Returns the native denom string for this coin's asset."

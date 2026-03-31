@@ -4,6 +4,45 @@ defmodule Rujira.Math do
   """
 
   @doc """
+  Parses any value to an integer. `nil` passes through.
+
+  Returns `{:ok, integer}`, `{:ok, nil}`, or `{:error, :invalid_integer}`.
+  """
+  @spec to_integer(nil | integer() | String.t()) :: {:ok, integer() | nil} | {:error, :invalid_integer}
+  def to_integer(nil), do: {:ok, nil}
+  def to_integer(value) when is_integer(value), do: {:ok, value}
+
+  def to_integer(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {n, ""} -> {:ok, n}
+      _ -> {:error, :invalid_integer}
+    end
+  end
+
+  def to_integer(_), do: {:error, :invalid_integer}
+
+  @doc """
+  Parses any value to a Decimal. `nil` passes through.
+
+  Returns `{:ok, Decimal.t}`, `{:ok, nil}`, or `{:error, :invalid_decimal}`.
+  """
+  @spec to_decimal(nil | integer() | float() | String.t() | Decimal.t()) ::
+          {:ok, Decimal.t() | nil} | {:error, :invalid_decimal}
+  def to_decimal(nil), do: {:ok, nil}
+  def to_decimal(%Decimal{} = value), do: {:ok, value}
+  def to_decimal(value) when is_integer(value), do: {:ok, Decimal.new(value)}
+  def to_decimal(value) when is_float(value), do: {:ok, Decimal.from_float(value)}
+
+  def to_decimal(value) when is_binary(value) do
+    case Decimal.parse(value) do
+      {d, ""} -> {:ok, d}
+      _ -> {:error, :invalid_decimal}
+    end
+  end
+
+  def to_decimal(_), do: {:error, :invalid_decimal}
+
+  @doc """
   Multiply two numbers and round down to integer
   """
   @spec mul_floor(number() | Decimal.t(), number() | Decimal.t()) :: integer()
@@ -43,7 +82,7 @@ defmodule Rujira.Math do
   Convert number from one decimal precision to another
   """
   @spec normalize(number() | float() | Decimal.t(), integer(), integer()) :: Decimal.t()
-  def normalize(a, from \\ 0, to \\ 8)
+  def normalize(a, from \\ 0, to \\ Rujira.Amount.decimals())
 
   def normalize(a, from, to) when is_float(a),
     do: do_normalize(Decimal.from_float(a), from, to)
