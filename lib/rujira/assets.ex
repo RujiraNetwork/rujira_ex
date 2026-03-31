@@ -12,7 +12,6 @@ defmodule Rujira.Assets do
   alias Thorchain.Types.QueryPoolsRequest
 
   @delimiters [".", "-", "/", "~"]
-  @coin_regex ~r/^(\d+(?:\.\d+)?|\.\d+)\s*([a-zA-Z][a-zA-Z0-9\/:._-]{2,127})$/
 
   # --- Pool queries ---
 
@@ -283,37 +282,6 @@ defmodule Rujira.Assets do
 
   def label(%{chain: chain, ticker: "ETH"}) when chain != "ETH", do: "ETH.#{chain}"
   def label(%{ticker: ticker}), do: ticker
-
-  # --- Coin/asset parsing ---
-
-  def parse_coins(str) do
-    str
-    |> String.split(",", trim: true)
-    |> Enum.map(&Regex.run(@coin_regex, &1))
-    |> Enum.reduce_while(%{}, fn
-      [_, amount, denom], acc -> {:cont, Map.put(acc, denom, String.to_integer(amount))}
-      _, _ -> {:halt, {:error, :invalid_denom_format}}
-    end)
-    |> case do
-      {:error, _} = error -> error
-      map -> {:ok, map}
-    end
-  end
-
-  def parse_asset(<<>>), do: {:error, :invalid_asset}
-
-  def parse_asset(asset_str) do
-    case String.split(asset_str, " ", parts: 2) do
-      [amount_str, asset] ->
-        case Integer.parse(amount_str) do
-          {amt, _} -> {:ok, {asset, amt}}
-          :error -> {:error, :invalid_amount}
-        end
-
-      _ ->
-        {:error, :invalid_asset}
-    end
-  end
 
   # --- Query matching ---
 
