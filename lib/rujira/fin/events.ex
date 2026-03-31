@@ -1,199 +1,43 @@
 defmodule Rujira.Fin.Events do
   @moduledoc """
-  Typed event structs and parser for FIN protocol wasm events.
+  Parser for FIN protocol wasm events.
+
+  Routes event structs to typed struct modules.
   """
 
-  defmodule Trade do
-    @moduledoc "A FIN trade event (`wasm-rujira-fin/trade`)."
-    defstruct [:contract, :side, :price, :rate, :offer, :bid, :ranges]
+  alias Rujira.Events.Event
+  alias Rujira.Fin.Events.RangeClaim
+  alias Rujira.Fin.Events.RangeClose
+  alias Rujira.Fin.Events.RangeCreate
+  alias Rujira.Fin.Events.RangeDeposit
+  alias Rujira.Fin.Events.RangeFee
+  alias Rujira.Fin.Events.RangeWithdraw
+  alias Rujira.Fin.Events.Retract
+  alias Rujira.Fin.Events.Submit
+  alias Rujira.Fin.Events.Trade
 
-    @type t :: %__MODULE__{
-            contract: String.t(),
-            side: String.t(),
-            price: String.t(),
-            rate: String.t() | nil,
-            offer: String.t() | nil,
-            bid: String.t() | nil,
-            ranges: String.t() | nil
-          }
-  end
+  @spec parse(Event.t()) :: {:ok, struct()} | {:error, term()}
+  def parse(%Event{type: "wasm-rujira-fin/trade", attributes: attrs}), do: Trade.new(attrs)
+  def parse(%Event{type: "wasm-rujira-fin/submit", attributes: attrs}), do: Submit.new(attrs)
+  def parse(%Event{type: "wasm-rujira-fin/retract", attributes: attrs}), do: Retract.new(attrs)
 
-  defmodule Submit do
-    @moduledoc "An order submission event (`wasm-rujira-fin/submit`)."
-    defstruct [:contract, :side, :price, :owner]
+  def parse(%Event{type: "wasm-rujira-fin/range.create", attributes: attrs}),
+    do: RangeCreate.new(attrs)
 
-    @type t :: %__MODULE__{
-            contract: String.t(),
-            side: String.t(),
-            price: String.t(),
-            owner: String.t()
-          }
-  end
+  def parse(%Event{type: "wasm-rujira-fin/range.deposit", attributes: attrs}),
+    do: RangeDeposit.new(attrs)
 
-  defmodule Retract do
-    @moduledoc "An order retraction event (`wasm-rujira-fin/retract`)."
-    defstruct [:contract, :side, :price, :owner]
+  def parse(%Event{type: "wasm-rujira-fin/range.withdraw", attributes: attrs}),
+    do: RangeWithdraw.new(attrs)
 
-    @type t :: %__MODULE__{
-            contract: String.t(),
-            side: String.t(),
-            price: String.t(),
-            owner: String.t()
-          }
-  end
+  def parse(%Event{type: "wasm-rujira-fin/range.close", attributes: attrs}),
+    do: RangeClose.new(attrs)
 
-  defmodule RangeCreate do
-    @moduledoc "A range creation event (`wasm-rujira-fin/range.create`)."
-    defstruct [:contract, :idx, :owner]
+  def parse(%Event{type: "wasm-rujira-fin/range.claim", attributes: attrs}),
+    do: RangeClaim.new(attrs)
 
-    @type t :: %__MODULE__{
-            contract: String.t(),
-            idx: String.t(),
-            owner: String.t()
-          }
-  end
+  def parse(%Event{type: "wasm-rujira-fin/range.fee", attributes: attrs}),
+    do: RangeFee.new(attrs)
 
-  defmodule RangeDeposit do
-    @moduledoc "A range deposit event (`wasm-rujira-fin/range.deposit`)."
-    defstruct [:contract, :idx, :owner]
-
-    @type t :: %__MODULE__{
-            contract: String.t(),
-            idx: String.t(),
-            owner: String.t()
-          }
-  end
-
-  defmodule RangeWithdraw do
-    @moduledoc "A range withdrawal event (`wasm-rujira-fin/range.withdraw`)."
-    defstruct [:contract, :idx, :owner]
-
-    @type t :: %__MODULE__{
-            contract: String.t(),
-            idx: String.t(),
-            owner: String.t()
-          }
-  end
-
-  defmodule RangeClose do
-    @moduledoc "A range close event (`wasm-rujira-fin/range.close`)."
-    defstruct [:contract, :idx, :owner]
-
-    @type t :: %__MODULE__{
-            contract: String.t(),
-            idx: String.t(),
-            owner: String.t()
-          }
-  end
-
-  defmodule RangeClaim do
-    @moduledoc "A range fee claim event (`wasm-rujira-fin/range.claim`)."
-    defstruct [:contract, :idx, :owner]
-
-    @type t :: %__MODULE__{
-            contract: String.t(),
-            idx: String.t(),
-            owner: String.t()
-          }
-  end
-
-  defmodule RangeFee do
-    @moduledoc "A range fee accrual event (`wasm-rujira-fin/range.fee`)."
-    defstruct [:contract, :idx]
-
-    @type t :: %__MODULE__{
-            contract: String.t(),
-            idx: String.t()
-          }
-  end
-
-  @doc """
-  Parses a raw wasm event map into a typed FIN event struct.
-
-  Returns `nil` if the event is not a FIN event.
-  """
-  @spec parse(map()) :: struct() | nil
-
-  def parse(%{
-        type: "wasm-rujira-fin/trade",
-        attributes: %{"_contract_address" => contract, "side" => side, "price" => price} = a
-      }) do
-    %Trade{
-      contract: contract,
-      side: side,
-      price: price,
-      rate: a["rate"],
-      offer: a["offer"],
-      bid: a["bid"],
-      ranges: a["ranges"]
-    }
-  end
-
-  def parse(%{
-        type: "wasm-rujira-fin/submit",
-        attributes: %{
-          "_contract_address" => contract,
-          "side" => side,
-          "price" => price,
-          "owner" => owner
-        }
-      }) do
-    %Submit{contract: contract, side: side, price: price, owner: owner}
-  end
-
-  def parse(%{
-        type: "wasm-rujira-fin/retract",
-        attributes: %{
-          "_contract_address" => contract,
-          "side" => side,
-          "price" => price,
-          "owner" => owner
-        }
-      }) do
-    %Retract{contract: contract, side: side, price: price, owner: owner}
-  end
-
-  def parse(%{
-        type: "wasm-rujira-fin/range.create",
-        attributes: %{"_contract_address" => contract, "idx" => idx, "owner" => owner}
-      }) do
-    %RangeCreate{contract: contract, idx: idx, owner: owner}
-  end
-
-  def parse(%{
-        type: "wasm-rujira-fin/range.deposit",
-        attributes: %{"_contract_address" => contract, "idx" => idx, "owner" => owner}
-      }) do
-    %RangeDeposit{contract: contract, idx: idx, owner: owner}
-  end
-
-  def parse(%{
-        type: "wasm-rujira-fin/range.withdraw",
-        attributes: %{"_contract_address" => contract, "idx" => idx, "owner" => owner}
-      }) do
-    %RangeWithdraw{contract: contract, idx: idx, owner: owner}
-  end
-
-  def parse(%{
-        type: "wasm-rujira-fin/range.close",
-        attributes: %{"_contract_address" => contract, "idx" => idx, "owner" => owner}
-      }) do
-    %RangeClose{contract: contract, idx: idx, owner: owner}
-  end
-
-  def parse(%{
-        type: "wasm-rujira-fin/range.claim",
-        attributes: %{"_contract_address" => contract, "idx" => idx, "owner" => owner}
-      }) do
-    %RangeClaim{contract: contract, idx: idx, owner: owner}
-  end
-
-  def parse(%{
-        type: "wasm-rujira-fin/range.fee",
-        attributes: %{"_contract_address" => contract, "idx" => idx}
-      }) do
-    %RangeFee{contract: contract, idx: idx}
-  end
-
-  def parse(_), do: nil
+  def parse(%Event{} = event), do: {:ok, event}
 end
