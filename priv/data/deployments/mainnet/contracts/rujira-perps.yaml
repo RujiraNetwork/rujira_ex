@@ -1,0 +1,62 @@
+code: 15
+
+targets:
+  - id: btc-usdc
+    admin: ${accounts:admin}
+    creator: ${accounts:creator}
+    address: thor1cyd63pk2wuvjkqmhlvp9884z4h89rqtn8w8xgz9m28hjd2kzj2cqwugjkp
+    config:
+
+  - id: eth-usdc
+    admin: ${accounts:admin}
+    creator: ${accounts:creator}
+    address: thor1wastjc07zuuy46mzzl3egz4uzy6fs59752grxqvz8zlsqccpv2wqjtw9mm
+    config:
+
+  - id: rune-usdc
+    admin: ${accounts:admin}
+    creator: ${accounts:creator}
+    address: thor19egn9e8v5493mtum626upcjyu5xj3mru57htge0ma66sk5gyqf4qac33sr
+    config:
+
+  - id: ltc-usdc
+    admin: ${accounts:admin}
+    creator: ${accounts:creator}
+    address: thor1zmgfjea6e4p94n07j6982yhmhhg5yev33u3v8vwdjkkaa0748ljqypzf9r
+    config:
+
+  - id: atom-usdc
+    admin: ${accounts:admin}
+    creator: ${accounts:creator}
+    address: thor1r9wq0ehkef0l27tel9qw8hke2fsqktpxg66rnls32xffypf2htrs6peq6z
+    config:
+
+  - id: bch-usdc
+    admin: ${accounts:admin}
+    creator: ${accounts:creator}
+    address: thor1gflccmghzfscmxl95z43v36y0rle8v9x8kvt9na03yzywtw86amsjnq5h2
+    config:
+
+  - id: avax-usdc
+    admin: ${accounts:admin}
+    creator: ${accounts:creator}
+    address: thor1v86dpn86jcftmr6xwmg9ure4fhdxta9n2eup5ag8udw3h7uvmrusqj8whg
+    config:
+
+  - id: xrp-usdc
+    admin: ${accounts:admin}
+    creator: ${accounts:creator}
+    address: thor105espjya6qc7tazk8drsnvf2675q5wywafnwlhs5tpx9yza7hpmqpynjwv
+    config:
+
+  - id: doge-usdc
+    admin: ${accounts:admin}
+    creator: ${accounts:creator}
+    address: thor1cgjnhuf86dnwc6gs8p78x0nmexzht8gpzy9gpv9xh8g03f94vu0q3dpdq2
+    config:
+
+  - id: bnb-usdc
+    admin: ${accounts:admin}
+    creator: ${accounts:creator}
+    address: thor17e5wqwfd6pjm7cdg54vg5xf255gssckgtltew46w50pptk2he92smq4r35
+    config:

@@ -1,0 +1,11 @@
+code: 54
+
+targets:
+  - id: calc-manager
+    admin: ${accounts:admin}
+    creator: ${accounts:creator}
+    address: thor136rwqvwy3flttm9wfnc5xgnlr6mu5k8e2elgzs2hdhuwf50w3l2q0nu2qu
+    config:
+      fee_collector: ${accounts:calc}
+      strategy_code_id": 56
+    

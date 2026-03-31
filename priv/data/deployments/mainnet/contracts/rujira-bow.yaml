@@ -1,0 +1,167 @@
+code: 53
+
+targets:
+  - id: atom-eth-usdc
+    address: thor19e8l7xkkkce0k5cjcz65ae9ntvjqft9cxcq2qn0tdtsc7339lv2szdqfhh
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: gaia-atom
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+  - id: auto-eth-usdc
+    address: thor185dc632j6nv0apdcg5lq7uppast0nmd4awkgzcfcq7phx65w3mjq0mmwqh
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: thor.auto
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+  - id: avax-eth-usdc
+    address: thor1vjxfh0smv78zchf0jcdz2wfv80nuhe2lcfr3dewde9p6khh4g7hq6sgtjw
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: avax-avax
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+
+  - id: btc-eth-usdc
+    address: thor1g97844v7wuvz58m6p3vqp3u28nxaglqsag4dte2wrrry7sge9llq0t5tav
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: btc-btc
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+
+  - id: bch-eth-usdc
+    address: thor1qk2g3e6pg0rcsa0w9079zvczlldjufulp5an8gs5qdqym297jv5qxm73rr
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: bch-bch
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+  - id: bnb-eth-usdc
+    address: thor122f5ezcpnucazcjslwy4gg4q663lrn8xd0sum75ggv83v77tegpqclzq0v
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: bsc-bnb
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+  - id: doge-eth-usdc
+    address: thor1s5g0rm6fk2cpcxmsy3zgft725azrxsmuxxrjzrgxzfe298g2m7uqt2ejw6
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: doge-doge
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+  - id: eth-btc
+    address: thor1nwpkxz6ww2q6dz8ulkt804z8azm57s8lrrn67usrhpqxjt6sakeq24rf09
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: eth-eth
+          y: btc-btc
+
+  - id: eth-eth-usdc
+    address: thor1f88gayqapexm5ywmdn85c2s62h84j7gjhg8582ctxyew42n308pqqyg7js
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: eth-eth
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+
+  - id: lqdy-btc
+    address: thor1lpupl5c5yfa2shd0uk3t0clahsv237zz8a7nvrdrktrjrxwgz56s80kew4
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: thor.lqdy
+          y: btc-btc
+
+  - id: lqdy-eth-usdc
+    address: thor1c020ygq35hu6fp2hpd3ws0fa9xmlqhpw9g4nz624wnwmvlq7l49s877kkx
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: thor.lqdy
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+  
+  - id: ltc-eth-usdc
+    address: thor1rw9awvqnl6n0slk6tl9pw6nan77kum5480r93stc6unzlaneh6wqzrw0za
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: ltc-ltc
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+  - id: nami-eth-usdc
+    address: thor1j45s6a4ym8ru2zd70acnrwk4fkmew2a43eq2wngu46ur7yg4d8eqnvvfxx
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: thor.nami
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+  - id: ruji-eth-usdc
+    address: thor1z6drgxf8js4mycfqfgqr3v4paep4p5ur7ff0suehyg0a6alm8uks29zyv0
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: x/ruji
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+  # Instantiated as part of bow v1.0.1 migration to force code pinning 
+  # - id: tcy-btc
+  #   address: thor138nu5l4pjn50rkyv4puvan9huulkcagaqyj5cy5htutq84dtlmws2w8mw5
+  #   admin: ${accounts:dao}
+  #   creator: ${accounts:creator}
+  #   config:
+  #     strategy: 
+  #       xyk: 
+  #         x: tcy
+  #         y: btc-btc
+
+  - id: xrp-eth-usdc
+    address: thor193ec9vn36q9752ut6ntqpt94yfdcwxt4u47fmsv9ql4n7fkac38qucqckc
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      strategy: 
+        xyk: 
+          x: xrp-xrp
+          y: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+

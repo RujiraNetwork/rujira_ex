@@ -1,0 +1,8 @@
+code: 19
+
+targets:
+  - id: affiliate
+    admin: ${accounts:nami-deployer}
+    creator: ${accounts:nami-deployer}
+    address: thor1v3f7h384r8hw6r3dtcgfq6d5fq842u6cjzeuu8nr0cp93j7zfxyquyrfl8
+    config:

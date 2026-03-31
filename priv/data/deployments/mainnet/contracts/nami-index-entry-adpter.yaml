@@ -1,0 +1,22 @@
+code: 19
+
+targets:
+  - id: usdc-entry-adpter
+    admin: ${accounts:nami-deployer}
+    creator: ${accounts:nami-deployer}
+    config:
+      quote_denom: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      swap_contracts:
+      - - thor.nami
+        - ${targets:rujira-fin.nami-eth-usdc}
+      - - thor.auto
+        - ${targets:rujira-fin.auto-eth-usdc}
+      - - thor.lqdy
+        - ${targets:rujira-fin.lqdy-eth-usdc}
+      - - x/ruji
+        - ${targets:rujira-fin.ruji-eth-usdc}
+      - - rune
+        - ${targets:rujira-fin.rune-eth-usdc}
+      - - tcy
+        - ${targets:rujira-fin.tcy-eth-usdc}
+        

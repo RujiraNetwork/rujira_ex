@@ -1,0 +1,37 @@
+code: 18
+
+targets:
+  - id: rji-v1.0.1
+    admin: ${accounts:nami-deployer}
+    creator: ${accounts:nami-deployer}
+    config:
+      receipt:
+        description: The Rujira Index (RJI) is a fixed-unit asset index that tracks the performance of tokens on the Rujira App Layer. RJI does not auto-rebalance; therefore, it is designed to continuously overweight the top performers and underweight the underperformers.
+        display: RJI
+        name: The Rujira Index
+        symbol: RJI
+      quote_denom: eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      fee_collector: ${accounts:nami-deployer}
+      fees:
+        management: '0.01'
+        performance: null
+        transaction: '0.01'
+      target_allocations:
+      - - thor.nami
+        - '88'
+        - ${targets:rujira-fin.nami-eth-usdc}
+      - - thor.auto
+        - '99'
+        - ${targets:rujira-fin.auto-eth-usdc}
+      - - thor.lqdy
+        - '13'
+        - ${targets:rujira-fin.lqdy-eth-usdc}
+      - - x/ruji
+        - '35'
+        - ${targets:rujira-fin.ruji-eth-usdc}
+      - - rune
+        - '31'
+        - ${targets:rujira-fin.rune-eth-usdc}
+      - - tcy
+        - '63'
+        - ${targets:rujira-fin.tcy-eth-usdc}

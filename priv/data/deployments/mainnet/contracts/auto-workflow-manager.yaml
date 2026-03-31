@@ -1,0 +1,9 @@
+code: 67
+
+targets:
+  - id: workflow-manager
+    admin: ${accounts:admin}
+    creator: ${accounts:creator}
+    address: thor15xwa4y4wucma9gmcakjjg7mw36skpuhenhwlh9nkjn8vjguz6xzs8nc8np
+    config:
+

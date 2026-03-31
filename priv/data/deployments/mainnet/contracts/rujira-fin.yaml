@@ -1,0 +1,448 @@
+code: 71
+
+targets:
+  - id: atom-eth-usdc
+    address: thor1s8rxcvg83cwar87ehv4c866auxujkfj3k4wjkxkaren7vmvn9nass80ekp
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - gaia-atom
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      fee_address: ${targets:rujira-revenue.trade}
+      market_makers: 
+        - ${targets:rujira-bow.atom-eth-usdc}
+
+  - id: auto-eth-usdc
+    address: thor15t4cykf3mj8fsvd6ha8j0lnavcyex2h4a4l2pv8zkctandwck3zshs92jy
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - thor.auto
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-bow.auto-eth-usdc}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: avax-eth-usdc
+    address: thor1dw8tadkwy746ytvaugv26g5jwekwpfyjyvlvncvryukm07rc998s4ukvrt
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - avax-avax
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      fee_address: ${targets:rujira-revenue.trade}
+      market_makers: 
+        - ${targets:rujira-bow.avax-eth-usdc}
+
+  - id: avax-usdc-eth-usdc
+    address: thor14sk3vqzt6rpp8c06ynfhw30ctk0wy5mqhvedccg8gnnlcdcyc9csaf4ngt
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - avax-usdc-0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: avax-usdt-eth-usdc
+    address: thor1mj73004rhycffu6k56dalt0zmefzdc3ana6egkh4aes9aw43lxqqmfq2xg
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - avax-usdt-0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: base-cbbtc-btc
+    address: thor1ar3grsxufvmr3fq8j92ssvc8vcyzdkhh9rlg5mdmuw8we552htxsf4mct2
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - base-cbbtc-0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf
+        - btc-btc
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: base-eth-eth
+    address: thor1624v08rr5na2hv5jazw5tmyyjyqg8lfy78zvck52ep3nqxa7lljq00e4xq
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - base-eth
+        - eth-eth
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: base-usdc-eth-usdc
+    address: thor1kkuhwaqnlnvchx6fzttp7l9vhman9ll9u6dyhx65v4c7gcpflvcqkdv7z9
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - base-usdc-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: bch-eth-usdc
+    address: thor1s4jpxtz0jsh6elyqcdujd303ptefz53gknmcp437rm9ykxnfhysqrm5hze
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - bch-bch
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      fee_address: ${targets:rujira-revenue.trade}
+      market_makers: 
+        - ${targets:rujira-bow.bch-eth-usdc}
+
+  - id: bnb-eth-usdc
+    address: thor1g49m6re9vgrte8twpgx0qcnvr92575tqhcgmnwq3g5s94msk4ersqsyw3x
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - bsc-bnb
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      fee_address: ${targets:rujira-revenue.trade}
+      market_makers: 
+        - ${targets:rujira-bow.bnb-eth-usdc}
+
+  - id: bsc-usdc-eth-usdc
+    address: thor1f9zc2sdua4n6nreuxzhed9435n0cf6v6lpx6nrjdadtkr294a26qhs676n
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - bsc-usdc-0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: brune-rune
+    address: thor1vk6trmz42cjrh4zcxczeaacnsv3snv4f22x8ccu203dqde7vtaxsyevlec
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - x/brune
+        - rune
+      market_makers: 
+        - thor1enhmz57mpn4umspa8hqgqwwqpe02q4hpqmqr0k2zftxr8fu3nxmqjy3tqx
+      fee_address: ${targets:rujira-revenue.single}
+
+  - id: bsc-usdt-eth-usdc
+    address: thor1mgjtf976cnurac63yh2tldmw2mme5f4a8n0u7m3d5yvxk6x5yrws4u37es
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - bsc-usdt-0x55d398326f99059ff775485246999027b3197955
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+
+  - id: btc-eth-usdc
+    address: thor1dwsnlqw3lfhamc5dz3r57hlsppx3a2n2d7kppccxfdhfazjh06rs5077sz
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - btc-btc
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-bow.btc-eth-usdc}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: btc-eth-usdt
+    address: thor1sttnfysg5e92d82gu9vg7jl9dhu29h4w8mujg7hsfdy3qj6ryuwsaqwu5m
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - btc-btc
+        - eth-usdt-0xdac17f958d2ee523a2206206994597c13d831ec7
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: doge-eth-usdc
+    address: thor1w8agselh7k2e4ty369v39lngkckljxfafm35d06f7wj3ar90h2esv75t7p
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - doge-doge
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      fee_address: ${targets:rujira-revenue.trade}
+      market_makers: 
+        - ${targets:rujira-bow.doge-eth-usdc}
+
+  - id: eth-btc
+    address: thor1g3mymxjlmvyeadfys6lsj98sgg7mxut5pwz99q5rat7ny698elwq778ngf
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - eth-eth
+        - btc-btc
+      market_makers: 
+        - ${targets:rujira-bow.eth-btc}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: eth-eth-usdc
+    address: thor1tnd06uswj8033d0kzd5d7zre73u3uc44r2vvez26z5m4kr68vtusf2snva
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - eth-eth
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-bow.eth-eth-usdc}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: eth-eth-usdt
+    address: thor1fekmqh9crnzdaudrsqxk5gmwcch6xrfre288nqmx4hpk8sscw6hq9kkxn6
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - eth-eth
+        - eth-usdt-0xdac17f958d2ee523a2206206994597c13d831ec7
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: eth-dai-eth-usdc
+    address: thor1qa2l2rrzjq30j2wphc3hcz3ykjz8aaqcjlrnzmp00hy0cpk233ysm9rr3c
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - eth-dai-0x6b175474e89094c44da98b954eedeac495271d0f
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: eth-gusd-eth-usdc
+    address: thor19pdw7vjkhk0qhvn7r3xgj6f5zyyj700w6my3z28cv9ugzu7gp5rqv5596l
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - eth-gusd-0x056fd409e1d7a124bd7017459dfea2f387b6d5cd
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: eth-usdp-eth-usdc
+    address: thor1zj84djje5t0cn3veezmlfewmzmn6yn793nkrtfkjhcywdyyca9tq9582yf
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - eth-usdp-0x8e870d67f660d95d5be530380d0ec0bd388289e1
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: eth-usdt-eth-usdc
+    address: thor14qg8r6u7x4yt57565ztm6v8fwkd2t0j8wqnx6k872yt49ynx8d0q6s7kq0
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - eth-usdt-0xdac17f958d2ee523a2206206994597c13d831ec7
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: eth-wbtc-btc
+    address: thor1e5dmfdtpveprsznzyqjdygy2fd782d0q9zm7246e7jhvmq04nqnqm78vek
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - eth-wbtc-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599
+        - btc-btc
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: lqdy-btc
+    address: thor1t76lvqjq7avt6kxnul4pt0zaq6y06fhkw29wxs5rm4kt873s6y9sdp8rxf
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - thor.lqdy
+        - btc-btc
+      market_makers: 
+        - ${targets:rujira-bow.lqdy-btc}
+      fee_address: ${targets:rujira-revenue.trade}
+
+
+  - id: lqdy-eth-usdc
+    address: thor1ax94w4rldvdgc4xgsfwgve7g7xfyxhvuvquvx57vtmr6y4alev0qw3mlvr
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - thor.lqdy
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-bow.lqdy-eth-usdc}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: ltc-eth-usdc
+    address: thor10a8nuh9r3xywm77km3upqk08lqac7sj9avl082cnm39teae4w9cs64kptz
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - ltc-ltc
+        - eth-usdt-0xdac17f958d2ee523a2206206994597c13d831ec7
+      fee_address: ${targets:rujira-revenue.trade}
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+
+  - id: ltc-eth-usdc
+    address: thor1ks9qq0nwv7qxtnznesys6ylflwruqlf85er6zls4erwgzkvw0m0qs3rghz
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - ltc-ltc
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      fee_address: ${targets:rujira-revenue.trade}
+      market_makers: 
+        - ${targets:rujira-bow.ltc-eth-usdc}
+
+  - id: nami-eth-usdc
+    address: thor1txmrchsrzycmzvlwsjl20q9zkdsp0nywctefuceepf02phpudvxsxtzmty
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - thor.nami
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-bow.nami-eth-usdc}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: ruji-eth-usdc
+    address: thor17cawwg2lsnvcne69fek6nsqkf8snma6gc5ccceshul86rl0u3q4s5l5d0a
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - x/ruji
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-bow.ruji-eth-usdc}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: ruji-rune
+    address: thor1j9euq8fjd5zdxdkx7auser7kp84tmwtx3snuptpec6azakzwv3dqq6ahwp
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - x/ruji
+        - rune
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: rune-btc
+    address: thor1qqql3tugjuwnslfgf9a9zfqenywn2h8zy9v025vh3398xtzpaqcsx5axyl
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - rune
+        - btc-btc
+      market_makers: []
+      fee_address: ${targets:rujira-revenue.trade}
+
+
+  - id: rune-eth-usdc
+    address: thor1y8g3yhzmnwyt6g7jque36eyregf85kgtzem6dgzqxuzrpmzpumvqts7ud7
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - rune
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: tcy-btc
+    address: thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - tcy
+        - btc-btc
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: tcy-rune
+    address: thor12ds7fxj5g47jwzfzvzzhzxxd3cp6v55flgwxva0803r8k5mzm44skth6wa
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - tcy
+        - rune
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: tcy-eth-usdc
+    address: thor1kyjky2yprmamj0gfkevyc6tunxev0054gpxjap8k9vkyutkkf5lqyr0xxv
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - tcy
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-thorchain-swap.main}
+      fee_address: ${targets:rujira-revenue.trade}
+
+  - id: xrp-eth-usdc
+    address: thor14v89h32ztmfg9d230cjly7ac26fvdkhgq7nkntsw4uy2f3yh2v7qrz6hsw
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      denoms: 
+        - xrp-xrp
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      market_makers: 
+        - ${targets:rujira-bow.xrp-eth-usdc}
+      fee_address: ${targets:rujira-revenue.trade}

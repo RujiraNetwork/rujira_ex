@@ -1,0 +1,13 @@
+code: 57
+
+targets:
+  - id: main
+    address: thor1n5a08r0zvmqca39ka2tgwlkjy9ugalutk7fjpzptfppqcccnat2ska5t4g
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      min_slip_bps: 10
+      max_stream_length: 1
+      stream_step_ratio: "0.99"
+      reserve_fee: "0.001"
+      max_borrow_ratio: "0.3"

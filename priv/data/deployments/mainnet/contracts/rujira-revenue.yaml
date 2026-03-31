@@ -1,0 +1,70 @@
+code: 6
+
+targets:
+  - id: single
+    address: thor1mcy9jtp4kzl8q2lvdgfgsl8jvqrf504uphkf0pz2p9wud8tsntesjvccew
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      executor: ${accounts:admin}
+      target_denoms:
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      target_addresses:
+        - address: ${targets:rujira-staking.ruji}
+          weight: 1
+
+  - id: split
+    address: thor1jduxxzpyyvrgzx7zcnl7e5cdj34tnq5jxy00a4wp86szye25dndq575c0y
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      executor: ${accounts:admin}
+      target_denoms:
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      target_addresses:
+        - address: ${targets:rujira-staking.ruji}
+          weight: 1
+        - address: ${targets:rujira-revenue.base}
+          weight: 1
+
+  - id: trade
+    address: thor1gm8q2gr25nzzsxzdp2mpja4hyvyhjlr4s6krcsgv2y953uu0js3qhwpus7
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      executor: ${accounts:admin}
+      target_denoms:
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      target_addresses:
+        - address: ${targets:rujira-revenue.single}
+          weight: 1
+        - address: ${targets:rujira-revenue.split}
+          weight: 1
+
+  - id: base
+    address: thor1txum04wp8ykqudphxy9prtwsd9jpcm2kwdaxctxeeyr6g0r0we9qpfdktr
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
+      executor: ${accounts:admin}
+      target_denoms:
+        - rune
+      target_addresses:
+        - address: ${accounts:thorchain-reserve}
+          weight: 1
+
+  - id: nami-index-revenue-converter
+    address: thor132u9qpm9gfdqtgwxwl8ty409s6zmewfrum2k6wvtvtyphdn5urzsej764l
+    admin: ${accounts:nami-deployer}
+    creator: ${accounts:creator}
+    config:
+      executor: ${accounts:nami-deployer}
+      target_denoms:
+        - eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+      target_addresses:
+        - address: ${targets:rujira-staking.nami}
+          weight: 25
+        - address: thor1g5peya3jn038taayjw90x5rgkqmulllgflzhkx
+          weight: 35
+        - address: thor1gllwce856wljjnppfa5c0qm9we967pyhkkvgmk
+          weight: 40

@@ -1,0 +1,8 @@
+code: 57
+
+targets:
+  - id: main
+    address: thor1enhmz57mpn4umspa8hqgqwwqpe02q4hpqmqr0k2zftxr8fu3nxmqjy3tqx
+    admin: ${accounts:dao}
+    creator: ${accounts:creator}
+    config:
