@@ -98,8 +98,8 @@ defmodule Rujira.Fin.Pair do
          } <- init_msg(config),
          {fee_taker, ""} <- Decimal.parse(fee_taker),
          {fee_maker, ""} <- Decimal.parse(fee_maker),
-         {:ok, oracle_base} <- get_oracle(Enum.at(oracles || [], 0)),
-         {:ok, oracle_quote} <- get_oracle(Enum.at(oracles || [], 1)) do
+         {:ok, oracle_base} <- get_oracle(Enum.at(oracles, 0)),
+         {:ok, oracle_quote} <- get_oracle(Enum.at(oracles, 1)) do
       {:ok,
        %__MODULE__{
          id: address,
