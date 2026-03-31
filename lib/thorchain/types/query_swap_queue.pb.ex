@@ -1,0 +1,15 @@
+defmodule Thorchain.Types.QuerySwapQueueRequest do
+  @moduledoc false
+
+  use Protobuf, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
+
+  field(:height, 1, type: :string)
+end
+
+defmodule Thorchain.Types.QuerySwapQueueResponse do
+  @moduledoc false
+
+  use Protobuf, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
+
+  field(:swap_queue, 1, repeated: true, type: Thorchain.Types.MsgSwap, json_name: "swapQueue")
+end
