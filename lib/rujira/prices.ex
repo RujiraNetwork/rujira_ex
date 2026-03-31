@@ -2,14 +2,28 @@ defmodule Rujira.Prices do
   @moduledoc """
   Behaviour and configurable delegator for asset price lookups.
 
-  Consumers configure the implementation via application env:
+  Ships with two built-in implementations:
 
-      config :rujira_core, prices: MyApp.PricesImpl
+    * `Rujira.Prices.Default` — oracle → FIN book mid-price fallback
+    * `Rujira.Prices.Noop` — returns 0 (useful for tests)
 
-  Defaults to `Rujira.Prices.Noop` which returns 0 for all lookups.
+  Consumers can override via application env:
+
+      config :rujira_core, prices: MyApp.CustomPrices
+
+  Defaults to `Rujira.Prices.Default`.
+
+  ## Cache TTL
+
+  The default implementation memoizes prices using the global cache TTL.
+  See `Rujira.cache_ttl/0`.
   """
 
+  @callback get(String.t()) :: {:ok, Decimal.t()} | {:error, term()}
   @callback value_usd(String.t(), integer(), integer()) :: integer()
+
+  @spec get(String.t()) :: {:ok, Decimal.t()} | {:error, term()}
+  def get(symbol), do: impl().get(symbol)
 
   @spec value_usd(String.t(), integer(), integer()) :: integer()
   def value_usd(symbol, amount, decimals \\ 8) do
@@ -17,14 +31,6 @@ defmodule Rujira.Prices do
   end
 
   defp impl do
-    Application.get_env(:rujira_core, :prices, Rujira.Prices.Noop)
+    Application.get_env(:rujira_core, :prices, Rujira.Prices.Default)
   end
-end
-
-defmodule Rujira.Prices.Noop do
-  @moduledoc "No-op prices adapter. Returns 0 for all lookups."
-  @behaviour Rujira.Prices
-
-  @impl true
-  def value_usd(_symbol, _amount, _decimals \\ 8), do: 0
 end
