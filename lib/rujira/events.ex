@@ -2,24 +2,21 @@ defmodule Rujira.Events do
   @moduledoc """
   Generic event parser for all Rujira protocol events.
 
-  Takes a raw event and routes it to the correct protocol parser,
-  returning a typed struct or `nil`.
-
-  Accepts both already-cast events (`%{type: ..., attributes: ...}`)
-  and raw protobuf `BlockEvent` structs.
+  Takes a raw event, creates a default `Event` struct, then routes it
+  to the correct protocol parser. If no parser matches, the default
+  event is returned as-is so consumers never lose data.
 
   ## Usage
 
       case Rujira.Events.parse(raw_event) do
-        %Rujira.Fin.Events.Trade{} = trade -> handle_trade(trade)
-        %Rujira.Thorchain.Events.Swap{} = swap -> handle_swap(swap)
-        nil -> :unhandled
+        {:ok, %Rujira.Fin.Events.Trade{} = trade} -> handle_trade(trade)
+        {:ok, %Rujira.Thorchain.Events.Swap{} = swap} -> handle_swap(swap)
+        {:ok, %Rujira.Events.Event{} = event} -> handle_unknown(event)
       end
   """
 
+  alias Rujira.Events.Event
   alias Thorchain.Types.BlockEvent
-
-  # --- Casting raw protos ---
 
   @doc """
   Casts a raw `BlockEvent` protobuf struct into the standard
@@ -40,8 +37,6 @@ defmodule Rujira.Events do
     %{type: type, attributes: attrs}
   end
 
-  # --- Parse ---
-
   @doc """
   Parses a raw event into a typed struct from the matching protocol.
 
@@ -49,32 +44,37 @@ defmodule Rujira.Events do
   - `%{type: String.t(), attributes: map()}` — already cast
   - `%BlockEvent{}` — raw protobuf, cast first
 
-  Returns `nil` if no parser matches.
+  Returns `{:ok, struct}` for known events or `{:ok, %Event{}}` for
+  unrecognized events so consumers never lose data.
   """
-  @spec parse(map() | BlockEvent.t()) :: struct() | nil
+  @spec parse(map() | BlockEvent.t()) :: {:ok, struct()} | {:error, term()}
 
-  # Raw proto — cast first
   def parse(%BlockEvent{} = event), do: event |> cast() |> parse()
 
-  # FIN
-  def parse(%{type: "wasm-rujira-fin/" <> _} = event), do: Rujira.Fin.Events.parse(event)
+  def parse(%{type: type, attributes: attrs}) do
+    event = Event.new(type, attrs)
+    route(event)
+  end
 
-  # Thorchain native
-  def parse(%{type: type} = event)
-      when type in ~w(swap transfer add_liquidity withdraw pending_liquidity oracle_price bond rebond set_mimir),
-      do: Rujira.Thorchain.Events.parse(event)
+  def parse(_), do: {:error, :invalid_event}
+
+  defp route(%Event{type: "wasm-rujira-fin/" <> _} = event),
+    do: Rujira.Fin.Events.parse(event)
+
+  defp route(%Event{type: type} = event)
+       when type in ~w(swap transfer add_liquidity withdraw pending_liquidity oracle_price bond rebond set_mimir),
+       do: Rujira.Thorchain.Events.parse(event)
 
   # --- Not yet implemented ---
-  # def parse(%{type: "wasm-rujira-bow/" <> _} = event), do: Rujira.Bow.Events.parse(event)
-  # def parse(%{type: "wasm-rujira-ghost-vault/" <> _} = event), do: Rujira.Ghost.Events.parse(event)
-  # def parse(%{type: "wasm-rujira-ghost-credit/" <> _} = event), do: Rujira.Ghost.Events.parse(event)
-  # def parse(%{type: "wasm-rujira-staking/" <> _} = event), do: Rujira.Staking.Events.parse(event)
-  # def parse(%{type: "wasm-rujira-merge/" <> _} = event), do: Rujira.Merge.Events.parse(event)
-  # def parse(%{type: "wasm-rujira-brune/" <> _} = event), do: Rujira.Brune.Events.parse(event)
-  # def parse(%{type: "wasm-rujira-thorchain-swap/" <> _} = event), do: Rujira.Thorchain.Swap.Events.parse(event)
-  # def parse(%{type: "wasm-rujira-ventures-factory/" <> _} = event), do: Rujira.Keiko.Events.parse(event)
-  # def parse(%{type: "wasm-calc-" <> _} = event), do: Rujira.Calc.Events.parse(event)
+  # defp route(%Event{type: "wasm-rujira-bow/" <> _} = event), do: Rujira.Bow.Events.parse(event)
+  # defp route(%Event{type: "wasm-rujira-ghost-vault/" <> _} = event), do: Rujira.Ghost.Events.parse(event)
+  # defp route(%Event{type: "wasm-rujira-ghost-credit/" <> _} = event), do: Rujira.Ghost.Events.parse(event)
+  # defp route(%Event{type: "wasm-rujira-staking/" <> _} = event), do: Rujira.Staking.Events.parse(event)
+  # defp route(%Event{type: "wasm-rujira-merge/" <> _} = event), do: Rujira.Merge.Events.parse(event)
+  # defp route(%Event{type: "wasm-rujira-brune/" <> _} = event), do: Rujira.Brune.Events.parse(event)
+  # defp route(%Event{type: "wasm-rujira-thorchain-swap/" <> _} = event), do: Rujira.Thorchain.Swap.Events.parse(event)
+  # defp route(%Event{type: "wasm-rujira-ventures-factory/" <> _} = event), do: Rujira.Keiko.Events.parse(event)
+  # defp route(%Event{type: "wasm-calc-" <> _} = event), do: Rujira.Calc.Events.parse(event)
 
-  # No match
-  def parse(_), do: nil
+  defp route(%Event{} = event), do: {:ok, event}
 end
