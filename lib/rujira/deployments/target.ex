@@ -16,7 +16,7 @@ defmodule Rujira.Deployments.Target do
     :status
   ]
 
-  @type status :: :live | :pending
+  @type status :: :live | :preview
 
   @type t :: %__MODULE__{
           id: term(),

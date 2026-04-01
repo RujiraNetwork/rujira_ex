@@ -190,7 +190,7 @@ defmodule Rujira.Contracts do
   defmemo get({module, address}) do
     case query_state_smart(address, %{config: %{}}) do
       {:ok, config} ->
-        module.from_config(address, config)
+        config |> Map.put("address", address) |> module.new()
 
       {:error,
        %GRPC.RPCError{
@@ -210,7 +210,7 @@ defmodule Rujira.Contracts do
       {:ok, targets} ->
         case Enum.find(targets, &(&1.address == address)) do
           nil -> {:error, :not_found}
-          x -> module.from_target(x)
+          x -> module.new(x)
         end
 
       error ->

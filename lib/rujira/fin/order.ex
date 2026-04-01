@@ -1,11 +1,16 @@
 defmodule Rujira.Fin.Order do
   @moduledoc """
-  Represents and manages trading orders in the FIN protocol.
+  Trading order for the FIN protocol.
+
+  Struct, construction, and queries. Use `Rujira.Fin` as the public API.
   """
 
   alias Rujira.Assets
+  alias Rujira.Contracts
   alias Rujira.Math
   alias Rujira.Prices
+
+  use Memoize
 
   defstruct id: nil,
             pair: nil,
@@ -45,8 +50,10 @@ defmodule Rujira.Fin.Order do
           deviation: deviation
         }
 
-  @spec from_query(map(), map()) :: {:ok, t()} | {:error, term()}
-  def from_query(
+  # --- Construction ---
+
+  @spec new(Rujira.Fin.Pair.t(), map()) :: {:ok, t()} | {:error, term()}
+  def new(
         %{
           address: address,
           fee_taker: fee_taker,
@@ -65,12 +72,13 @@ defmodule Rujira.Fin.Order do
         }
       ) do
     with {type, deviation, price_id} <- parse_price(price),
-         {rate, ""} <- Decimal.parse(rate),
-         {updated_at, ""} <- Integer.parse(updated_at),
+         {:ok, rate} <- Math.to_decimal(rate),
+         {:ok, updated_at} <- Math.to_integer(updated_at),
          {:ok, updated_at} <- DateTime.from_unix(updated_at, :nanosecond),
-         {offer, ""} <- Integer.parse(offer),
-         {remaining, ""} <- Integer.parse(remaining),
-         {filled, ""} <- Integer.parse(filled),
+         {:ok, offer} <- Math.to_integer(offer),
+         {:ok, remaining} <- Math.to_integer(remaining),
+         {:ok, filled} <- Math.to_integer(filled),
+         {:ok, fee_taker} <- Math.to_decimal(fee_taker),
          {:ok, asset_quote} <- Assets.from_denom(token_quote),
          {:ok, asset_base} <- Assets.from_denom(token_base) do
       side = String.to_existing_atom(side)
@@ -111,16 +119,6 @@ defmodule Rujira.Fin.Order do
     end
   end
 
-  @spec parse_price(map()) :: {atom(), term(), String.t()}
-  def parse_price(%{"fixed" => v}), do: {:fixed, nil, "fixed:#{v}"}
-  def parse_price(%{"oracle" => v}), do: {:oracle, v, "oracle:#{v}"}
-  @spec decode_price(String.t()) :: map()
-  def decode_price("fixed:" <> v), do: %{fixed: v}
-  def decode_price("oracle:" <> v), do: %{oracle: String.to_integer(v)}
-  @spec encode_price(map()) :: String.t()
-  def encode_price(%{fixed: v}), do: "fixed:#{v}"
-  def encode_price(%{oracle: v}), do: "oracle:#{v}"
-
   @spec new(String.t(), String.t(), String.t(), String.t()) :: t()
   def new(address, side, price, owner) do
     [type | _] = String.split(price, ":")
@@ -140,11 +138,115 @@ defmodule Rujira.Fin.Order do
     }
   end
 
-  defp value(amount, rate, :base) do
-    Math.mul_floor(amount, rate)
+  # --- Queries ---
+
+  @spec list(Rujira.Fin.Pair.t(), String.t(), integer()) ::
+          {:ok, [t()]} | {:error, term()}
+  def list(pair, address, limit \\ 30)
+  def list(%{deployment_status: :preview}, _, _), do: {:ok, []}
+
+  def list(pair, address, limit) do
+    case query_list(pair.address, address, limit) do
+      {:ok, %{"orders" => orders}} ->
+        Rujira.Enum.reduce_while_ok(orders, &new(pair, &1))
+
+      err ->
+        err
+    end
   end
 
-  defp value(amount, rate, :quote) do
-    Math.div_floor(amount, rate)
+  @spec list_all(Rujira.Fin.Pair.t(), keyword()) :: {:ok, [t()]} | {:error, term()}
+  def list_all(%{address: address} = pair, opts) do
+    with {:ok, raw_orders} <- query_all(address, opts) do
+      Rujira.Enum.reduce_while_ok(raw_orders, &new(pair, &1))
+    end
   end
+
+  @spec load(Rujira.Fin.Pair.t(), String.t(), String.t(), String.t()) ::
+          {:ok, t()} | {:error, term()}
+  def load(%{address: address} = pair, side, price, owner) do
+    case query(address, owner, side, price) do
+      {:ok, order} ->
+        new(pair, order)
+
+      {:error, %GRPC.RPCError{status: 2, message: "NotFound: query wasm contract failed"}} ->
+        {:ok, new(address, side, price, owner)}
+
+      err ->
+        err
+    end
+  end
+
+  @spec list_all_pairs(String.t()) :: {:ok, [t()]} | {:error, term()}
+  def list_all_pairs(address) do
+    with {:ok, pairs} <- Rujira.Fin.Pair.list(),
+         {:ok, orders} <-
+           Rujira.Enum.reduce_async_while_ok(pairs, &list(&1, address), timeout: 15_000) do
+      {:ok, List.flatten(orders)}
+    end
+  end
+
+  @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
+  def from_id(id) do
+    with [pair_address, side, price, owner] <- String.split(id, "/"),
+         {:ok, pair} <- Rujira.Fin.Pair.get(pair_address) do
+      load(pair, side, price, owner)
+    else
+      {:error, err} -> {:error, err}
+      _ -> {:error, :invalid_id}
+    end
+  end
+
+  # --- Price utils ---
+
+  @spec parse_price(map()) :: {atom(), term(), String.t()}
+  def parse_price(%{"fixed" => v}), do: {:fixed, nil, "fixed:#{v}"}
+  def parse_price(%{"oracle" => v}), do: {:oracle, v, "oracle:#{v}"}
+
+  @spec decode_price(String.t()) :: map()
+  def decode_price("fixed:" <> v), do: %{fixed: v}
+  def decode_price("oracle:" <> v), do: %{oracle: String.to_integer(v)}
+
+  @spec encode_price(map()) :: String.t()
+  def encode_price(%{fixed: v}), do: "fixed:#{v}"
+  def encode_price(%{oracle: v}), do: "oracle:#{v}"
+
+  # --- Private ---
+
+  defmemop query(address, owner, side, price) do
+    Contracts.query_state_smart(
+      address,
+      %{order: [owner, side, decode_price(price)]}
+    )
+  end
+
+  defmemo query_list(contract, address, limit \\ 30) do
+    Contracts.query_state_smart_with_retry(contract, %{
+      orders: %{owner: address, limit: limit}
+    })
+  end
+
+  defp query_all(contract, opts, start_after \\ nil, limit \\ 30)
+
+  defp query_all(contract, opts, nil, limit) do
+    do_query_all(contract, opts, nil, limit)
+  end
+
+  defp query_all(contract, opts, %{"owner" => o, "side" => s, "price" => p}, limit) do
+    do_query_all(contract, opts, [o, s, p], limit)
+  end
+
+  defp do_query_all(contract, opts, cursor, limit) do
+    Contracts.query_state_smart(
+      contract,
+      %{orders: %{owner: nil, start_after: cursor, limit: limit}},
+      opts
+    )
+    |> Contracts.paginate("orders", limit, fn orders ->
+      query_all(contract, opts, List.last(orders), limit)
+    end)
+  end
+
+  defp value(amount, rate, :base), do: Math.mul_floor(amount, rate)
+  defp value(amount, rate, :quote), do: Math.div_floor(amount, rate)
 end

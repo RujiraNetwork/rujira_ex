@@ -1,12 +1,23 @@
 defmodule Rujira.Fin.Book do
   @moduledoc """
-  Parses and represents a FIN.Book from blockchain data.
+  Order book for the FIN protocol.
+
+  Struct, construction, and queries. Use `Rujira.Fin` as the public API.
   """
+
+  alias Rujira.Contracts
+  alias Rujira.Fin.Pair
+  alias Rujira.Logger
+  alias Rujira.Math
+
+  use Memoize
 
   defmodule Price do
     @moduledoc """
     Represents a price level in the order book with associated order details.
     """
+    alias Rujira.Math
+
     defstruct [:price, :total, :side, :value, :virtual_total, :virtual_value]
 
     @type side :: :bid | :ask
@@ -19,10 +30,10 @@ defmodule Rujira.Fin.Book do
             virtual_value: non_neg_integer()
           }
 
-    @spec from_query(side, map()) :: {:ok, t()} | {:error, :parse_error}
-    def from_query(side, %{"price" => price_str, "total" => total_str}) do
-      with {price, ""} <- Decimal.parse(price_str),
-           {total, ""} <- Integer.parse(total_str) do
+    @spec new(side, map()) :: {:ok, t()} | {:error, :parse_error}
+    def new(side, %{"price" => price_str, "total" => total_str}) do
+      with {:ok, price} <- Math.to_decimal(price_str),
+           {:ok, total} <- Math.to_integer(total_str) do
         {:ok,
          %__MODULE__{
            side: side,
@@ -65,16 +76,15 @@ defmodule Rujira.Fin.Book do
           spread: Decimal.t()
         }
 
-  @spec from_query(String.t(), map()) :: {:ok, t()}
-  def from_query(address, %{
-        "base" => asks,
-        "quote" => bids
-      }) do
+  # --- Construction ---
+
+  @spec new(String.t(), map()) :: {:ok, t()}
+  def new(address, %{"base" => asks, "quote" => bids}) do
     {:ok,
      %__MODULE__{
        id: address,
-       asks: asks |> Enum.map(&Price.from_query(:ask, &1)) |> filter_ok(),
-       bids: bids |> Enum.map(&Price.from_query(:bid, &1)) |> filter_ok(),
+       asks: asks |> Enum.map(&Price.new(:ask, &1)) |> filter_ok(),
+       bids: bids |> Enum.map(&Price.new(:bid, &1)) |> filter_ok(),
        center: Decimal.new(0),
        spread: Decimal.new(0)
      }
@@ -92,8 +102,42 @@ defmodule Rujira.Fin.Book do
     }
   end
 
-  @spec from_target(String.t()) :: t()
-  def from_target(address), do: empty(address)
+  # --- Queries ---
+
+  @spec load(Pair.t(), integer()) :: {:ok, Pair.t()} | {:error, term()}
+  def load(pair, limit \\ 75)
+
+  def load(%{deployment_status: :preview} = pair, _limit) do
+    {:ok, %{pair | book: empty(pair.address)}}
+  end
+
+  def load(pair, limit) do
+    with {:ok, res} <- query(pair.address, limit),
+         {:ok, book} <- new(pair.address, res) do
+      {:ok, %{pair | book: book}}
+    else
+      {:error, err} ->
+        Logger.error(__MODULE__, "load #{pair.address} #{inspect(err)}")
+        {:ok, %{pair | book: empty(pair.address)}}
+    end
+  end
+
+  @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
+  def from_id(id) do
+    with {:ok, res} <- Pair.get(id),
+         {:ok, %{book: book}} <- load(res, 100) do
+      {:ok, book}
+    end
+  end
+
+  @spec price(String.t()) :: {:ok, map()} | {:error, term()}
+  def price(id) do
+    with {:ok, book} <- from_id(id) do
+      {:ok, %{price: book.center, change: 0}}
+    end
+  end
+
+  # --- Calculations ---
 
   @spec populate(t()) :: t()
   def populate(%__MODULE__{asks: [ask | _], bids: [bid | _]} = book) do
@@ -111,14 +155,6 @@ defmodule Rujira.Fin.Book do
 
   def populate(book), do: book
 
-  @spec filter_ok([{:ok, Price.t()} | {:error, term()}]) :: [Price.t()]
-  defp filter_ok(results) do
-    for {:ok, price} <- results, do: price
-  end
-
-  @doc """
-  Calculates the total liquidity depth within a given deviation from the best price.
-  """
   @spec depth(t(), :bid | :ask, number()) :: non_neg_integer()
   def depth(%__MODULE__{bids: []}, :bid, _), do: 0
   def depth(%__MODULE__{asks: []}, :ask, _), do: 0
@@ -143,5 +179,16 @@ defmodule Rujira.Fin.Book do
     |> Enum.reduce(Decimal.new(0), fn ask, acc -> Decimal.add(ask.value, acc) end)
     |> Decimal.round(0, :floor)
     |> Decimal.to_integer()
+  end
+
+  # --- Private ---
+
+  defmemo query(contract, limit \\ 100) do
+    Contracts.query_state_smart_with_retry(contract, %{book: %{limit: limit}})
+  end
+
+  @spec filter_ok([{:ok, Price.t()} | {:error, term()}]) :: [Price.t()]
+  defp filter_ok(results) do
+    for {:ok, price} <- results, do: price
   end
 end

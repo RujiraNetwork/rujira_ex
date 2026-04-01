@@ -1,11 +1,20 @@
 defmodule Rujira.Fin.Pair do
   @moduledoc """
-  Parses trading pair configuration data into a structured representation for the FIN protocol.
+  Trading pair for the FIN protocol.
+
+  Struct, construction, and queries. Use `Rujira.Fin` as the public API.
   """
+
   alias Rujira.Assets
+  alias Rujira.Contracts
+  alias Rujira.Deployments
   alias Rujira.Deployments.Target
   alias Rujira.Fin.Book
+  alias Rujira.Logger
+  alias Rujira.Math
   alias Rujira.Thorchain.Oracle
+
+  use Memoize
 
   defstruct [
     :id,
@@ -42,18 +51,29 @@ defmodule Rujira.Fin.Pair do
           deployment_status: Target.status()
         }
 
-  @spec from_config(String.t(), map()) :: :error | {:ok, __MODULE__.t()}
-  def from_config(address, %{"market_maker" => nil} = params) do
-    params = params |> Map.delete("market_maker") |> Map.put("market_makers", [])
-    from_config(address, params)
+  # --- Construction ---
+
+  @spec new(map() | Target.t()) :: {:ok, t()} | {:error, term()}
+
+  def new(%Target{address: address, config: config, status: status}) do
+    config
+    |> init_msg()
+    |> to_new_attrs()
+    |> Map.put("address", address)
+    |> Map.put("deployment_status", status)
+    |> new()
   end
 
-  def from_config(address, %{"market_maker" => market_maker} = params) do
-    params = params |> Map.delete("market_maker") |> Map.put("market_makers", [market_maker])
-    from_config(address, params)
+  def new(%{"market_maker" => nil} = attrs) do
+    attrs |> Map.delete("market_maker") |> Map.put("market_makers", []) |> new()
   end
 
-  def from_config(address, %{
+  def new(%{"market_maker" => market_maker} = attrs) do
+    attrs |> Map.delete("market_maker") |> Map.put("market_makers", [market_maker]) |> new()
+  end
+
+  def new(%{
+        "address" => address,
         "market_makers" => market_makers,
         "denoms" => denoms,
         "oracles" => oracles,
@@ -61,9 +81,9 @@ defmodule Rujira.Fin.Pair do
         "fee_taker" => fee_taker,
         "fee_maker" => fee_maker,
         "fee_address" => fee_address
-      }) do
-    with {fee_taker, ""} <- Decimal.parse(fee_taker),
-         {fee_maker, ""} <- Decimal.parse(fee_maker),
+      } = attrs) do
+    with {:ok, fee_taker} <- Math.to_decimal(fee_taker),
+         {:ok, fee_maker} <- Math.to_decimal(fee_maker),
          {:ok, oracle_base} <- oracle_from_config(Enum.at(oracles || [], 0)),
          {:ok, oracle_quote} <- oracle_from_config(Enum.at(oracles || [], 1)) do
       {:ok,
@@ -81,45 +101,103 @@ defmodule Rujira.Fin.Pair do
          fee_address: fee_address,
          book: :not_loaded,
          summary: :not_loaded,
-         deployment_status: :live
+         deployment_status: Map.get(attrs, "deployment_status", :live)
        }}
     end
   end
 
-  @spec from_target(Target.t()) :: {:ok, t()} | {:error, term()}
-  def from_target(%Target{address: address, config: config, status: status}) do
-    with %{
-           denoms: denoms,
-           oracles: oracles,
-           market_makers: market_makers,
-           tick: tick,
-           fee_taker: fee_taker,
-           fee_maker: fee_maker,
-           fee_address: fee_address
-         } <- init_msg(config),
-         {fee_taker, ""} <- Decimal.parse(fee_taker),
-         {fee_maker, ""} <- Decimal.parse(fee_maker),
-         {:ok, oracle_base} <- oracle_from_config(Enum.at(oracles, 0)),
-         {:ok, oracle_quote} <- oracle_from_config(Enum.at(oracles, 1)) do
-      {:ok,
-       %__MODULE__{
-         id: address,
-         address: address,
-         market_makers: market_makers,
-         token_base: Enum.at(denoms, 0),
-         token_quote: Enum.at(denoms, 1),
-         oracle_base: oracle_base,
-         oracle_quote: oracle_quote,
-         tick: tick,
-         fee_taker: fee_taker,
-         fee_maker: fee_maker,
-         fee_address: fee_address,
-         book: :not_loaded,
-         summary: :not_loaded,
-         deployment_status: status
-       }}
+  # --- Queries ---
+
+  @spec get(String.t()) :: {:ok, t()} | {:error, term()}
+  def get(address), do: Contracts.get({__MODULE__, address})
+
+  @spec list() :: {:ok, [t()]} | {:error, term()}
+  defmemo list do
+    with {:ok, targets} <- Deployments.list_targets(__MODULE__) do
+      Rujira.Enum.reduce_while_ok(targets, [], fn
+        %{status: :preview} = target ->
+          new(target)
+
+        %{module: module, address: address} ->
+          case Contracts.get({module, address}) do
+            {:ok, v} ->
+              {:ok, v}
+
+            {:error, err} ->
+              Logger.error(__MODULE__, "#{address} error #{inspect(err)}")
+              :skip
+          end
+      end)
     end
   end
+
+  @spec find_stable(String.t()) :: {:ok, t()} | {:error, term()}
+  def find_stable(base_denom) do
+    with {:ok, pairs} <- list(),
+         %__MODULE__{} = pair <-
+           Enum.find(
+             pairs,
+             &(&1.token_base == base_denom && &1.deployment_status == :live &&
+                 (String.contains?(&1.token_quote, "usdc") ||
+                    String.contains?(&1.token_quote, "usdt")))
+           ) do
+      {:ok, pair}
+    else
+      nil -> {:error, :not_found}
+      err -> err
+    end
+  end
+
+  @spec find_by_denoms(String.t(), String.t()) :: {:ok, t()} | {:error, term()}
+  defmemo find_by_denoms(base_denom, quote_denom) do
+    with {:ok, pairs} <- list(),
+         %__MODULE__{} = pair <-
+           Enum.find(
+             pairs,
+             &(&1.token_base == base_denom && &1.token_quote == quote_denom)
+           ) do
+      {:ok, pair}
+    else
+      nil -> {:error, :not_found}
+      err -> err
+    end
+  end
+
+  @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
+  def from_id("sthor" <> _ = address), do: get(address)
+  def from_id("thor" <> _ = address), do: get(address)
+
+  def from_id(assets) do
+    with {:ok, pair} <- lookup(assets) do
+      {:ok, %{pair | id: assets}}
+    end
+  end
+
+  @spec ticker_id!(t()) :: String.t()
+  def ticker_id!(%__MODULE__{token_base: token_base, token_quote: token_quote}) do
+    {:ok, base} = Assets.from_denom(token_base)
+    {:ok, target} = Assets.from_denom(token_quote)
+
+    "#{Assets.label(base)}_#{Assets.label(target)}"
+  end
+
+  @spec tvl(String.t()) :: {:ok, non_neg_integer()} | {:error, term()}
+  def tvl(address) do
+    case get(address) do
+      {:ok, %__MODULE__{market_makers: mms} = pair} ->
+        mm_tvl = mms |> Enum.map(&mm_tvl_or_zero/1) |> Enum.sum()
+
+        case Rujira.Fin.Range.tvl(pair) do
+          {:ok, r_tvl} -> {:ok, mm_tvl + r_tvl}
+          {:error, _} = err -> err
+        end
+
+      _ ->
+        {:ok, 0}
+    end
+  end
+
+  # --- Deployment protocol ---
 
   @spec oracle_from_config(map() | String.t() | nil) :: {:ok, Oracle.t() | nil}
   def oracle_from_config(%{"chain" => chain, "symbol" => symbol}),
@@ -178,4 +256,54 @@ defmodule Rujira.Fin.Pair do
 
   @spec init_label(term(), map()) :: String.t()
   def init_label(_, %{"denoms" => [x, y]}), do: "rujira-fin:#{x}:#{y}"
+
+  # --- Private ---
+
+  defp to_new_attrs(msg) do
+    %{
+      "market_makers" => msg[:market_makers],
+      "denoms" => msg[:denoms],
+      "oracles" => msg[:oracles],
+      "tick" => msg[:tick],
+      "fee_taker" => msg[:fee_taker],
+      "fee_maker" => msg[:fee_maker],
+      "fee_address" => msg[:fee_address]
+    }
+  end
+
+  defp mm_tvl_or_zero(mm) do
+    case get_mm_tvl(mm) do
+      {:ok, tvl} -> tvl
+      _ -> 0
+    end
+  end
+
+  defp get_mm_tvl(mm) do
+    with {:ok, %Rujira.Deployments.Target{module: module}} <- Deployments.from_address(mm),
+         {:ok, pool} <- module.pool_from_id(mm) do
+      {:ok, module.tvl(pool)}
+    end
+  end
+
+  defp lookup(assets) do
+    with [b, q] <- String.split(assets, "/"),
+         {:ok, pairs} <- list(),
+         %__MODULE__{} = pair <-
+           Enum.find(
+             pairs,
+             &(Assets.eq_denom(
+                 Assets.from_shortcode(b),
+                 &1.token_base
+               ) and
+                 Assets.eq_denom(
+                   Assets.from_shortcode(q),
+                   &1.token_quote
+                 ))
+           ) do
+      {:ok, pair}
+    else
+      nil -> {:error, :not_found}
+      _ -> {:error, :invalid_id}
+    end
+  end
 end

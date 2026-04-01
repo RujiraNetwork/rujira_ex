@@ -4,9 +4,10 @@ defmodule Rujira.Fin.PairTest do
   alias Rujira.Fin.Pair
   alias Rujira.Deployments.Target
 
-  describe "from_config/2" do
+  describe "new/1 from map" do
     test "parses pair config with market_makers list" do
       config = %{
+        "address" => "thor1pair",
         "market_makers" => ["thor1mm1", "thor1mm2"],
         "denoms" => ["gaia-atom", "eth-usdc-0xabc"],
         "oracles" => [
@@ -19,7 +20,7 @@ defmodule Rujira.Fin.PairTest do
         "fee_address" => "thor1fee"
       }
 
-      assert {:ok, %Pair{} = pair} = Pair.from_config("thor1pair", config)
+      assert {:ok, %Pair{} = pair} = Pair.new(config)
       assert pair.address == "thor1pair"
       assert pair.id == "thor1pair"
       assert pair.market_makers == ["thor1mm1", "thor1mm2"]
@@ -36,6 +37,7 @@ defmodule Rujira.Fin.PairTest do
 
     test "normalizes single market_maker to list" do
       config = %{
+        "address" => "thor1pair",
         "market_maker" => "thor1mm",
         "denoms" => ["gaia-atom", "eth-usdc-0xabc"],
         "oracles" => nil,
@@ -45,11 +47,12 @@ defmodule Rujira.Fin.PairTest do
         "fee_address" => "thor1fee"
       }
 
-      assert {:ok, %Pair{market_makers: ["thor1mm"]}} = Pair.from_config("thor1pair", config)
+      assert {:ok, %Pair{market_makers: ["thor1mm"]}} = Pair.new(config)
     end
 
     test "normalizes nil market_maker to empty list" do
       config = %{
+        "address" => "thor1pair",
         "market_maker" => nil,
         "denoms" => ["gaia-atom", "eth-usdc-0xabc"],
         "oracles" => nil,
@@ -59,11 +62,11 @@ defmodule Rujira.Fin.PairTest do
         "fee_address" => "thor1fee"
       }
 
-      assert {:ok, %Pair{market_makers: []}} = Pair.from_config("thor1pair", config)
+      assert {:ok, %Pair{market_makers: []}} = Pair.new(config)
     end
   end
 
-  describe "from_target/1" do
+  describe "new/1 from Target" do
     test "creates pair from deployment target" do
       target = %Target{
         address: "thor1pair",
@@ -74,7 +77,7 @@ defmodule Rujira.Fin.PairTest do
         }
       }
 
-      assert {:ok, %Pair{} = pair} = Pair.from_target(target)
+      assert {:ok, %Pair{} = pair} = Pair.new(target)
       assert pair.address == "thor1pair"
       assert pair.deployment_status == :preview
       assert pair.token_base == "rune"

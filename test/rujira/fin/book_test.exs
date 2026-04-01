@@ -3,7 +3,7 @@ defmodule Rujira.Fin.BookTest do
 
   alias Rujira.Fin.Book
 
-  describe "from_query/2" do
+  describe "new/2" do
     test "parses book from contract response" do
       data = %{
         "base" => [
@@ -16,7 +16,7 @@ defmodule Rujira.Fin.BookTest do
         ]
       }
 
-      assert {:ok, %Book{} = book} = Book.from_query("thor1pair", data)
+      assert {:ok, %Book{} = book} = Book.new("thor1pair", data)
       assert book.id == "thor1pair"
       assert length(book.asks) == 2
       assert length(book.bids) == 2
@@ -37,7 +37,7 @@ defmodule Rujira.Fin.BookTest do
 
     test "handles empty book" do
       data = %{"base" => [], "quote" => []}
-      assert {:ok, %Book{asks: [], bids: [], center: center}} = Book.from_query("thor1pair", data)
+      assert {:ok, %Book{asks: [], bids: [], center: center}} = Book.new("thor1pair", data)
       assert Decimal.eq?(center, Decimal.new(0))
     end
   end
@@ -67,7 +67,7 @@ defmodule Rujira.Fin.BookTest do
         ]
       }
 
-      {:ok, book} = Book.from_query("thor1pair", data)
+      {:ok, book} = Book.new("thor1pair", data)
 
       # With 2% deviation from best bid (1.4), lower bound = 1.372
       # Only first bid (1.4) is within range
