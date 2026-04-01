@@ -3,7 +3,7 @@ defmodule Rujira.Thorchain.Events.Bond do
 
   alias Rujira.Amount
 
-  defstruct [:type, :amount, :bond_type]
+  defstruct type: nil, amount: 0, bond_type: nil
 
   @type t :: %__MODULE__{
           type: :bond | :rebond,

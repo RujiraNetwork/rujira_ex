@@ -3,7 +3,7 @@ defmodule Rujira.Thorchain.Events.OraclePrice do
 
   alias Rujira.Math
 
-  defstruct [:symbol, :price]
+  defstruct symbol: nil, price: nil
 
   @type t :: %__MODULE__{
           symbol: String.t(),

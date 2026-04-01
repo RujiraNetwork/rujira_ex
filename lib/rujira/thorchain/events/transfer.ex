@@ -3,7 +3,7 @@ defmodule Rujira.Thorchain.Events.Transfer do
 
   alias Rujira.Amount
 
-  defstruct [:sender, :recipient, :amount]
+  defstruct sender: nil, recipient: nil, amount: 0
 
   @type t :: %__MODULE__{
           sender: String.t(),

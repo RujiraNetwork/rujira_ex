@@ -1,7 +1,7 @@
 defmodule Rujira.Thorchain.Events.AddLiquidity do
   @moduledoc "A THORChain add liquidity event."
 
-  defstruct [:pool, :rune_address, :asset_address]
+  defstruct pool: nil, rune_address: nil, asset_address: nil
 
   @type t :: %__MODULE__{
           pool: String.t(),

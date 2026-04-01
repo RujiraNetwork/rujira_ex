@@ -1,7 +1,7 @@
 defmodule Rujira.Thorchain.Events.Swap do
   @moduledoc "A THORChain pool swap event."
 
-  defstruct [:pool, :id, :coin, :emit_asset, :memo, :from, :to]
+  defstruct pool: nil, id: nil, coin: nil, emit_asset: nil, memo: nil, from: nil, to: nil
 
   @type t :: %__MODULE__{
           pool: String.t(),

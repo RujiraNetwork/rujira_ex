@@ -1,7 +1,7 @@
 defmodule Rujira.Thorchain.Events.SetMimir do
   @moduledoc "A THORChain governance mimir update event."
 
-  defstruct [:key, :value]
+  defstruct key: nil, value: nil
 
   @type t :: %__MODULE__{
           key: String.t(),

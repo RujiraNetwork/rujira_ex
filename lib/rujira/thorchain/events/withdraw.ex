@@ -1,7 +1,7 @@
 defmodule Rujira.Thorchain.Events.Withdraw do
   @moduledoc "A THORChain withdraw event."
 
-  defstruct [:pool]
+  defstruct pool: nil
 
   @type t :: %__MODULE__{pool: String.t()}
 
