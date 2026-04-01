@@ -32,7 +32,11 @@ defmodule Rujira.Protocol.Resource do
   use Memoize
 
   # --- Struct ---
-  defstruct [...]
+  defstruct id: nil,
+            name: nil,
+            items: [],
+            value: 0,
+            price: Decimal.new(0)
   @type t :: %__MODULE__{...}
 
   # --- Construction ---

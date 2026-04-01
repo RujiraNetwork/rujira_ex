@@ -85,6 +85,33 @@ One function per type. `nil` in → `{:ok, nil}` out. Use `with` chains. Never u
 
 All amounts are integers normalized to 8 decimal places (`1.0 = 100_000_000`). Use `Rujira.Amount.t()` in typespecs and `Amount.new/1` for construction.
 
+## Struct Defaults
+
+Every `defstruct` must declare explicit defaults — never use the bare `[:field]` syntax.
+
+- Strings/references: `nil`
+- Lists: `[]`
+- Integers: `0`
+- Decimals: `Decimal.new(0)`
+- Loadable associations: `:not_loaded`
+- Enums: the most common value (e.g. `deployment_status: :live`)
+
+```elixir
+# good
+defstruct id: nil,
+          items: [],
+          total: 0,
+          price: Decimal.new(0),
+          book: :not_loaded
+
+# bad — all nil, no type hints
+defstruct [:id, :items, :total, :price, :book]
+```
+
+## Visibility
+
+Every public function on a resource module must be delegated from the facade (`defdelegate` in `Rujira.Protocol`), or be a deployment protocol callback (`init_msg`, `migrate_msg`, `init_label`), or be a `new` constructor. Everything else must be `defp`.
+
 ## Structure
 
 - 1 module per file, 1 responsibility per module
