@@ -15,17 +15,47 @@ alias Rujira.Fin.Events.{Trade, Submit}
 ```
 
 ### Return Values
-All public functions must return `{:ok, term()}` or `{:error, term()}`. Never return bare values, `nil`, or `:error` without a reason.
+
+**Fallible functions** (I/O, parsing, construction that can fail) must return `{:ok, term()} | {:error, term()}`.
+
+**Infallible pure functions** (getters, math, formatting, predicates) return bare values.
+
+Never return `nil` as a failure — use `{:error, :not_found}` or similar.
+
+```elixir
+# fallible — I/O or parsing
+def from_denom(denom), do: {:ok, asset}
+def from_denom(_), do: {:error, :unknown_denom}
+
+# infallible pure — getter
+def decimals(%Asset{chain: "ETH"}), do: 18
+def label(%Asset{ticker: ticker}), do: ticker
+
+# predicate
+def eq_denom?(asset, denom), do: true
+```
+
+### Typespecs
+
+Every public `def` must have `@spec`. Use defined types (`Asset.t()`, `Amount.t()`) not raw structs.
 
 ```elixir
 # good
-def get(id), do: {:ok, value}
-def get(_), do: {:error, :not_found}
+@spec from_denom(String.t()) :: {:ok, Asset.t()} | {:error, term()}
 
-# bad
-def get(id), do: value
-def get(_), do: nil
+# bad — missing spec, raw struct
+def from_denom(d), do: {:ok, %Asset{...}}
 ```
+
+### Naming
+
+| Pattern | Use | Returns |
+|---------|-----|---------|
+| `new/N` | Struct constructor | Bare struct (infallible) or `{:ok, struct()} \| {:error, _}` |
+| `from_query/N` | Parse from chain/contract response | `{:ok, struct()} \| {:error, _}` |
+| `from_X/N` | Parse/convert from X format | `{:ok, _} \| {:error, _}` |
+| `to_X/N` | Convert to X format | `{:ok, _} \| {:error, _}` (fallible) or bare (infallible) |
+| `bang!/N` | Raises on error, returns bare | Bare value |
 
 ### Map Access
 Use `Map.get/2` instead of bracket syntax for string-keyed maps.
@@ -41,21 +71,6 @@ attrs["key"]
 ### Pattern Matching
 Always prefer pattern matching in function heads over `case`, `cond`, or `if` inside the body.
 
-```elixir
-# good
-def parse(%{type: "swap"} = event), do: ...
-def parse(%{type: "transfer"} = event), do: ...
-def parse(_), do: {:error, :unknown_event}
-
-# bad
-def parse(event) do
-  case event.type do
-    "swap" -> ...
-    "transfer" -> ...
-  end
-end
-```
-
 ### Numeric Parsing
 
 One function per type. `nil` in → `{:ok, nil}` out. Use `with` chains.
@@ -66,22 +81,13 @@ One function per type. `nil` in → `{:ok, nil}` out. Use `with` chains.
 | Decimal/price | `Math.to_decimal/1` | `{:ok, nil}` | `{:ok, Decimal.t}` | `{:error, :invalid_decimal}` |
 | Plain integer | `Math.to_integer/1` | `{:ok, nil}` | `{:ok, integer}` | `{:error, :invalid_integer}` |
 
-```elixir
-# good — with chain, no private helpers
-def new(%{"amount" => amount, "rate" => rate} = a) do
-  with {:ok, amount} <- Amount.new(amount),
-       {:ok, rate} <- Math.to_decimal(rate) do
-    {:ok, %__MODULE__{amount: amount, rate: rate}}
-  end
-end
-
-# bad — private parse helpers per file
-defp parse_amount(nil), do: nil
-defp parse_amount(v), do: elem(Amount.new(v), 1)
-```
-
 ### Amounts
 All amounts are integers normalized to 8 decimal places (`1.0 = 100_000_000`). Use `Rujira.Amount.t()` in typespecs and `Amount.new/1` for construction.
+
+### Structure
+- 1 module per file, 1 responsibility per module
+- Structs with multiple sub-concerns get their own folder
+- Event structs live in `events/` subfolder with `new/1` constructors
 
 ## Project
 
