@@ -25,6 +25,7 @@ defmodule Rujira.Contracts do
 
   @type t :: %__MODULE__{id: String.t(), address: String.t(), info: ContractInfo.t()}
 
+  @spec from_id(String.t()) :: {:ok, t()}
   def from_id(id) do
     {:ok, %__MODULE__{id: id, address: id}}
   end
@@ -38,6 +39,8 @@ defmodule Rujira.Contracts do
     end
   end
 
+  @spec version(String.t()) ::
+          {:ok, %{contract: String.t(), version: String.t()} | nil} | {:error, term()}
   defmemo version(address) do
     case query_state_raw(address, :erlang.iolist_to_binary("contract_info")) do
       {:ok, %{"contract" => contract, "version" => version}} ->
@@ -51,6 +54,8 @@ defmodule Rujira.Contracts do
     end
   end
 
+  @spec build_address(binary(), String.t(), non_neg_integer() | String.t()) ::
+          {:ok, String.t()} | {:error, term()}
   defmemo build_address(salt, creator, id) when is_integer(id) do
     with {:ok, %{data_hash: data_hash}} <- code_info(id) do
       build_address(salt, creator, Base.encode16(data_hash))
@@ -71,6 +76,7 @@ defmodule Rujira.Contracts do
     end
   end
 
+  @spec build_address!(binary(), String.t(), non_neg_integer() | String.t()) :: String.t()
   defmemo build_address!(salt, deployer, code_id) do
     {:ok, address} = build_address(salt, deployer, code_id)
     address
@@ -198,6 +204,7 @@ defmodule Rujira.Contracts do
     end
   end
 
+  @spec from_target({module(), String.t()}) :: {:ok, struct()} | {:error, term()}
   def from_target({module, address}) do
     case Deployments.list_all_targets() do
       {:ok, targets} ->
@@ -320,6 +327,7 @@ defmodule Rujira.Contracts do
   end
 
   @doc "Streams the current contract state"
+  @spec stream_state_all(String.t()) :: Enumerable.t()
   def stream_state_all(address) do
     Stream.resource(
       fn ->
@@ -356,6 +364,8 @@ defmodule Rujira.Contracts do
     )
   end
 
+  @spec query_state_smart_with_retry(String.t(), map()) ::
+          {:ok, map()} | {:error, term()}
   def query_state_smart_with_retry(address, query) do
     case query_state_smart(address, query) |> log_retry(address, query) do
       {:error, %GRPC.RPCError{status: 2, message: msg}}

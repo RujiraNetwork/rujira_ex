@@ -12,6 +12,6 @@ defmodule Rujira.Assets.Asset do
           chain: String.t(),
           symbol: String.t(),
           ticker: String.t(),
-          metadata: Metadata.t()
+          metadata: Metadata.t() | nil
         }
 end

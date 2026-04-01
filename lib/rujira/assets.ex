@@ -13,6 +13,7 @@ defmodule Rujira.Assets do
 
   # --- Metadata ---
 
+  @spec load_metadata(Asset.t()) :: {:ok, map()} | {:error, term()}
   def load_metadata(%Asset{id: "x/" <> _ = denom} = asset) do
     with {:ok, metadata} <- Metadata.load_metadata(denom) do
       {:ok, %{metadata | decimals: decimals(asset)}}
@@ -25,6 +26,7 @@ defmodule Rujira.Assets do
 
   # --- from_string ---
 
+  @spec from_string(String.t()) :: Asset.t()
   def from_string(id) do
     %Asset{
       id: id,
@@ -35,10 +37,12 @@ defmodule Rujira.Assets do
     }
   end
 
+  @spec from_id(String.t()) :: {:ok, Asset.t()}
   def from_id(id), do: {:ok, from_string(id)}
 
   # --- from_shortcode ---
 
+  @spec from_shortcode(String.t()) :: Asset.t()
   def from_shortcode("RUJI"), do: from_string("THOR.RUJI")
   def from_shortcode("RUNE"), do: from_string("THOR.RUNE")
   def from_shortcode("TCY"), do: from_string("THOR.TCY")
@@ -54,6 +58,7 @@ defmodule Rujira.Assets do
 
   # --- chain/symbol/ticker ---
 
+  @spec chain(String.t()) :: String.t()
   def chain("x/" <> _), do: "THOR"
 
   def chain(str) do
@@ -61,6 +66,7 @@ defmodule Rujira.Assets do
     c
   end
 
+  @spec symbol(String.t()) :: String.t()
   def symbol("x/" <> id), do: String.upcase(id)
 
   def symbol(str) do
@@ -68,6 +74,7 @@ defmodule Rujira.Assets do
     v
   end
 
+  @spec ticker(String.t()) :: String.t()
   def ticker("x/" <> id), do: String.upcase(id)
 
   def ticker(str) do
@@ -78,6 +85,7 @@ defmodule Rujira.Assets do
 
   # --- decimals ---
 
+  @spec decimals(Asset.t() | map()) :: non_neg_integer()
   def decimals(%{type: :layer_1, chain: "AVAX", ticker: "USDC"}), do: 6
   def decimals(%{type: :layer_1, chain: "AVAX", ticker: "USDT"}), do: 6
   def decimals(%{type: :layer_1, chain: "AVAX"}), do: 18
@@ -106,6 +114,7 @@ defmodule Rujira.Assets do
 
   # --- type ---
 
+  @spec type(String.t()) :: :native | :layer_1 | :synth | :trade | :secured
   def type(str) do
     cond do
       String.starts_with?(str, "THOR.") -> :native
@@ -119,6 +128,7 @@ defmodule Rujira.Assets do
 
   # --- to_native ---
 
+  @spec to_native(Asset.t() | map() | nil) :: {:ok, String.t() | nil} | {:error, term()}
   def to_native(%{id: "THOR.RUNE"}), do: {:ok, "rune"}
   def to_native(%{id: "THOR.RUJI"}), do: {:ok, "x/ruji"}
   def to_native(%{id: "THOR.TCY"}), do: {:ok, "tcy"}
@@ -133,19 +143,26 @@ defmodule Rujira.Assets do
     {:ok, String.downcase(chain) <> "-" <> String.downcase(symbol)}
   end
 
-  def to_native(%Asset{} = a), do: to_secured(a) |> to_native()
+  def to_native(%Asset{} = a) do
+    with {:ok, secured} <- to_secured(a) do
+      to_native(secured)
+    end
+  end
+
   def to_native(nil), do: {:ok, nil}
 
   # --- to_secured (used by to_native) ---
 
-  def to_secured(%Asset{chain: "THOR"}), do: nil
+  @spec to_secured(Asset.t()) :: {:ok, Asset.t()} | {:error, :not_supported}
+  def to_secured(%Asset{chain: "THOR"}), do: {:error, :not_supported}
 
   def to_secured(%Asset{id: id} = a) do
-    %{a | type: :secured, id: String.replace(id, ~r/[\.\-\/]/, "-", global: false)}
+    {:ok, %{a | type: :secured, id: String.replace(id, ~r/[\.\-\/]/, "-", global: false)}}
   end
 
   # --- from_denom ---
 
+  @spec from_denom(String.t()) :: {:ok, Asset.t()} | {:error, String.t()}
   def from_denom("x/ruji") do
     {:ok, %Asset{id: "THOR.RUJI", type: :native, chain: "THOR", symbol: "RUJI", ticker: "RUJI"}}
   end
@@ -240,6 +257,7 @@ defmodule Rujira.Assets do
 
   # --- eq_denom ---
 
+  @spec eq_denom(Asset.t(), String.t()) :: boolean()
   def eq_denom(%Asset{} = a, denom) do
     case from_denom(denom) do
       {:ok, asset} -> a.chain == asset.chain and a.ticker == asset.ticker
@@ -249,6 +267,7 @@ defmodule Rujira.Assets do
 
   # --- Display helpers ---
 
+  @spec label(Asset.t() | map()) :: String.t()
   def label(%{chain: "ETH", ticker: "USDC"}), do: "USDC"
 
   def label(%{chain: chain, ticker: ticker}) when ticker in ["USDC", "USDT"],

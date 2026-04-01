@@ -14,28 +14,36 @@ defmodule Rujira.Deployments do
 
   @path "data/deployments"
 
+  @spec get_target(module(), term()) :: {:ok, Target.t()} | {:error, term()}
   defmemo get_target(module, id) do
-    list_all_targets()
-    |> Enum.find(&(&1.module === module and &1.id == id))
+    with {:ok, targets} <- list_all_targets() do
+      case Enum.find(targets, &(&1.module === module and &1.id == id)) do
+        nil -> {:error, :not_found}
+        target -> {:ok, target}
+      end
+    end
   end
 
   @doc "Returns the address of a contract if it exists and is live"
+  @spec get_address(module(), term()) :: {:ok, String.t()} | {:error, :not_found}
   defmemo get_address(module, id) do
     case get_target(module, id) do
-      %{address: address, status: :live} -> address
-      _ -> nil
+      {:ok, %{address: address, status: :live}} -> {:ok, address}
+      _ -> {:error, :not_found}
     end
   end
 
+  @spec from_address(String.t()) :: {:ok, Target.t()} | {:error, term()}
   defmemo from_address(address) do
-    list_all_targets()
-    |> Enum.find(&(&1.address == address))
-    |> case do
-      nil -> {:error, :not_found}
-      target -> {:ok, target}
+    with {:ok, targets} <- list_all_targets() do
+      case Enum.find(targets, &(&1.address == address)) do
+        nil -> {:error, :not_found}
+        target -> {:ok, target}
+      end
     end
   end
 
+  @spec list_all_targets() :: {:ok, [Target.t()]} | {:error, term()}
   defmemo list_all_targets() do
     %{codes: codes, targets: targets} = load_config!()
 
@@ -45,16 +53,19 @@ defmodule Rujira.Deployments do
              &parse_protocol(codes, &1),
              timeout: 30_000
            ) do
-      List.flatten(result)
+      {:ok, List.flatten(result)}
     end
   end
 
   @doc "List all targets for a given module"
+  @spec list_targets(module()) :: {:ok, [Target.t()]} | {:error, term()}
   defmemo list_targets(module) do
-    list_all_targets()
-    |> Enum.filter(&(&1.module === module))
+    with {:ok, targets} <- list_all_targets() do
+      {:ok, Enum.filter(targets, &(&1.module === module))}
+    end
   end
 
+  @spec contract_file_path(String.t()) :: String.t()
   defmemo contract_file_path(name) do
     plan = Application.get_env(:rujira_core, __MODULE__)[:plan]
 

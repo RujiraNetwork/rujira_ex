@@ -17,4 +17,18 @@ defmodule Rujira.Deployments.Target do
   ]
 
   @type status :: :live | :pending
+
+  @type t :: %__MODULE__{
+          id: term(),
+          address: String.t() | nil,
+          creator: String.t() | nil,
+          code_id: non_neg_integer() | nil,
+          salt: String.t() | nil,
+          admin: String.t() | nil,
+          protocol: String.t() | nil,
+          module: module() | nil,
+          config: map() | nil,
+          contract: String.t() | nil,
+          status: status() | nil
+        }
 end

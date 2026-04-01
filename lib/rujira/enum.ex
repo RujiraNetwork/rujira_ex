@@ -11,6 +11,8 @@ defmodule Rujira.Enum do
   - Skips over elements if `:skip` is returned.
   - Returns `{:ok, list}` when all elements succeed.
   """
+  @spec reduce_while_ok(Enumerable.t(), list(), (term() -> {:ok, term()} | {:error, term()} | :skip)) ::
+          {:ok, list()} | {:error, term()}
   def reduce_while_ok(enum, initial_acc \\ [], fun) do
     Enum.reduce_while(enum, {:ok, initial_acc}, fn element, {:ok, acc} ->
       case fun.(element) do
@@ -33,6 +35,7 @@ defmodule Rujira.Enum do
   @doc """
   Returns a list of unique elements from the given enumerable, preserving order.
   """
+  @spec uniq(Enumerable.t()) :: list()
   def uniq(enum) do
     {_, acc} =
       Enum.reduce(enum, {MapSet.new(), []}, fn x, {seen, acc} ->
@@ -50,6 +53,8 @@ defmodule Rujira.Enum do
   Runs the given function concurrently over the enum using `Task.async_stream/3`,
   short-circuiting on the first error, and collecting only successful results.
   """
+  @spec reduce_async_while_ok(Enumerable.t(), (term() -> term()), keyword()) ::
+          {:ok, list()} | {:error, term()}
   def reduce_async_while_ok(enum, fun, opts \\ []) when is_function(fun, 1) do
     Task.async_stream(
       enum,
