@@ -2,7 +2,7 @@ defmodule Rujira.Assets.Asset do
   @moduledoc """
   Defines the Asset struct for representing blockchain assets.
   """
-  defstruct [:id, :type, :chain, :symbol, :ticker, :metadata]
+  defstruct id: nil, type: nil, chain: nil, symbol: nil, ticker: nil, metadata: nil
 
   alias Rujira.Assets.Metadata
 

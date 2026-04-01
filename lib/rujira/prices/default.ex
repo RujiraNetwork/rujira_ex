@@ -37,7 +37,7 @@ defmodule Rujira.Prices.Default do
   defmemo oracle_price(symbol), expires_in: Rujira.cache_ttl() do
     with {:ok, %{price: %{price: price_str}}} <-
            Rujira.Node.query(&Q.oracle_price/2, %QueryOraclePriceRequest{symbol: symbol}),
-         {price, ""} <- Decimal.parse(price_str) do
+         {:ok, price} <- Rujira.Math.to_decimal(price_str) do
       {:ok, price}
     else
       _ -> {:error, :no_price}

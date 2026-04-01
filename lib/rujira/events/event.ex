@@ -1,7 +1,7 @@
 defmodule Rujira.Events.Event do
   @moduledoc "Default event struct for unrecognized or not-yet-implemented events."
 
-  defstruct [:type, :attributes]
+  defstruct type: nil, attributes: nil
 
   @type t :: %__MODULE__{
           type: String.t(),

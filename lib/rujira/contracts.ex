@@ -21,7 +21,7 @@ defmodule Rujira.Contracts do
 
   use Memoize
 
-  defstruct [:id, :address, :info]
+  defstruct id: nil, address: nil, info: nil
 
   @type t :: %__MODULE__{id: String.t(), address: String.t(), info: ContractInfo.t()}
 

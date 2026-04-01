@@ -7,17 +7,15 @@ defmodule Rujira.Assets.Metadata do
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataResponse
 
-  defstruct [
-    :decimals,
-    :description,
-    :display,
-    :name,
-    :symbol,
-    :uri,
-    :uri_hash,
-    :png_url,
-    :svg_url
-  ]
+  defstruct decimals: 0,
+            description: nil,
+            display: nil,
+            name: nil,
+            symbol: nil,
+            uri: nil,
+            uri_hash: nil,
+            png_url: nil,
+            svg_url: nil
 
   @type t :: %__MODULE__{
           decimals: integer(),

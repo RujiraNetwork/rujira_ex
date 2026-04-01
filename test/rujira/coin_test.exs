@@ -39,7 +39,7 @@ defmodule Rujira.CoinTest do
     end
 
     test "rejects non-integer string" do
-      assert :error = Coin.new("rune", "abc")
+      assert {:error, :invalid_integer} = Coin.new("rune", "abc")
     end
   end
 
