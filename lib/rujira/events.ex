@@ -3,14 +3,22 @@ defmodule Rujira.Events do
   Generic event parser for all Rujira protocol events.
 
   Takes a raw event, creates a default `Event` struct, then routes it
-  to the correct protocol parser. If no parser matches, the default
-  event is returned as-is so consumers never lose data.
+  to the correct protocol parser. Each protocol returns an envelope
+  struct so consumers can match at protocol, type, or field level.
 
   ## Usage
 
       case Rujira.Events.parse(raw_event) do
-        {:ok, %Rujira.Fin.Events.Trade{} = trade} -> handle_trade(trade)
-        {:ok, %Rujira.Thorchain.Events.Swap{} = swap} -> handle_swap(swap)
+        # Match all FIN events
+        {:ok, %Rujira.Fin.Events.Event{} = e} -> handle_fin(e)
+
+        # Match a specific FIN event by inner struct
+        {:ok, %Rujira.Fin.Events.Event{data: %Rujira.Fin.Events.Trade{} = trade}} -> ...
+
+        # Match all Thorchain events
+        {:ok, %Rujira.Thorchain.Events.Event{} = e} -> handle_tc(e)
+
+        # Unrecognized protocol
         {:ok, %Rujira.Events.Event{} = event} -> handle_unknown(event)
       end
   """
@@ -47,7 +55,11 @@ defmodule Rujira.Events do
   Returns `{:ok, struct}` for known events or `{:ok, %Event{}}` for
   unrecognized events so consumers never lose data.
   """
-  @spec parse(map() | BlockEvent.t()) :: {:ok, struct()} | {:error, term()}
+  alias Rujira.Fin.Events.Event, as: FinEvent
+  alias Rujira.Thorchain.Events.Event, as: TcEvent
+
+  @spec parse(map() | BlockEvent.t()) ::
+          {:ok, FinEvent.t() | TcEvent.t() | Event.t()} | {:error, term()}
 
   def parse(%BlockEvent{} = event), do: event |> cast() |> parse()
 

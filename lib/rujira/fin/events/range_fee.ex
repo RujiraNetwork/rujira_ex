@@ -3,17 +3,16 @@ defmodule Rujira.Fin.Events.RangeFee do
 
   alias Rujira.Math
 
-  defstruct [:contract, :idx]
+  defstruct [:idx]
 
   @type t :: %__MODULE__{
-          contract: String.t(),
           idx: non_neg_integer()
         }
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
-  def new(%{"_contract_address" => contract, "idx" => idx}) do
+  def new(%{"idx" => idx}) do
     with {:ok, idx} <- Math.to_integer(idx) do
-      {:ok, %__MODULE__{contract: contract, idx: idx}}
+      {:ok, %__MODULE__{idx: idx}}
     end
   end
 end

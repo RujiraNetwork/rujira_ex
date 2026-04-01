@@ -3,18 +3,17 @@ defmodule Rujira.Fin.Events.RangeCreate do
 
   alias Rujira.Math
 
-  defstruct [:contract, :idx, :owner]
+  defstruct [:idx, :owner]
 
   @type t :: %__MODULE__{
-          contract: String.t(),
           idx: non_neg_integer(),
           owner: String.t()
         }
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
-  def new(%{"_contract_address" => contract, "idx" => idx, "owner" => owner}) do
+  def new(%{"idx" => idx, "owner" => owner}) do
     with {:ok, idx} <- Math.to_integer(idx) do
-      {:ok, %__MODULE__{contract: contract, idx: idx, owner: owner}}
+      {:ok, %__MODULE__{idx: idx, owner: owner}}
     end
   end
 end

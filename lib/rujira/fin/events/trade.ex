@@ -4,10 +4,9 @@ defmodule Rujira.Fin.Events.Trade do
   alias Rujira.Amount
   alias Rujira.Math
 
-  defstruct [:contract, :side, :price, :rate, :offer, :bid, :ranges]
+  defstruct [:side, :price, :rate, :offer, :bid, :ranges]
 
   @type t :: %__MODULE__{
-          contract: String.t(),
           side: :base | :quote,
           price: String.t(),
           rate: Decimal.t() | nil,
@@ -17,13 +16,12 @@ defmodule Rujira.Fin.Events.Trade do
         }
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
-  def new(%{"_contract_address" => contract, "side" => side, "price" => price} = attrs) do
+  def new(%{"side" => side, "price" => price} = attrs) do
     with {:ok, rate} <- Math.to_decimal(Map.get(attrs, "rate")),
          {:ok, offer} <- Amount.new(Map.get(attrs, "offer")),
          {:ok, bid} <- Amount.new(Map.get(attrs, "bid")) do
       {:ok,
        %__MODULE__{
-         contract: contract,
          side: side(side),
          price: price,
          rate: rate,
