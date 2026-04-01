@@ -104,20 +104,20 @@ defmodule Rujira.Fin.PairTest do
     end
   end
 
-  describe "get_oracle/1" do
+  describe "oracle_from_config/1" do
     test "parses map oracle" do
-      assert {:ok, oracle} = Pair.get_oracle(%{"chain" => "GAIA", "symbol" => "ATOM"})
+      assert {:ok, oracle} = Pair.oracle_from_config(%{"chain" => "GAIA", "symbol" => "ATOM"})
       assert oracle.id == "GAIA.ATOM"
       assert oracle.symbol == "GAIA.ATOM"
     end
 
     test "parses string oracle" do
-      assert {:ok, oracle} = Pair.get_oracle("rune")
+      assert {:ok, oracle} = Pair.oracle_from_config("rune")
       assert oracle.id == "RUNE"
     end
 
     test "handles nil oracle" do
-      assert {:ok, nil} = Pair.get_oracle(nil)
+      assert {:ok, nil} = Pair.oracle_from_config(nil)
     end
   end
 end

@@ -64,8 +64,8 @@ defmodule Rujira.Fin.Pair do
       }) do
     with {fee_taker, ""} <- Decimal.parse(fee_taker),
          {fee_maker, ""} <- Decimal.parse(fee_maker),
-         {:ok, oracle_base} <- get_oracle(Enum.at(oracles || [], 0)),
-         {:ok, oracle_quote} <- get_oracle(Enum.at(oracles || [], 1)) do
+         {:ok, oracle_base} <- oracle_from_config(Enum.at(oracles || [], 0)),
+         {:ok, oracle_quote} <- oracle_from_config(Enum.at(oracles || [], 1)) do
       {:ok,
        %__MODULE__{
          id: address,
@@ -86,6 +86,7 @@ defmodule Rujira.Fin.Pair do
     end
   end
 
+  @spec from_target(Target.t()) :: {:ok, t()} | {:error, term()}
   def from_target(%Target{address: address, config: config, status: status}) do
     with %{
            denoms: denoms,
@@ -98,8 +99,8 @@ defmodule Rujira.Fin.Pair do
          } <- init_msg(config),
          {fee_taker, ""} <- Decimal.parse(fee_taker),
          {fee_maker, ""} <- Decimal.parse(fee_maker),
-         {:ok, oracle_base} <- get_oracle(Enum.at(oracles, 0)),
-         {:ok, oracle_quote} <- get_oracle(Enum.at(oracles, 1)) do
+         {:ok, oracle_base} <- oracle_from_config(Enum.at(oracles, 0)),
+         {:ok, oracle_quote} <- oracle_from_config(Enum.at(oracles, 1)) do
       {:ok,
        %__MODULE__{
          id: address,
@@ -120,20 +121,22 @@ defmodule Rujira.Fin.Pair do
     end
   end
 
-  def get_oracle(%{"chain" => chain, "symbol" => symbol}),
-    do: get_oracle(%{chain: chain, symbol: symbol})
+  @spec oracle_from_config(map() | String.t() | nil) :: {:ok, Oracle.t() | nil}
+  def oracle_from_config(%{"chain" => chain, "symbol" => symbol}),
+    do: oracle_from_config(%{chain: chain, symbol: symbol})
 
-  def get_oracle(%{chain: chain, symbol: symbol}) do
+  def oracle_from_config(%{chain: chain, symbol: symbol}) do
     id = String.upcase(chain) <> "." <> symbol
     {:ok, %Oracle{id: id, symbol: id, asset: Assets.from_string(id)}}
   end
 
-  def get_oracle(str) when is_binary(str) do
+  def oracle_from_config(str) when is_binary(str) do
     {:ok, %Oracle{id: String.upcase(str), symbol: String.upcase(str)}}
   end
 
-  def get_oracle(nil), do: {:ok, nil}
+  def oracle_from_config(nil), do: {:ok, nil}
 
+  @spec init_msg(map()) :: map()
   def init_msg(
         %{
           "denoms" => [x, y],
@@ -170,7 +173,9 @@ defmodule Rujira.Fin.Pair do
     end
   end
 
+  @spec migrate_msg(term(), term(), term()) :: map()
   def migrate_msg(_from, _to, _), do: %{}
 
+  @spec init_label(term(), map()) :: String.t()
   def init_label(_, %{"denoms" => [x, y]}), do: "rujira-fin:#{x}:#{y}"
 end

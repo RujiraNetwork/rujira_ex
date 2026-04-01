@@ -45,6 +45,7 @@ defmodule Rujira.Fin.Order do
           deviation: deviation
         }
 
+  @spec from_query(map(), map()) :: {:ok, t()} | {:error, term()}
   def from_query(
         %{
           address: address,
@@ -79,43 +80,48 @@ defmodule Rujira.Fin.Order do
       remaining_value = value(remaining, rate, side)
       filled_value = value(filled, Decimal.div(Decimal.new(1), rate), side)
 
-      %__MODULE__{
-        id: "#{address}/#{side}/#{price_id}/#{owner}",
-        pair: address,
-        owner: owner,
-        side: side,
-        rate: rate,
-        updated_at: updated_at,
-        offer: offer,
-        offer_value: value(offer, rate, side),
-        remaining: remaining,
-        remaining_value: remaining_value,
-        filled: filled,
-        filled_value: filled_value,
-        filled_fee: filled_fee,
-        type: type,
-        deviation: deviation,
-        value_usd:
-          case side do
-            :quote ->
-              Prices.value_usd(asset_quote.symbol, remaining) +
-                Prices.value_usd(asset_base.symbol, filled)
+      {:ok,
+       %__MODULE__{
+         id: "#{address}/#{side}/#{price_id}/#{owner}",
+         pair: address,
+         owner: owner,
+         side: side,
+         rate: rate,
+         updated_at: updated_at,
+         offer: offer,
+         offer_value: value(offer, rate, side),
+         remaining: remaining,
+         remaining_value: remaining_value,
+         filled: filled,
+         filled_value: filled_value,
+         filled_fee: filled_fee,
+         type: type,
+         deviation: deviation,
+         value_usd:
+           case side do
+             :quote ->
+               Prices.value_usd(asset_quote.symbol, remaining) +
+                 Prices.value_usd(asset_base.symbol, filled)
 
-            :base ->
-              Prices.value_usd(asset_base.symbol, remaining) +
-                Prices.value_usd(asset_quote.symbol, filled)
-          end
-      }
+             :base ->
+               Prices.value_usd(asset_base.symbol, remaining) +
+                 Prices.value_usd(asset_quote.symbol, filled)
+           end
+       }}
     end
   end
 
+  @spec parse_price(map()) :: {atom(), term(), String.t()}
   def parse_price(%{"fixed" => v}), do: {:fixed, nil, "fixed:#{v}"}
   def parse_price(%{"oracle" => v}), do: {:oracle, v, "oracle:#{v}"}
+  @spec decode_price(String.t()) :: map()
   def decode_price("fixed:" <> v), do: %{fixed: v}
   def decode_price("oracle:" <> v), do: %{oracle: String.to_integer(v)}
+  @spec encode_price(map()) :: String.t()
   def encode_price(%{fixed: v}), do: "fixed:#{v}"
   def encode_price(%{oracle: v}), do: "oracle:#{v}"
 
+  @spec new(String.t(), String.t(), String.t(), String.t()) :: t()
   def new(address, side, price, owner) do
     [type | _] = String.split(price, ":")
 

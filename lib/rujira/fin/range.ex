@@ -48,6 +48,7 @@ defmodule Rujira.Fin.Range do
   @doc """
   Parses a range from a contract query response.
   """
+  @spec from_query(map(), map()) :: {:ok, t()} | {:error, term()}
   def from_query(
         %{
           address: address,
@@ -90,33 +91,35 @@ defmodule Rujira.Fin.Range do
       base_fees_int = Math.floor(fees_base)
       quote_fees_int = Math.floor(fees_quote)
 
-      %__MODULE__{
-        id: "#{address}/#{idx}",
-        idx: idx,
-        pair: address,
-        owner: owner,
-        high: high,
-        low: low,
-        skew: skew,
-        spread: spread,
-        fee: fee,
-        base: base_int,
-        quote: quote_int,
-        price: price,
-        ask: ask,
-        bid: bid,
-        fees_base: base_fees_int,
-        fees_quote: quote_fees_int,
-        value_usd:
-          Prices.value_usd(asset_base.symbol, base_int + base_fees_int) +
-            Prices.value_usd(asset_quote.symbol, quote_int + quote_fees_int)
-      }
+      {:ok,
+       %__MODULE__{
+         id: "#{address}/#{idx}",
+         idx: idx,
+         pair: address,
+         owner: owner,
+         high: high,
+         low: low,
+         skew: skew,
+         spread: spread,
+         fee: fee,
+         base: base_int,
+         quote: quote_int,
+         price: price,
+         ask: ask,
+         bid: bid,
+         fees_base: base_fees_int,
+         fees_quote: quote_fees_int,
+         value_usd:
+           Prices.value_usd(asset_base.symbol, base_int + base_fees_int) +
+             Prices.value_usd(asset_quote.symbol, quote_int + quote_fees_int)
+       }}
     end
   end
 
   @doc """
   Creates a minimal range struct for subscription edge responses.
   """
+  @spec new(String.t(), integer()) :: t()
   def new(address, idx) do
     %__MODULE__{id: "#{address}/#{idx}", idx: idx, pair: address}
   end

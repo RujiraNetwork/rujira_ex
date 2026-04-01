@@ -25,11 +25,10 @@ defmodule Rujira.Fin do
     Contracts.get({Pair, address})
   end
 
-  @spec list_pairs :: {:ok, list(Pair.t())} | {:error, GRPC.RPCError.t()}
+  @spec list_pairs :: {:ok, list(Pair.t())} | {:error, term()}
   defmemo list_pairs do
-    Pair
-    |> Deployments.list_targets()
-    |> Rujira.Enum.reduce_while_ok([], fn
+    with {:ok, targets} <- Deployments.list_targets(Pair) do
+      Rujira.Enum.reduce_while_ok(targets, [], fn
       %{status: :preview} = target ->
         Pair.from_target(target)
 
@@ -43,8 +42,10 @@ defmodule Rujira.Fin do
             :skip
         end
     end)
+    end
   end
 
+  @spec get_stable_pair(String.t()) :: {:ok, Pair.t()} | {:error, term()}
   def get_stable_pair(base_denom) do
     with {:ok, pairs} <- list_pairs(),
          %Pair{} = pair <-
@@ -61,6 +62,7 @@ defmodule Rujira.Fin do
     end
   end
 
+  @spec get_pair_from_denoms(String.t(), String.t()) :: {:ok, Pair.t()} | {:error, term()}
   defmemo get_pair_from_denoms(base_denom, quote_denom) do
     with {:ok, pairs} <- list_pairs(),
          %Pair{} = pair <-
@@ -95,10 +97,12 @@ defmodule Rujira.Fin do
     end
   end
 
+  @spec query_book(String.t(), integer()) :: {:ok, map()} | {:error, GRPC.RPCError.t()}
   defmemo query_book(contract, limit \\ 100) do
     Contracts.query_state_smart_with_retry(contract, %{book: %{limit: limit}})
   end
 
+  @spec book_from_id(String.t()) :: {:ok, Book.t()} | {:error, term()}
   def book_from_id(id) do
     with {:ok, res} <- get_pair(id),
          {:ok, %{book: book}} <- load_pair(res, 100) do
@@ -106,6 +110,7 @@ defmodule Rujira.Fin do
     end
   end
 
+  @spec book_price(String.t()) :: {:ok, map()} | {:error, term()}
   def book_price(id) do
     with {:ok, book} <- book_from_id(id) do
       {:ok, %{price: book.center, change: 0}}
@@ -122,19 +127,22 @@ defmodule Rujira.Fin do
   def list_orders(pair, address, limit) do
     case query_orders(pair.address, address, limit) do
       {:ok, %{"orders" => orders}} ->
-        {:ok, Enum.map(orders, &Order.from_query(pair, &1))}
+        Rujira.Enum.reduce_while_ok(orders, &Order.from_query(pair, &1))
 
       err ->
         err
     end
   end
 
+  @spec query_orders(String.t(), String.t(), integer()) ::
+          {:ok, map()} | {:error, GRPC.RPCError.t()}
   defmemo query_orders(contract, address, limit \\ 30) do
     Contracts.query_state_smart_with_retry(contract, %{
       orders: %{owner: address, limit: limit}
     })
   end
 
+  @spec list_all_orders(String.t()) :: {:ok, list(Order.t())} | {:error, term()}
   def list_all_orders(address) do
     with {:ok, pairs} <- list_pairs(),
          {:ok, orders} <-
@@ -146,16 +154,19 @@ defmodule Rujira.Fin do
   @doc """
   Lists all orders for a pair as raw `Order.t()` structs, with opts for height pinning.
   """
+  @spec list_pair_orders(Pair.t(), keyword()) :: {:ok, list(Order.t())} | {:error, term()}
   def list_pair_orders(%Pair{} = pair, opts) do
     with {:ok, raw_orders} <- query_all_orders(pair.address, opts) do
-      {:ok, Enum.map(raw_orders, &Order.from_query(pair, &1))}
+      Rujira.Enum.reduce_while_ok(raw_orders, &Order.from_query(pair, &1))
     end
   end
 
+  @spec load_order(Pair.t(), String.t(), String.t(), String.t()) ::
+          {:ok, Order.t()} | {:error, term()}
   def load_order(%{address: address} = pair, side, price, owner) do
     case query_order(address, owner, side, price) do
       {:ok, order} ->
-        {:ok, Order.from_query(pair, order)}
+        Order.from_query(pair, order)
 
       {:error, %GRPC.RPCError{status: 2, message: "NotFound: query wasm contract failed"}} ->
         {:ok, Order.new(address, side, price, owner)}
@@ -182,13 +193,15 @@ defmodule Rujira.Fin do
   def list_ranges(pair, address, opts) do
     case query_ranges(pair.address, address, opts) do
       {:ok, ranges} when is_list(ranges) ->
-        {:ok, Enum.map(ranges, &Range.from_query(pair, &1))}
+        Rujira.Enum.reduce_while_ok(ranges, [], &Range.from_query(pair, &1))
 
       err ->
         err
     end
   end
 
+  @spec query_ranges(String.t(), String.t() | nil, keyword(), String.t() | nil, integer()) ::
+          {:ok, list()} | {:error, term()}
   defmemo query_ranges(contract, address, opts, cursor \\ nil, limit \\ 30) do
     Contracts.query_state_smart(
       contract,
@@ -207,10 +220,11 @@ defmodule Rujira.Fin do
     )
   end
 
+  @spec load_range(Pair.t(), integer()) :: {:ok, Range.t()} | {:error, term()}
   def load_range(%{address: address} = pair, idx) do
     case query_range(address, idx) do
       {:ok, range} ->
-        {:ok, Range.from_query(pair, range)}
+        Range.from_query(pair, range)
 
       {:error, %GRPC.RPCError{status: 2, message: "NotFound: query wasm contract failed"}} ->
         {:ok, Range.new(address, idx)}
@@ -220,6 +234,8 @@ defmodule Rujira.Fin do
     end
   end
 
+  @spec list_all_ranges(String.t() | nil, list(String.t()) | nil) ::
+          {:ok, list(Range.t())} | {:error, term()}
   def list_all_ranges(address \\ nil, contracts \\ nil)
 
   def list_all_ranges(address, nil) do
@@ -238,6 +254,7 @@ defmodule Rujira.Fin do
 
   # --- ID routing ---
 
+  @spec pair_from_id(String.t()) :: {:ok, Pair.t()} | {:error, term()}
   def pair_from_id("sthor" <> _ = address), do: get_pair(address)
   def pair_from_id("thor" <> _ = address), do: get_pair(address)
 
@@ -247,6 +264,7 @@ defmodule Rujira.Fin do
     end
   end
 
+  @spec order_from_id(String.t()) :: {:ok, Order.t()} | {:error, term()}
   def order_from_id(id) do
     with [pair_address, side, price, owner] <- String.split(id, "/"),
          {:ok, pair} <- get_pair(pair_address) do
@@ -257,6 +275,7 @@ defmodule Rujira.Fin do
     end
   end
 
+  @spec range_from_id(String.t()) :: {:ok, Range.t()} | {:error, term()}
   def range_from_id(id) do
     with [pair_address, idx] <- String.split(id, "/"),
          {idx, ""} <- Integer.parse(idx),
@@ -268,6 +287,7 @@ defmodule Rujira.Fin do
     end
   end
 
+  @spec ticker_id!(Pair.t()) :: String.t()
   def ticker_id!(%Pair{token_base: token_base, token_quote: token_quote}) do
     {:ok, base} = Assets.from_denom(token_base)
     {:ok, target} = Assets.from_denom(token_quote)
@@ -277,40 +297,52 @@ defmodule Rujira.Fin do
 
   # --- TVL ---
 
+  @spec get_pair_tvl(String.t()) :: {:ok, non_neg_integer()} | {:error, term()}
   def get_pair_tvl(address) do
     case get_pair(address) do
       {:ok, %Pair{market_makers: market_makers} = pair} ->
         mm_tvl = market_makers |> Enum.map(&mm_tvl_or_zero/1) |> Enum.sum()
-        mm_tvl + range_tvl(pair)
+
+        case range_tvl(pair) do
+          {:ok, r_tvl} -> {:ok, mm_tvl + r_tvl}
+          {:error, _} = err -> err
+        end
 
       _ ->
-        0
+        {:ok, 0}
     end
   end
 
+  @spec range_tvl(Pair.t()) :: {:ok, non_neg_integer()} | {:error, term()}
   def range_tvl(%Pair{} = pair) do
     case list_ranges(pair) do
-      {:ok, ranges} -> Enum.reduce(ranges, 0, fn r, acc -> acc + r.value_usd end)
-      _ -> 0
+      {:ok, ranges} -> {:ok, Enum.reduce(ranges, 0, fn r, acc -> acc + r.value_usd end)}
+      {:error, _} = err -> err
     end
   end
 
+  @spec total_range_tvl :: {:ok, non_neg_integer()} | {:error, term()}
   def total_range_tvl do
     case list_pairs() do
       {:ok, pairs} ->
         pairs
         |> Enum.filter(&(&1.deployment_status == :live))
         |> Rujira.Enum.reduce_async_while_ok(
-          fn pair -> {:ok, range_tvl(pair)} end,
+          fn pair ->
+            case range_tvl(pair) do
+              {:ok, _} = ok -> ok
+              {:error, _} -> {:ok, 0}
+            end
+          end,
           timeout: 30_000
         )
         |> case do
-          {:ok, tvls} -> Enum.sum(tvls)
-          _ -> 0
+          {:ok, tvls} -> {:ok, Enum.sum(tvls)}
+          {:error, _} = err -> err
         end
 
-      _ ->
-        0
+      {:error, _} = err ->
+        err
     end
   end
 
