@@ -55,5 +55,4 @@ defmodule Rujira.Prices.Default do
       _ -> {:error, :no_price}
     end
   end
-
 end

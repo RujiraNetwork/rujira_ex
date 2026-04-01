@@ -168,5 +168,4 @@ defmodule Rujira.Fin.Book do
   defmemo query(contract, limit \\ 100) do
     Contracts.query_state_smart_with_retry(contract, %{book: %{limit: limit}})
   end
-
 end

@@ -20,10 +20,12 @@ defmodule Rujira.Fin.Events do
 
   @spec parse(Event.t()) :: {:ok, FinEvent.t()} | {:error, term()}
 
-  def parse(%Event{
-        type: "wasm-rujira-fin/" <> action,
-        attributes: %{"_contract_address" => address} = attrs
-      } = event) do
+  def parse(
+        %Event{
+          type: "wasm-rujira-fin/" <> action,
+          attributes: %{"_contract_address" => address} = attrs
+        } = event
+      ) do
     case new(action, attrs) do
       {:ok, data} -> {:ok, FinEvent.new(address, data)}
       {:error, _} = err -> err

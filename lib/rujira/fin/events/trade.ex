@@ -31,5 +31,4 @@ defmodule Rujira.Fin.Events.Trade do
        }}
     end
   end
-
 end

@@ -210,7 +210,6 @@ defmodule Rujira.Fin.Order do
     %{oracle: val}
   end
 
-
   defmemop query(address, owner, side, price) do
     Contracts.query_state_smart(
       address,

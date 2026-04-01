@@ -8,7 +8,8 @@ defmodule Rujira.Math do
 
   Returns `{:ok, integer}`, `{:ok, nil}`, or `{:error, :invalid_integer}`.
   """
-  @spec to_integer(nil | integer() | String.t()) :: {:ok, integer() | nil} | {:error, :invalid_integer}
+  @spec to_integer(nil | integer() | String.t()) ::
+          {:ok, integer() | nil} | {:error, :invalid_integer}
   def to_integer(nil), do: {:ok, nil}
   def to_integer(value) when is_integer(value), do: {:ok, value}
 

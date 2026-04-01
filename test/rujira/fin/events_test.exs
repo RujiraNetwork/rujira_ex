@@ -74,7 +74,10 @@ defmodule Rujira.Fin.EventsTest do
         })
 
       assert {:ok,
-              %FinEvent{address: "thor1abc", data: %Events.RangeCreate{idx: 5, owner: "thor1owner"}}} =
+              %FinEvent{
+                address: "thor1abc",
+                data: %Events.RangeCreate{idx: 5, owner: "thor1owner"}
+              }} =
                Events.parse(e)
     end
 

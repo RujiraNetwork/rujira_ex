@@ -18,5 +18,4 @@ defmodule Rujira.Fin.Events.Retract do
        owner: owner
      }}
   end
-
 end

@@ -11,7 +11,8 @@ defmodule Rujira.Enum do
   - Skips over elements if `:skip` is returned.
   - Returns `{:ok, list}` when all elements succeed.
   """
-  @spec reduce_while_ok(Enumerable.t(), list(), (term() -> {:ok, term()} | {:error, term()} | :skip)) ::
+  @spec reduce_while_ok(Enumerable.t(), list(), (term() ->
+                                                   {:ok, term()} | {:error, term()} | :skip)) ::
           {:ok, list()} | {:error, term()}
   def reduce_while_ok(enum, initial_acc \\ [], fun) do
     Enum.reduce_while(enum, {:ok, initial_acc}, fn element, {:ok, acc} ->

@@ -9,7 +9,8 @@ Follow the conventions and architecture documented in:
 All must pass before any commit:
 
 ```bash
+mix format --check-formatted
 mix compile --warnings-as-errors
 mix test
-mix credo
+mix credo --strict
 ```

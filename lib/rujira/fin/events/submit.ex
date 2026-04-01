@@ -18,5 +18,4 @@ defmodule Rujira.Fin.Events.Submit do
        owner: owner
      }}
   end
-
 end
