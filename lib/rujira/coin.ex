@@ -9,7 +9,6 @@ defmodule Rujira.Coin do
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Assets.Asset
-  alias Rujira.Math
 
   defstruct asset: nil, amount: 0
 
@@ -38,7 +37,7 @@ defmodule Rujira.Coin do
 
   @spec new(String.t(), String.t()) :: {:ok, t()} | {:error, term()}
   def new(denom, amount) when is_binary(denom) and is_binary(amount) do
-    with {:ok, parsed} <- Math.to_integer(amount) do
+    with {:ok, parsed} <- Amount.new(amount) do
       new(denom, parsed)
     end
   end
@@ -71,7 +70,7 @@ defmodule Rujira.Coin do
 
     case String.split(trimmed, " ", parts: 2) do
       [amount_str, denom] when denom != "" ->
-        with {:ok, amount} <- Math.to_integer(amount_str) do
+        with {:ok, amount} <- Amount.new(amount_str) do
           new(denom, amount)
         else
           _ -> {:error, :invalid_amount}
@@ -80,7 +79,7 @@ defmodule Rujira.Coin do
       _ ->
         case Regex.run(@coin_regex, trimmed) do
           [_, amount_str, denom] ->
-            with {:ok, amount} <- Math.to_integer(amount_str) do
+            with {:ok, amount} <- Amount.new(amount_str) do
               new(denom, amount)
             else
               _ -> {:error, :invalid_amount}

@@ -35,7 +35,7 @@ defmodule Rujira.Fin.Book do
     @spec new(side, map()) :: {:ok, t()} | {:error, :parse_error}
     def new(side, %{"price" => price_str, "total" => total_str}) when side in [:bid, :ask] do
       with {:ok, price} <- Math.to_decimal(price_str),
-           {:ok, total} <- Math.to_integer(total_str) do
+           {:ok, total} <- Amount.new(total_str) do
         {:ok,
          %__MODULE__{
            side: side,

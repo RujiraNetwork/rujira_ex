@@ -77,9 +77,9 @@ defmodule Rujira.Fin.Order do
          {:ok, rate} <- Math.to_decimal(rate),
          {:ok, updated_at} <- Math.to_integer(updated_at),
          {:ok, updated_at} <- DateTime.from_unix(updated_at, :nanosecond),
-         {:ok, offer} <- Math.to_integer(offer),
-         {:ok, remaining} <- Math.to_integer(remaining),
-         {:ok, filled} <- Math.to_integer(filled),
+         {:ok, offer} <- Amount.new(offer),
+         {:ok, remaining} <- Amount.new(remaining),
+         {:ok, filled} <- Amount.new(filled),
          {:ok, fee_taker} <- Math.to_decimal(fee_taker),
          {:ok, asset_quote} <- Assets.from_denom(token_quote),
          {:ok, asset_base} <- Assets.from_denom(token_base) do
