@@ -16,23 +16,21 @@ defmodule Rujira.Fin.Pair do
 
   use Memoize
 
-  defstruct [
-    :id,
-    :address,
-    :market_makers,
-    :token_base,
-    :token_quote,
-    :oracle_base,
-    :oracle_quote,
-    :tick,
-    :fee_taker,
-    :fee_maker,
-    :fee_address,
-    :book,
-    :history,
-    :summary,
-    :deployment_status
-  ]
+  defstruct id: nil,
+            address: nil,
+            market_makers: [],
+            token_base: nil,
+            token_quote: nil,
+            oracle_base: nil,
+            oracle_quote: nil,
+            tick: 0,
+            fee_taker: Decimal.new(0),
+            fee_maker: Decimal.new(0),
+            fee_address: nil,
+            book: :not_loaded,
+            history: :not_loaded,
+            summary: :not_loaded,
+            deployment_status: :live
 
   @type t :: %__MODULE__{
           id: String.t(),
@@ -56,11 +54,19 @@ defmodule Rujira.Fin.Pair do
   @spec new(map() | Target.t()) :: {:ok, t()} | {:error, term()}
 
   def new(%Target{address: address, config: config, status: status}) do
-    config
-    |> init_msg()
-    |> to_new_attrs()
-    |> Map.put("address", address)
-    |> Map.put("deployment_status", status)
+    msg = init_msg(config)
+
+    %{
+      "address" => address,
+      "market_makers" => msg[:market_makers],
+      "denoms" => msg[:denoms],
+      "oracles" => msg[:oracles],
+      "tick" => msg[:tick],
+      "fee_taker" => msg[:fee_taker],
+      "fee_maker" => msg[:fee_maker],
+      "fee_address" => msg[:fee_address],
+      "deployment_status" => status
+    }
     |> new()
   end
 
@@ -199,21 +205,6 @@ defmodule Rujira.Fin.Pair do
 
   # --- Deployment protocol ---
 
-  @spec oracle_from_config(map() | String.t() | nil) :: {:ok, Oracle.t() | nil}
-  def oracle_from_config(%{"chain" => chain, "symbol" => symbol}),
-    do: oracle_from_config(%{chain: chain, symbol: symbol})
-
-  def oracle_from_config(%{chain: chain, symbol: symbol}) do
-    id = String.upcase(chain) <> "." <> symbol
-    {:ok, %Oracle{id: id, symbol: id, asset: Assets.from_string(id)}}
-  end
-
-  def oracle_from_config(str) when is_binary(str) do
-    {:ok, %Oracle{id: String.upcase(str), symbol: String.upcase(str)}}
-  end
-
-  def oracle_from_config(nil), do: {:ok, nil}
-
   @spec init_msg(map()) :: map()
   def init_msg(
         %{
@@ -259,17 +250,19 @@ defmodule Rujira.Fin.Pair do
 
   # --- Private ---
 
-  defp to_new_attrs(msg) do
-    %{
-      "market_makers" => msg[:market_makers],
-      "denoms" => msg[:denoms],
-      "oracles" => msg[:oracles],
-      "tick" => msg[:tick],
-      "fee_taker" => msg[:fee_taker],
-      "fee_maker" => msg[:fee_maker],
-      "fee_address" => msg[:fee_address]
-    }
+  defp oracle_from_config(%{"chain" => chain, "symbol" => symbol}),
+    do: oracle_from_config(%{chain: chain, symbol: symbol})
+
+  defp oracle_from_config(%{chain: chain, symbol: symbol}) do
+    id = String.upcase(chain) <> "." <> symbol
+    {:ok, %Oracle{id: id, symbol: id, asset: Assets.from_string(id)}}
   end
+
+  defp oracle_from_config(str) when is_binary(str) do
+    {:ok, %Oracle{id: String.upcase(str), symbol: String.upcase(str)}}
+  end
+
+  defp oracle_from_config(nil), do: {:ok, nil}
 
   defp mm_tvl_or_zero(mm) do
     case get_mm_tvl(mm) do

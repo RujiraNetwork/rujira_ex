@@ -5,6 +5,7 @@ defmodule Rujira.Fin.Order do
   Struct, construction, and queries. Use `Rujira.Fin` as the public API.
   """
 
+  alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Contracts
   alias Rujira.Math
@@ -33,19 +34,20 @@ defmodule Rujira.Fin.Order do
   @type deviation :: nil | integer()
   @type type_order :: :fixed | :oracle
   @type t :: %__MODULE__{
+          id: String.t(),
           pair: String.t(),
           owner: String.t(),
           side: side,
           rate: Decimal.t(),
           updated_at: DateTime.t(),
-          offer: integer(),
-          offer_value: integer(),
-          remaining: integer(),
-          remaining_value: integer(),
-          filled: integer(),
-          filled_value: integer(),
-          filled_fee: integer(),
-          value_usd: integer(),
+          offer: Amount.t(),
+          offer_value: Amount.t(),
+          remaining: Amount.t(),
+          remaining_value: Amount.t(),
+          filled: Amount.t(),
+          filled_value: Amount.t(),
+          filled_fee: Amount.t(),
+          value_usd: Amount.t(),
           type: type_order,
           deviation: deviation
         }
@@ -119,8 +121,7 @@ defmodule Rujira.Fin.Order do
     end
   end
 
-  @spec new(String.t(), String.t(), String.t(), String.t()) :: t()
-  def new(address, side, price, owner) do
+  defp placeholder(address, side, price, owner) do
     [type | _] = String.split(price, ":")
 
     %__MODULE__{
@@ -128,12 +129,12 @@ defmodule Rujira.Fin.Order do
       pair: address,
       owner: owner,
       side: String.to_existing_atom(side),
-      rate: 0,
+      rate: Decimal.new(0),
       updated_at: DateTime.utc_now(),
       offer: 0,
       remaining: 0,
       filled: 0,
-      type: type,
+      type: String.to_existing_atom(type),
       deviation: nil
     }
   end
@@ -170,7 +171,7 @@ defmodule Rujira.Fin.Order do
         new(pair, order)
 
       {:error, %GRPC.RPCError{status: 2, message: "NotFound: query wasm contract failed"}} ->
-        {:ok, new(address, side, price, owner)}
+        {:ok, placeholder(address, side, price, owner)}
 
       err ->
         err
@@ -197,21 +198,18 @@ defmodule Rujira.Fin.Order do
     end
   end
 
-  # --- Price utils ---
-
-  @spec parse_price(map()) :: {atom(), term(), String.t()}
-  def parse_price(%{"fixed" => v}), do: {:fixed, nil, "fixed:#{v}"}
-  def parse_price(%{"oracle" => v}), do: {:oracle, v, "oracle:#{v}"}
-
-  @spec decode_price(String.t()) :: map()
-  def decode_price("fixed:" <> v), do: %{fixed: v}
-  def decode_price("oracle:" <> v), do: %{oracle: String.to_integer(v)}
-
-  @spec encode_price(map()) :: String.t()
-  def encode_price(%{fixed: v}), do: "fixed:#{v}"
-  def encode_price(%{oracle: v}), do: "oracle:#{v}"
-
   # --- Private ---
+
+  defp parse_price(%{"fixed" => v}), do: {:fixed, nil, "fixed:#{v}"}
+  defp parse_price(%{"oracle" => v}), do: {:oracle, v, "oracle:#{v}"}
+
+  defp decode_price("fixed:" <> v), do: %{fixed: v}
+
+  defp decode_price("oracle:" <> v) do
+    {:ok, val} = Math.to_integer(v)
+    %{oracle: val}
+  end
+
 
   defmemop query(address, owner, side, price) do
     Contracts.query_state_smart(
@@ -226,26 +224,19 @@ defmodule Rujira.Fin.Order do
     })
   end
 
-  defp query_all(contract, opts, start_after \\ nil, limit \\ 30)
-
-  defp query_all(contract, opts, nil, limit) do
-    do_query_all(contract, opts, nil, limit)
-  end
-
-  defp query_all(contract, opts, %{"owner" => o, "side" => s, "price" => p}, limit) do
-    do_query_all(contract, opts, [o, s, p], limit)
-  end
-
-  defp do_query_all(contract, opts, cursor, limit) do
+  defp query_all(contract, opts, cursor \\ nil, limit \\ 30) do
     Contracts.query_state_smart(
       contract,
-      %{orders: %{owner: nil, start_after: cursor, limit: limit}},
+      %{orders: %{owner: nil, start_after: to_cursor(cursor), limit: limit}},
       opts
     )
     |> Contracts.paginate("orders", limit, fn orders ->
       query_all(contract, opts, List.last(orders), limit)
     end)
   end
+
+  defp to_cursor(nil), do: nil
+  defp to_cursor(%{"owner" => o, "side" => s, "price" => p}), do: [o, s, p]
 
   defp value(amount, rate, :base), do: Math.mul_floor(amount, rate)
   defp value(amount, rate, :quote), do: Math.div_floor(amount, rate)

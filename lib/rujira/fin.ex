@@ -26,6 +26,7 @@ defmodule Rujira.Fin do
   defdelegate load_pair(pair, limit \\ 75), to: Book, as: :load
   defdelegate book_from_id(id), to: Book, as: :from_id
   defdelegate book_price(id), to: Book, as: :price
+  defdelegate book_depth(book, side, deviation), to: Book, as: :depth
 
   # --- Order ---
 

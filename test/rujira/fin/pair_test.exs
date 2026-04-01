@@ -107,20 +107,40 @@ defmodule Rujira.Fin.PairTest do
     end
   end
 
-  describe "oracle_from_config/1" do
-    test "parses map oracle" do
-      assert {:ok, oracle} = Pair.oracle_from_config(%{"chain" => "GAIA", "symbol" => "ATOM"})
-      assert oracle.id == "GAIA.ATOM"
-      assert oracle.symbol == "GAIA.ATOM"
+  describe "new/1 oracle parsing" do
+    test "parses oracles from config maps" do
+      config = %{
+        "address" => "thor1pair",
+        "market_makers" => [],
+        "denoms" => ["gaia-atom", "eth-usdc-0xabc"],
+        "oracles" => [
+          %{"chain" => "GAIA", "symbol" => "ATOM"},
+          %{"chain" => "ETH", "symbol" => "USDC"}
+        ],
+        "tick" => 6,
+        "fee_taker" => "0.0015",
+        "fee_maker" => "0.00075",
+        "fee_address" => "thor1fee"
+      }
+
+      assert {:ok, %Pair{oracle_base: base, oracle_quote: quote_}} = Pair.new(config)
+      assert base.id == "GAIA.ATOM"
+      assert quote_.id == "ETH.USDC"
     end
 
-    test "parses string oracle" do
-      assert {:ok, oracle} = Pair.oracle_from_config("rune")
-      assert oracle.id == "RUNE"
-    end
+    test "handles nil oracles" do
+      config = %{
+        "address" => "thor1pair",
+        "market_makers" => [],
+        "denoms" => ["gaia-atom", "eth-usdc-0xabc"],
+        "oracles" => nil,
+        "tick" => 6,
+        "fee_taker" => "0.0015",
+        "fee_maker" => "0.00075",
+        "fee_address" => "thor1fee"
+      }
 
-    test "handles nil oracle" do
-      assert {:ok, nil} = Pair.oracle_from_config(nil)
+      assert {:ok, %Pair{oracle_base: nil, oracle_quote: nil}} = Pair.new(config)
     end
   end
 end

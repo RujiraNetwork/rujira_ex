@@ -5,6 +5,7 @@ defmodule Rujira.Fin.Range do
   Struct, construction, and queries. Use `Rujira.Fin` as the public API.
   """
 
+  alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Contracts
   alias Rujira.Math
@@ -35,19 +36,19 @@ defmodule Rujira.Fin.Range do
           idx: integer(),
           pair: String.t(),
           owner: String.t(),
-          high: integer(),
-          low: integer(),
-          skew: integer(),
-          spread: integer(),
-          fee: integer(),
-          base: integer(),
-          quote: integer(),
-          price: integer(),
-          ask: integer(),
-          bid: integer(),
-          fees_base: integer(),
-          fees_quote: integer(),
-          value_usd: integer()
+          high: Decimal.t(),
+          low: Decimal.t(),
+          skew: Decimal.t(),
+          spread: Decimal.t(),
+          fee: Decimal.t(),
+          base: Amount.t(),
+          quote: Amount.t(),
+          price: Decimal.t(),
+          ask: Decimal.t(),
+          bid: Decimal.t(),
+          fees_base: Amount.t(),
+          fees_quote: Amount.t(),
+          value_usd: Amount.t()
         }
 
   # --- Construction ---
@@ -122,8 +123,7 @@ defmodule Rujira.Fin.Range do
     end
   end
 
-  @spec new(String.t(), integer()) :: t()
-  def new(address, idx) do
+  defp placeholder(address, idx) do
     %__MODULE__{id: "#{address}/#{idx}", idx: idx, pair: address}
   end
 
@@ -151,7 +151,7 @@ defmodule Rujira.Fin.Range do
         new(pair, range)
 
       {:error, %GRPC.RPCError{status: 2, message: "NotFound: query wasm contract failed"}} ->
-        {:ok, new(address, idx)}
+        {:ok, placeholder(address, idx)}
 
       err ->
         err
@@ -178,7 +178,7 @@ defmodule Rujira.Fin.Range do
   @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
   def from_id(id) do
     with [pair_address, idx] <- String.split(id, "/"),
-         {idx, ""} <- Integer.parse(idx),
+         {:ok, idx} <- Math.to_integer(idx),
          {:ok, pair} <- Rujira.Fin.Pair.get(pair_address) do
       load(pair, idx)
     else
@@ -197,26 +197,20 @@ defmodule Rujira.Fin.Range do
 
   @spec total_tvl() :: {:ok, non_neg_integer()} | {:error, term()}
   def total_tvl do
-    case Rujira.Fin.Pair.list() do
-      {:ok, pairs} ->
-        pairs
-        |> Enum.filter(&(&1.deployment_status == :live))
-        |> Rujira.Enum.reduce_async_while_ok(
-          fn pair ->
-            case tvl(pair) do
-              {:ok, _} = ok -> ok
-              {:error, _} -> {:ok, 0}
-            end
-          end,
-          timeout: 30_000
-        )
-        |> case do
-          {:ok, tvls} -> {:ok, Enum.sum(tvls)}
-          {:error, _} = err -> err
-        end
-
-      {:error, _} = err ->
-        err
+    with {:ok, pairs} <- Rujira.Fin.Pair.list(),
+         {:ok, tvls} <-
+           pairs
+           |> Enum.filter(&(&1.deployment_status == :live))
+           |> Rujira.Enum.reduce_async_while_ok(
+             fn pair ->
+               case tvl(pair) do
+                 {:ok, _} = ok -> ok
+                 {:error, _} -> {:ok, 0}
+               end
+             end,
+             timeout: 30_000
+           ) do
+      {:ok, Enum.sum(tvls)}
     end
   end
 

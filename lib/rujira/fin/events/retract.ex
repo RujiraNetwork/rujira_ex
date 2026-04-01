@@ -1,7 +1,7 @@
 defmodule Rujira.Fin.Events.Retract do
   @moduledoc "An order retraction event (`wasm-rujira-fin/retract`)."
 
-  defstruct [:side, :price, :owner]
+  defstruct side: nil, price: nil, owner: nil
 
   @type t :: %__MODULE__{
           side: :base | :quote,

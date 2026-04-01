@@ -1,7 +1,7 @@
 defmodule Rujira.Fin.Events.Event do
   @moduledoc "Protocol-level envelope for FIN events. Allows matching all FIN events by struct."
 
-  defstruct [:address, :data]
+  defstruct address: nil, data: nil
 
   @type t :: %__MODULE__{
           address: String.t() | nil,

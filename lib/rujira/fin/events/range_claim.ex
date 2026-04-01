@@ -3,7 +3,7 @@ defmodule Rujira.Fin.Events.RangeClaim do
 
   alias Rujira.Math
 
-  defstruct [:idx, :owner]
+  defstruct idx: 0, owner: nil
 
   @type t :: %__MODULE__{
           idx: non_neg_integer(),

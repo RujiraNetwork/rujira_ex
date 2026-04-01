@@ -16,22 +16,24 @@ defmodule Rujira.Fin.Book do
     @moduledoc """
     Represents a price level in the order book with associated order details.
     """
+    alias Rujira.Amount
     alias Rujira.Math
 
-    defstruct [:price, :total, :side, :value, :virtual_total, :virtual_value]
+    defstruct price: Decimal.new(0),
+              total: 0,
+              side: nil,
+              value: 0
 
     @type side :: :bid | :ask
     @type t :: %__MODULE__{
             price: Decimal.t(),
-            total: non_neg_integer(),
+            total: Amount.t(),
             side: side,
-            value: non_neg_integer(),
-            virtual_total: non_neg_integer(),
-            virtual_value: non_neg_integer()
+            value: Amount.t()
           }
 
     @spec new(side, map()) :: {:ok, t()} | {:error, :parse_error}
-    def new(side, %{"price" => price_str, "total" => total_str}) do
+    def new(side, %{"price" => price_str, "total" => total_str}) when side in [:bid, :ask] do
       with {:ok, price} <- Math.to_decimal(price_str),
            {:ok, total} <- Math.to_integer(total_str) do
         {:ok,
@@ -39,17 +41,15 @@ defmodule Rujira.Fin.Book do
            side: side,
            total: total,
            price: price,
-           value: value(side, price, total),
-           virtual_total: 0,
-           virtual_value: 0
+           value: value(side, price, total)
          }}
       else
         _ -> {:error, :parse_error}
       end
     end
 
-    @spec value(side, Decimal.t(), non_neg_integer()) :: non_neg_integer()
-    def value(:ask, price, total) do
+    @spec value(side, Decimal.t(), Amount.t()) :: Amount.t()
+    defp value(:ask, price, total) do
       total
       |> Decimal.new()
       |> Decimal.mult(price)
@@ -57,7 +57,7 @@ defmodule Rujira.Fin.Book do
       |> Decimal.to_integer()
     end
 
-    def value(:bid, price, total) do
+    defp value(:bid, price, total) do
       total
       |> Decimal.new()
       |> Decimal.div(price)
@@ -66,7 +66,11 @@ defmodule Rujira.Fin.Book do
     end
   end
 
-  defstruct [:id, :bids, :asks, :center, :spread]
+  defstruct id: nil,
+            bids: [],
+            asks: [],
+            center: Decimal.new(0),
+            spread: Decimal.new(0)
 
   @type t :: %__MODULE__{
           id: String.t(),
@@ -78,28 +82,12 @@ defmodule Rujira.Fin.Book do
 
   # --- Construction ---
 
-  @spec new(String.t(), map()) :: {:ok, t()}
+  @spec new(String.t(), map()) :: {:ok, t()} | {:error, term()}
   def new(address, %{"base" => asks, "quote" => bids}) do
-    {:ok,
-     %__MODULE__{
-       id: address,
-       asks: asks |> Enum.map(&Price.new(:ask, &1)) |> filter_ok(),
-       bids: bids |> Enum.map(&Price.new(:bid, &1)) |> filter_ok(),
-       center: Decimal.new(0),
-       spread: Decimal.new(0)
-     }
-     |> populate()}
-  end
-
-  @spec empty(String.t()) :: t()
-  def empty(address) do
-    %__MODULE__{
-      id: address,
-      bids: [],
-      asks: [],
-      center: Decimal.new(0),
-      spread: Decimal.new(0)
-    }
+    with {:ok, asks} <- Rujira.Enum.reduce_while_ok(asks, &Price.new(:ask, &1)),
+         {:ok, bids} <- Rujira.Enum.reduce_while_ok(bids, &Price.new(:bid, &1)) do
+      {:ok, %__MODULE__{id: address, asks: asks, bids: bids} |> populate()}
+    end
   end
 
   # --- Queries ---
@@ -108,7 +96,7 @@ defmodule Rujira.Fin.Book do
   def load(pair, limit \\ 75)
 
   def load(%{deployment_status: :preview} = pair, _limit) do
-    {:ok, %{pair | book: empty(pair.address)}}
+    {:ok, %{pair | book: %__MODULE__{id: pair.address}}}
   end
 
   def load(pair, limit) do
@@ -118,7 +106,7 @@ defmodule Rujira.Fin.Book do
     else
       {:error, err} ->
         Logger.error(__MODULE__, "load #{pair.address} #{inspect(err)}")
-        {:ok, %{pair | book: empty(pair.address)}}
+        {:ok, %{pair | book: %__MODULE__{id: pair.address}}}
     end
   end
 
@@ -140,7 +128,7 @@ defmodule Rujira.Fin.Book do
   # --- Calculations ---
 
   @spec populate(t()) :: t()
-  def populate(%__MODULE__{asks: [ask | _], bids: [bid | _]} = book) do
+  defp populate(%__MODULE__{asks: [ask | _], bids: [bid | _]} = book) do
     center =
       ask.price
       |> Decimal.add(bid.price)
@@ -153,7 +141,7 @@ defmodule Rujira.Fin.Book do
     }
   end
 
-  def populate(book), do: book
+  defp populate(book), do: book
 
   @spec depth(t(), :bid | :ask, number()) :: non_neg_integer()
   def depth(%__MODULE__{bids: []}, :bid, _), do: 0
@@ -187,8 +175,4 @@ defmodule Rujira.Fin.Book do
     Contracts.query_state_smart_with_retry(contract, %{book: %{limit: limit}})
   end
 
-  @spec filter_ok([{:ok, Price.t()} | {:error, term()}]) :: [Price.t()]
-  defp filter_ok(results) do
-    for {:ok, price} <- results, do: price
-  end
 end

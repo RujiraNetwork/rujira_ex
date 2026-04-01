@@ -4,7 +4,7 @@ defmodule Rujira.Fin.Events.Trade do
   alias Rujira.Amount
   alias Rujira.Math
 
-  defstruct [:side, :price, :rate, :offer, :bid, :ranges]
+  defstruct side: nil, price: nil, rate: nil, offer: nil, bid: nil, ranges: nil
 
   @type t :: %__MODULE__{
           side: :base | :quote,

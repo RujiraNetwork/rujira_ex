@@ -3,7 +3,7 @@ defmodule Rujira.Fin.Events.RangeFee do
 
   alias Rujira.Math
 
-  defstruct [:idx]
+  defstruct idx: 0
 
   @type t :: %__MODULE__{
           idx: non_neg_integer()

@@ -1,7 +1,7 @@
 defmodule Rujira.Fin.Events.Submit do
   @moduledoc "An order submission event (`wasm-rujira-fin/submit`)."
 
-  defstruct [:side, :price, :owner]
+  defstruct side: nil, price: nil, owner: nil
 
   @type t :: %__MODULE__{
           side: :base | :quote,

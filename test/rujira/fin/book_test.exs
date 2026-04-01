@@ -42,18 +42,9 @@ defmodule Rujira.Fin.BookTest do
     end
   end
 
-  describe "empty/1" do
-    test "creates empty book" do
-      book = Book.empty("thor1pair")
-      assert book.id == "thor1pair"
-      assert book.asks == []
-      assert book.bids == []
-    end
-  end
-
   describe "depth/3" do
     test "returns 0 for empty side" do
-      book = Book.empty("thor1pair")
+      {:ok, book} = Book.new("thor1pair", %{"base" => [], "quote" => []})
       assert Book.depth(book, :bid, 0.02) == 0
       assert Book.depth(book, :ask, 0.02) == 0
     end

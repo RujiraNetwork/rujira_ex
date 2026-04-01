@@ -3,45 +3,57 @@ defmodule Rujira.Fin.OrderTest do
 
   alias Rujira.Fin.Order
 
-  describe "parse_price/1" do
-    test "parses fixed price" do
-      assert {:fixed, nil, "fixed:1000000"} = Order.parse_price(%{"fixed" => "1000000"})
-    end
+  describe "new/2" do
+    test "parses order with fixed price from pair context" do
+      pair = %{
+        address: "thor1pair",
+        fee_taker: "0.0015",
+        token_quote: "eth-usdc-0xabc",
+        token_base: "gaia-atom"
+      }
 
-    test "parses oracle price" do
-      assert {:oracle, 5, "oracle:5"} = Order.parse_price(%{"oracle" => 5})
-    end
-  end
+      attrs = %{
+        "owner" => "thor1owner",
+        "side" => "base",
+        "price" => %{"fixed" => "1000000"},
+        "rate" => "1.5",
+        "updated_at" => "1700000000000000000",
+        "offer" => "100000000",
+        "remaining" => "50000000",
+        "filled" => "50000000"
+      }
 
-  describe "decode_price/1" do
-    test "decodes fixed price" do
-      assert %{fixed: "1000000"} = Order.decode_price("fixed:1000000")
-    end
-
-    test "decodes oracle price" do
-      assert %{oracle: 5} = Order.decode_price("oracle:5")
-    end
-  end
-
-  describe "encode_price/1" do
-    test "encodes fixed price" do
-      assert "fixed:1000000" = Order.encode_price(%{fixed: "1000000"})
-    end
-
-    test "encodes oracle price" do
-      assert "oracle:5" = Order.encode_price(%{oracle: 5})
-    end
-  end
-
-  describe "new/4" do
-    test "creates placeholder order" do
-      order = Order.new("thor1pair", "base", "fixed:1000", "thor1owner")
-      assert order.id == "thor1pair/base/fixed:1000/thor1owner"
+      assert {:ok, %Order{} = order} = Order.new(pair, attrs)
       assert order.pair == "thor1pair"
-      assert order.side == :base
       assert order.owner == "thor1owner"
-      assert order.offer == 0
-      assert order.remaining == 0
+      assert order.side == :base
+      assert order.type == :fixed
+      assert order.rate == Decimal.new("1.5")
+      assert order.offer == 100_000_000
+      assert order.remaining == 50_000_000
+      assert order.filled == 50_000_000
+    end
+
+    test "parses order with oracle price" do
+      pair = %{
+        address: "thor1pair",
+        fee_taker: "0.0015",
+        token_quote: "eth-usdc-0xabc",
+        token_base: "gaia-atom"
+      }
+
+      attrs = %{
+        "owner" => "thor1owner",
+        "side" => "quote",
+        "price" => %{"oracle" => 5},
+        "rate" => "2.0",
+        "updated_at" => "1700000000000000000",
+        "offer" => "200000000",
+        "remaining" => "200000000",
+        "filled" => "0"
+      }
+
+      assert {:ok, %Order{type: :oracle, deviation: 5}} = Order.new(pair, attrs)
     end
   end
 end
