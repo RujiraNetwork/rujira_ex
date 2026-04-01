@@ -76,7 +76,7 @@ decimals = Rujira.Assets.decimals(asset)
 ```elixir
 {:ok, pairs} = Rujira.Fin.list_pairs()
 {:ok, pair} = Rujira.Fin.get_pair(pair_address)
-{:ok, book} = Rujira.Fin.load_pair(pair, :book)
+{:ok, book} = Rujira.Fin.load_pair(pair, limit)
 mid_price = Rujira.Fin.book_price(book)
 ```
 
