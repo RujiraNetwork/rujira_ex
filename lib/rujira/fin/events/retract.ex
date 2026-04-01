@@ -13,13 +13,10 @@ defmodule Rujira.Fin.Events.Retract do
   def new(%{"side" => side, "price" => price, "owner" => owner}) do
     {:ok,
      %__MODULE__{
-       side: side(side),
+       side: side |> String.downcase() |> String.to_existing_atom(),
        price: price,
        owner: owner
      }}
   end
 
-  defp side("Base"), do: :base
-  defp side("Quote"), do: :quote
-  defp side(s), do: s
 end

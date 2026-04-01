@@ -22,7 +22,7 @@ defmodule Rujira.Fin.Events.Trade do
          {:ok, bid} <- Amount.new(Map.get(attrs, "bid")) do
       {:ok,
        %__MODULE__{
-         side: side(side),
+         side: side |> String.downcase() |> String.to_existing_atom(),
          price: price,
          rate: rate,
          offer: offer,
@@ -32,7 +32,4 @@ defmodule Rujira.Fin.Events.Trade do
     end
   end
 
-  defp side("Base"), do: :base
-  defp side("Quote"), do: :quote
-  defp side(s), do: s
 end

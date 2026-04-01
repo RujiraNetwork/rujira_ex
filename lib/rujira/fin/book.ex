@@ -147,24 +147,18 @@ defmodule Rujira.Fin.Book do
   def depth(%__MODULE__{bids: []}, :bid, _), do: 0
   def depth(%__MODULE__{asks: []}, :ask, _), do: 0
 
-  def depth(%__MODULE__{bids: [best | _] = bids}, :bid, deviation) do
-    deviation = Decimal.from_float(deviation)
-    lower_bound = Decimal.mult(best.price, Decimal.sub(1, deviation))
+  def depth(%__MODULE__{bids: [best | _] = bids}, :bid, deviation),
+    do: sum_depth(bids, best.price, Decimal.sub(1, Decimal.from_float(deviation)), :lt, :total)
 
-    bids
-    |> Enum.filter(&(Decimal.compare(&1.price, lower_bound) != :lt))
-    |> Enum.reduce(Decimal.new(0), fn bid, acc -> Decimal.add(bid.total, acc) end)
-    |> Decimal.round(0, :floor)
-    |> Decimal.to_integer()
-  end
+  def depth(%__MODULE__{asks: [best | _] = asks}, :ask, deviation),
+    do: sum_depth(asks, best.price, Decimal.add(1, Decimal.from_float(deviation)), :gt, :value)
 
-  def depth(%__MODULE__{asks: [best | _] = asks}, :ask, deviation) do
-    deviation = Decimal.from_float(deviation)
-    upper_bound = Decimal.mult(best.price, Decimal.add(1, deviation))
+  defp sum_depth(prices, best, factor, exclude, field) do
+    bound = Decimal.mult(best, factor)
 
-    asks
-    |> Enum.filter(&(Decimal.compare(&1.price, upper_bound) != :gt))
-    |> Enum.reduce(Decimal.new(0), fn ask, acc -> Decimal.add(ask.value, acc) end)
+    prices
+    |> Enum.filter(&(Decimal.compare(&1.price, bound) != exclude))
+    |> Enum.reduce(Decimal.new(0), fn p, acc -> Decimal.add(Map.get(p, field), acc) end)
     |> Decimal.round(0, :floor)
     |> Decimal.to_integer()
   end
