@@ -23,7 +23,7 @@ defmodule Rujira.Contracts do
 
   defstruct id: nil, address: nil, info: nil
 
-  @type t :: %__MODULE__{id: String.t(), address: String.t(), info: ContractInfo.t()}
+  @type t :: %__MODULE__{id: String.t(), address: String.t(), info: ContractInfo.t() | nil}
 
   @spec from_id(String.t()) :: {:ok, t()}
   def from_id(id) do

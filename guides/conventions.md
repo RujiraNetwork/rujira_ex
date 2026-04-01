@@ -170,4 +170,13 @@ mix format --check-formatted
 mix compile --warnings-as-errors
 mix test
 mix credo --strict
+mix dialyzer
 ```
+
+## Dialyzer
+
+Typespecs must be accurate — dialyzer warnings are treated as errors. Common pitfalls:
+
+- Struct fields that default to `nil` must include `| nil` in `@type` (e.g. `id: String.t() | nil`)
+- Return types must match all code paths (e.g. if a function can return `info: nil`, the type must allow it)
+- Use `@spec` on every public function — dialyzer infers, but explicit specs catch contract mismatches early

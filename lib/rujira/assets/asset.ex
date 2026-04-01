@@ -7,11 +7,11 @@ defmodule Rujira.Assets.Asset do
   alias Rujira.Assets.Metadata
 
   @type t :: %__MODULE__{
-          id: String.t(),
-          type: :native | :secured | :layer_1 | :synth | :trade,
-          chain: String.t(),
-          symbol: String.t(),
-          ticker: String.t(),
+          id: String.t() | nil,
+          type: :native | :secured | :layer_1 | :synth | :trade | nil,
+          chain: String.t() | nil,
+          symbol: String.t() | nil,
+          ticker: String.t() | nil,
           metadata: Metadata.t() | nil
         }
 end

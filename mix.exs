@@ -31,7 +31,8 @@ defmodule RujiraCore.MixProject do
       {:json, "~> 1.4"},
       {:bech32, "~> 1.0"},
       {:memoize, "~> 1.4"},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 end
