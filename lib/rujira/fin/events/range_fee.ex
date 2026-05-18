@@ -15,4 +15,6 @@ defmodule Rujira.Fin.Events.RangeFee do
       {:ok, %__MODULE__{idx: idx}}
     end
   end
+
+  def new(_), do: {:error, :invalid_attrs}
 end

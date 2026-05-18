@@ -31,4 +31,6 @@ defmodule Rujira.Fin.Events.Trade do
        }}
     end
   end
+
+  def new(_), do: {:error, :invalid_attrs}
 end

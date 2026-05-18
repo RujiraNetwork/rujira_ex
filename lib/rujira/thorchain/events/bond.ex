@@ -23,5 +23,5 @@ defmodule Rujira.Thorchain.Events.Bond do
     end
   end
 
-  def new(_, _), do: {:error, :malformed}
+  def new(_, _), do: {:error, :invalid_attrs}
 end

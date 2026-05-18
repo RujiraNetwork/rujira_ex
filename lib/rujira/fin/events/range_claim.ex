@@ -16,4 +16,6 @@ defmodule Rujira.Fin.Events.RangeClaim do
       {:ok, %__MODULE__{idx: idx, owner: owner}}
     end
   end
+
+  def new(_), do: {:error, :invalid_attrs}
 end

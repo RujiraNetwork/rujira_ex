@@ -18,5 +18,5 @@ defmodule Rujira.Thorchain.Events.Transfer do
     end
   end
 
-  def new(_), do: {:error, :malformed}
+  def new(_), do: {:error, :invalid_attrs}
 end

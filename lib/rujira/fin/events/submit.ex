@@ -18,4 +18,6 @@ defmodule Rujira.Fin.Events.Submit do
        owner: owner
      }}
   end
+
+  def new(_), do: {:error, :invalid_attrs}
 end
