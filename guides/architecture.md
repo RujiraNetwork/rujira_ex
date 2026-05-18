@@ -40,7 +40,7 @@ defmodule Rujira.Protocol.Resource do
   @type t :: %__MODULE__{...}
 
   # --- Construction ---
-  @spec new(map() | Target.t()) :: {:ok, t()} | {:error, term()}
+  @spec new(map()) :: {:ok, t()} | {:error, term()}
   def new(...), do: ...
 
   # --- Queries ---
@@ -100,13 +100,12 @@ Struct modules are **pure data constructors**. Always pass maps or structs for p
 | Constructor | Input | Returns | Use |
 |-------------|-------|---------|-----|
 | `new/1` | `map()` (string keys) | `{:ok, t()} \| {:error, term()}` | Top-level struct from chain config |
-| `new/1` | `Target.t()` | `{:ok, t()} \| {:error, term()}` | Normalize deployment target → delegate to map clause |
 | `new/2` | `(parent_struct, map())` | `{:ok, t()} \| {:error, term()}` | Child struct from parent context + chain query |
 | `new/N` | explicit typed args | bare struct | Infallible placeholder |
 
 ### Rules
 
-- `new/1` for top-level structs: receives `map()` or `%Target{}`
+- `new/1` for top-level structs: receives a plain `map()` (string keys)
 - `new/2` for child structs: receives parent struct + raw query map
 - Required fields: pattern match in function head
 - Optional fields: `Map.get/2`
@@ -114,13 +113,13 @@ Struct modules are **pure data constructors**. Always pass maps or structs for p
 
 ### Contracts dispatch
 
-```elixir
-# Live contract — config from chain
-config |> Map.put("address", address) |> module.new()
+`Rujira.Contracts.get/1` is the single entry point for live contracts:
 
-# Missing contract — fallback to deployment target
-module.new(target)
+```elixir
+config |> Map.put("address", address) |> module.new()
 ```
+
+If the contract does not exist on chain, the error tuple from `query_state_smart/2` is returned as-is. The on-chain contract registry lives in `Rujira.Deployments` (live `Thorchain.Types.Query.Stub.contract_infos/2` resolver) — protocol → module mapping is configured via `config :rujira_ex, :protocol_modules`.
 
 ## Event Pipeline
 
@@ -159,7 +158,7 @@ Follow this exact structure. Example: adding `Bow` protocol.
 
 ```elixir
 defmodule Rujira.Bow.Events.Event do
-  defstruct [:address, :data]
+  defstruct address: nil, data: nil
 
   @type t :: %__MODULE__{address: String.t() | nil, data: struct()}
 
@@ -177,7 +176,7 @@ end
 
 ```elixir
 defmodule Rujira.Bow.Events.Swap do
-  defstruct [:pool, :offer, :return]
+  defstruct pool: nil, offer: nil, return: nil
 
   @type t :: %__MODULE__{pool: String.t(), offer: Amount.t() | nil, return: Amount.t() | nil}
 
@@ -188,13 +187,16 @@ defmodule Rujira.Bow.Events.Swap do
       {:ok, %__MODULE__{pool: pool, offer: offer, return: return_amt}}
     end
   end
+
+  def new(_), do: {:error, :invalid_attrs}
 end
 ```
 
 Rules:
 - `new/1` receives a **plain `map()`** — never `%Event{}`
 - Returns `{:ok, struct()} | {:error, term()}`
-- Use `Map.get/2` for optional, pattern match required in function head
+- Pattern match required keys in the function head; use `Map.get/2` for optional
+- Always end with a `def new(_), do: {:error, :invalid_attrs}` fallback — the routing parser already handles `{:error, _}`
 - No alias to `Rujira.Events.Event` — sub-events are decoupled
 
 ### 3. Create the protocol parser

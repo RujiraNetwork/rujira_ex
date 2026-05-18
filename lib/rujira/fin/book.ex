@@ -32,7 +32,7 @@ defmodule Rujira.Fin.Book do
             value: Amount.t()
           }
 
-    @spec new(side, map()) :: {:ok, t()} | {:error, :parse_error}
+    @spec new(side, map()) :: {:ok, t()} | {:error, term()}
     def new(side, %{"price" => price_str, "total" => total_str}) when side in [:bid, :ask] do
       with {:ok, price} <- Math.to_decimal(price_str),
            {:ok, total} <- Amount.new(total_str) do
@@ -43,10 +43,10 @@ defmodule Rujira.Fin.Book do
            price: price,
            value: value(side, price, total)
          }}
-      else
-        _ -> {:error, :parse_error}
       end
     end
+
+    def new(_, _), do: {:error, :invalid_attrs}
 
     @spec value(side, Decimal.t(), Amount.t()) :: Amount.t()
     defp value(:ask, price, total) do

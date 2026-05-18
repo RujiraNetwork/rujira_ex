@@ -24,7 +24,7 @@ Never return `nil` as a failure — use `{:error, :not_found}` or similar.
 ```elixir
 # fallible — I/O or parsing
 def from_denom(denom), do: {:ok, asset}
-def from_denom(_), do: {:error, :unknown_denom}
+def from_denom(_), do: {:error, :invalid_denom}
 
 # infallible pure — getter
 def decimals(%Asset{chain: "ETH"}), do: 18
@@ -101,7 +101,7 @@ Every `defstruct` must declare explicit defaults — never use the bare `[:field
 - Integers: `0`
 - Decimals: `Decimal.new(0)`
 - Loadable associations: `:not_loaded`
-- Enums: the most common value (e.g. `deployment_status: :live`)
+- Enums: the most common value (e.g. `side: :base`)
 
 ```elixir
 # good
@@ -129,9 +129,14 @@ Use consistent error atoms across the codebase:
 | `:invalid_integer` | `Math.to_integer/1` fails |
 | `:invalid_decimal` | `Math.to_decimal/1` fails |
 | `:invalid_id` | ID format doesn't match expected pattern |
-| `:parse_error` | Struct construction from raw data fails |
+| `:invalid_denom` | Denom not recognized by `Assets.from_denom/1` |
+| `:invalid_coin_format` | `Coin.parse/1` cannot tokenize the input |
+| `:invalid_event` | `Events.parse/1` given a non-event shape |
+| `:invalid_attrs` | Sub-event `new/1` got a map missing required keys |
 | `:not_found` | Resource lookup returns nothing |
-| `:unknown_denom` | Denom not recognized by `Assets.from_denom/1` |
+| `:not_supported` | Operation valid in shape but disallowed (e.g. `Assets.to_secured/1` on a THOR-chain asset) |
+| `:unknown_protocol` | `Deployments` saw an on-chain contract with no protocol mapping |
+| `:no_price` | `Prices.get/1` could not resolve an oracle or FIN mid-price |
 
 ## Logger
 
