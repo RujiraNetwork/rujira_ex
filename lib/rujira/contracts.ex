@@ -16,7 +16,6 @@ defmodule Rujira.Contracts do
   alias Cosmwasm.Wasm.V1.QueryContractsByCodeRequest
   alias Cosmwasm.Wasm.V1.QueryRawContractStateRequest
   alias Cosmwasm.Wasm.V1.QuerySmartContractStateRequest
-  alias Rujira.Deployments
   alias Rujira.Logger
 
   use Memoize
@@ -192,29 +191,8 @@ defmodule Rujira.Contracts do
       {:ok, config} ->
         config |> Map.put("address", address) |> module.new()
 
-      {:error,
-       %GRPC.RPCError{
-         status: 2,
-         message: "codespace wasm code 22: no such contract: address " <> _
-       }} ->
-        from_target({module, address})
-
       err ->
         err
-    end
-  end
-
-  @spec from_target({module(), String.t()}) :: {:ok, struct()} | {:error, term()}
-  def from_target({module, address}) do
-    case Deployments.list_all_targets() do
-      {:ok, targets} ->
-        case Enum.find(targets, &(&1.address == address)) do
-          nil -> {:error, :not_found}
-          x -> module.new(x)
-        end
-
-      error ->
-        error
     end
   end
 

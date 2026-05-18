@@ -24,7 +24,7 @@ end
 - `Rujira.Fin` — FIN DEX query API (pairs, order books, orders, ranges)
 - `Rujira.Events` — multi-protocol event parser with typed envelopes
 - `Rujira.Contracts` — CosmWasm smart contract queries (memoized)
-- `Rujira.Deployments` — YAML-driven deployment configuration
+- `Rujira.Deployments` — on-chain contract registry resolved live from THORChain
 - `Rujira.Node` — pluggable gRPC node abstraction
 - `Rujira.Prices` — pluggable price provider with oracle and FIN book fallback
 - `Rujira.Math` — decimal arithmetic and numeric parsing

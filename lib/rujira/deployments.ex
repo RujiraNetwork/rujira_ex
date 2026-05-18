@@ -1,35 +1,48 @@
 defmodule Rujira.Deployments do
   @moduledoc """
-  Loads deployment configuration from YAML files and resolves contract targets.
+  Resolves deployed Rujira contracts from THORChain's contract-info index.
+
+  Queries `Thorchain.Types.Query.Stub.contract_infos/2` via the configured
+  `Rujira.Node` implementation and maps each on-chain `ContractInfo` to a
+  `Rujira.Deployments.Target`.
+
+  ## Configuration
+
+      config :rujira_ex,
+        # Map of contract-name string -> module implementing the resource.
+        # Rujira's own protocols (e.g. "rujira-fin") are mapped by default;
+        # consumers add their own entries here.
+        protocol_modules: %{"rujira-bow" => MyApp.Bow},
+
+        # Addresses to exclude from the resolved target list (e.g. legacy
+        # or unmaintained deployments).
+        deployments_omit: []
+
+  Consumers wire up cache invalidation themselves by calling
+  `invalidate/0` whenever a `MsgInstantiateContract`, `MsgInstantiateContract2`
+  or `MsgMigrateContract` is observed.
   """
 
-  alias Cosmwasm.Wasm.V1.ContractInfo
-  alias Cosmwasm.Wasm.V1.MsgInstantiateContract2
-  alias Cosmwasm.Wasm.V1.MsgMigrateContract
-  alias Cosmwasm.Wasm.V1.MsgUpdateAdmin
-  alias Rujira.Contracts
   alias Rujira.Deployments.Target
+  alias Thorchain.Types.ContractInfo
+  alias Thorchain.Types.Query.Stub
+  alias Thorchain.Types.QueryContractInfosRequest
 
   use Memoize
 
-  @path "data/deployments"
-
-  @spec get_target(module(), term()) :: {:ok, Target.t()} | {:error, term()}
-  defmemo get_target(module, id) do
-    with {:ok, targets} <- list_all_targets() do
-      case Enum.find(targets, &(&1.module === module and &1.id == id)) do
-        nil -> {:error, :not_found}
-        target -> {:ok, target}
-      end
+  @spec contract_infos() :: {:ok, [ContractInfo.t()]} | {:error, term()}
+  defmemo contract_infos do
+    with {:ok, %{infos: infos}} <-
+           Rujira.Node.query(&Stub.contract_infos/2, %QueryContractInfosRequest{}) do
+      {:ok, Enum.reject(infos, &(&1.address in omit()))}
     end
   end
 
-  @doc "Returns the address of a contract if it exists and is live"
-  @spec get_address(module(), term()) :: {:ok, String.t()} | {:error, :not_found}
-  defmemo get_address(module, id) do
-    case get_target(module, id) do
-      {:ok, %{address: address, status: :live}} -> {:ok, address}
-      _ -> {:error, :not_found}
+  @spec get_target(module()) :: Target.t() | nil
+  defmemo get_target(module) do
+    case list_all_targets() do
+      {:ok, targets} -> Enum.find(targets, &(&1.module === module))
+      _ -> nil
     end
   end
 
@@ -44,261 +57,61 @@ defmodule Rujira.Deployments do
   end
 
   @spec list_all_targets() :: {:ok, [Target.t()]} | {:error, term()}
-  defmemo list_all_targets() do
-    %{codes: codes, targets: targets} = load_config!()
-
-    with {:ok, result} <-
-           Rujira.Enum.reduce_async_while_ok(
-             targets,
-             &parse_protocol(codes, &1),
-             timeout: 30_000
-           ) do
-      {:ok, List.flatten(result)}
+  defmemo list_all_targets do
+    with {:ok, infos} <- contract_infos() do
+      Rujira.Enum.reduce_while_ok(infos, [], &target/1)
     end
   end
 
-  @doc "List all targets for a given module"
-  @spec list_targets(module()) :: {:ok, [Target.t()]} | {:error, term()}
+  @doc "List all targets for a given module."
+  @spec list_targets(module()) :: [Target.t()]
   defmemo list_targets(module) do
-    with {:ok, targets} <- list_all_targets() do
-      {:ok, Enum.filter(targets, &(&1.module === module))}
+    case list_all_targets() do
+      {:ok, targets} -> Enum.filter(targets, &(&1.module === module))
+      _ -> []
     end
   end
 
-  @spec contract_file_path(String.t()) :: String.t()
-  defmemo contract_file_path(name) do
-    plan = Application.get_env(:rujira_ex, __MODULE__)[:plan]
-
-    :rujira_ex
-    |> :code.priv_dir()
-    |> Path.join(@path)
-    |> Path.join(plan)
-    |> Path.join("contracts")
-    |> Path.join("#{name}.yaml")
-  end
-
-  defmemo load_config!() do
-    plan = Application.get_env(:rujira_ex, __MODULE__)[:plan]
-
-    deploy_dir =
-      :rujira_ex
-      |> :code.priv_dir()
-      |> Path.join(@path)
-      |> Path.join(plan)
-
-    yaml_files =
-      deploy_dir
-      |> Path.join("contracts")
-      |> File.ls!()
-
-    {codes, targets} =
-      Enum.reduce(yaml_files, {%{}, %{}}, fn file, {codes_acc, targets_acc} ->
-        key = String.replace_suffix(file, ".yaml", "")
-        full_path = deploy_dir |> Path.join("contracts") |> Path.join(file)
-
-        %{"code" => code_id, "targets" => targets_list} = YamlElixir.read_from_file!(full_path)
-        {Map.put(codes_acc, key, code_id), Map.put(targets_acc, key, targets_list)}
-      end)
-
-    accounts =
-      deploy_dir
-      |> Path.join("accounts.yaml")
-      |> YamlElixir.read_from_file!()
-      |> Map.fetch!("accounts")
-
-    %{accounts: parsed_accounts} = parse_ctx(%{accounts: accounts}, %{})
-
-    parse_ctx(
-      %{accounts: parsed_accounts, codes: codes, targets: targets},
-      %{accounts: parsed_accounts, codes: codes, targets: targets}
-    )
-  end
-
-  defp parse_protocol(codes, {protocol, configs}) do
-    with {:ok, result} <-
-           Rujira.Enum.reduce_async_while_ok(
-             configs,
-             &parse_contract(codes, protocol, &1),
-             timeout: 30_000
-           ) do
-      result
-    end
-  end
-
-  defp parse_contract(
-         codes,
-         protocol,
-         %{
-           "id" => id,
-           "admin" => admin,
-           "creator" => creator,
-           "config" => config
-         } = item
-       ) do
-    code_id = Map.get(codes, protocol)
-    salt = build_address_salt(protocol, id)
-
-    address = Map.get(item, "address", Contracts.build_address!(salt, creator, code_id))
-
-    contract =
-      case Contracts.info(address) do
-        {:ok, info} -> info
-        _ -> nil
-      end
-
-    %Target{
-      id: id,
-      address: address,
-      creator: creator,
-      code_id: code_id,
-      salt: salt,
-      admin: admin,
-      protocol: protocol,
-      module: to_module(protocol),
-      config: config,
-      contract: contract,
-      status:
-        case contract do
-          nil -> :preview
-          _ -> :live
-        end
-    }
-  end
-
-  # Existing contract, change, migrate
-  def to_msg(%{
-        address: address,
-        module: module,
-        code_id: target_code_id,
-        config: config,
-        contract: %ContractInfo{admin: admin, code_id: code_id}
-      })
-      when target_code_id != code_id do
-    %MsgMigrateContract{
-      sender: admin,
-      code_id: Kernel.to_string(target_code_id),
-      contract: address,
-      msg: module.migrate_msg(code_id, target_code_id, config)
-    }
-  end
-
-  def to_msg(%{address: address, admin: target_admin, contract: %ContractInfo{admin: admin}})
-      when target_admin != admin,
-      do: %MsgUpdateAdmin{sender: admin, new_admin: target_admin, contract: address}
-
-  # No contract, instantiate
-  def to_msg(%{
-        id: id,
-        module: module,
-        code_id: code_id,
-        config: config,
-        salt: salt,
-        admin: admin,
-        creator: creator,
-        contract: nil
-      }) do
-    %MsgInstantiateContract2{
-      sender: creator,
-      admin: admin,
-      code_id: Kernel.to_string(code_id),
-      msg: module.init_msg(config),
-      funds: [],
-      label: module.init_label(id, config),
-      salt: Base.encode64(Base.decode16!(salt))
-    }
-  end
-
-  # Existing contract, no change, ignore
-  def to_msg(%{contract: %ContractInfo{}}), do: nil
-
-  # Protocol -> module mapping
-  def to_module("rujira-fin"), do: Rujira.Fin.Pair
-
-  def to_module(protocol) do
-    Map.get(Application.get_env(:rujira_ex, :protocol_modules, %{}), protocol)
-  end
-
-  def parse_arg("targets:" <> id, %{targets: targets, codes: codes} = ctx) do
-    [protocol, id] = String.split(id, ".")
-    code_id = Map.get(codes, protocol)
-
-    target =
-      targets
-      |> Map.get(protocol)
-      |> Enum.find(&(Map.get(&1, "id") == id))
-
-    creator = target |> Map.get("creator") |> interpolate_string(ctx)
-    salt = build_address_salt(protocol, id)
-
-    Map.get(target, "address", Contracts.build_address!(salt, creator, code_id))
-  end
-
-  def parse_arg("accounts:" <> id, %{accounts: accounts}), do: Map.get(accounts, id)
-  def parse_arg("env:" <> id, _), do: System.get_env(id)
-  def parse_arg(x, _), do: x
-
-  def build_address_salt("rujira-" <> protocol, id), do: Base.encode16("#{protocol}:#{id}")
-  def build_address_salt("nami-" <> protocol, id), do: Base.encode16("#{protocol}:#{id}")
-  def build_address_salt(protocol, id), do: Base.encode16("#{protocol}:#{id}")
-
-  def to_migrate_tx do
-    %{codes: codes, targets: targets} = load_config!()
-
-    messages =
-      targets
-      |> Enum.flat_map(&parse_protocol(codes, &1))
-      |> Enum.map(fn x -> Map.put(x, :msg, to_msg(x)) end)
-      |> Enum.reduce([], fn
-        %{msg: nil}, a ->
-          a
-
-        %{msg: %struct{} = msg}, a ->
-          name = struct |> Kernel.to_string() |> String.split(".") |> Enum.at(-1)
-
-          [
-            msg
-            |> Map.from_struct()
-            |> Map.delete(:__unknown_fields__)
-            |> Map.delete(:fix_msg)
-            |> Map.put("@type", "/cosmwasm.wasm.v1.#{name}")
-            | a
-          ]
-      end)
-
-    %{
-      body: %{
-        messages: messages,
-        memo: "",
-        timeout_height: "0",
-        extension_options: [],
-        non_critical_extension_options: []
-      },
-      auth_info: %{
-        signer_infos: [],
-        fee: %{amount: [], gas_limit: "1000000", payer: "", granter: ""},
-        tip: nil
-      },
-      signatures: []
-    }
-    |> JSON.encode!()
+  @doc "Invalidate all memoized deployment metadata."
+  @spec invalidate() :: :ok
+  def invalidate do
+    Memoize.invalidate(__MODULE__, :contract_infos)
+    Memoize.invalidate(__MODULE__, :get_target)
+    Memoize.invalidate(__MODULE__, :from_address)
+    Memoize.invalidate(__MODULE__, :list_all_targets)
+    Memoize.invalidate(__MODULE__, :list_targets)
+    :ok
   end
 
   # --- Private ---
 
-  defp parse_ctx(map, ctx) when is_map(map) do
-    map
-    |> Enum.map(fn {k, v} -> {k, parse_ctx(v, ctx)} end)
-    |> Enum.into(%{})
-  end
+  defp target(%{contract: name, version: version, address: address} = info) do
+    case module_from(info) do
+      {:ok, module} ->
+        {:ok,
+         %Target{
+           id: address,
+           address: address,
+           module: module,
+           name: name,
+           version: version
+         }}
 
-  defp parse_ctx(v, ctx) when is_list(v), do: Enum.map(v, &parse_ctx(&1, ctx))
-  defp parse_ctx(v, ctx) when is_binary(v), do: interpolate_string(v, ctx)
-  defp parse_ctx(v, _), do: v
-
-  defp interpolate_string(str, ctx) do
-    case Regex.run(~r/^\${(.*)}$/, str) do
-      nil -> str
-      [_, x] -> parse_arg(x, ctx)
+      _ ->
+        :skip
     end
   end
+
+  defp module_from(%{contract: "rujira-fin"}), do: {:ok, Rujira.Fin.Pair}
+
+  defp module_from(%{contract: name}) do
+    case Map.get(protocol_modules(), name) do
+      nil -> {:error, "not found #{name}"}
+      module -> {:ok, module}
+    end
+  end
+
+  defp protocol_modules, do: Application.get_env(:rujira_ex, :protocol_modules, %{})
+
+  defp omit, do: Application.get_env(:rujira_ex, :deployments_omit, [])
 end

@@ -8,7 +8,6 @@ defmodule Rujira.Fin.Pair do
   alias Rujira.Assets
   alias Rujira.Contracts
   alias Rujira.Deployments
-  alias Rujira.Deployments.Target
   alias Rujira.Fin.Book
   alias Rujira.Logger
   alias Rujira.Math
@@ -29,8 +28,7 @@ defmodule Rujira.Fin.Pair do
             fee_address: nil,
             book: :not_loaded,
             history: :not_loaded,
-            summary: :not_loaded,
-            deployment_status: :live
+            summary: :not_loaded
 
   @type t :: %__MODULE__{
           id: String.t(),
@@ -45,30 +43,12 @@ defmodule Rujira.Fin.Pair do
           fee_maker: Decimal.t(),
           fee_address: String.t(),
           book: :not_loaded | Book.t(),
-          summary: :not_loaded | term(),
-          deployment_status: Target.status()
+          summary: :not_loaded | term()
         }
 
   # --- Construction ---
 
-  @spec new(map() | Target.t()) :: {:ok, t()} | {:error, term()}
-
-  def new(%Target{address: address, config: config, status: status}) do
-    msg = init_msg(config)
-
-    %{
-      "address" => address,
-      "market_makers" => msg[:market_makers],
-      "denoms" => msg[:denoms],
-      "oracles" => msg[:oracles],
-      "tick" => msg[:tick],
-      "fee_taker" => msg[:fee_taker],
-      "fee_maker" => msg[:fee_maker],
-      "fee_address" => msg[:fee_address],
-      "deployment_status" => status
-    }
-    |> new()
-  end
+  @spec new(map()) :: {:ok, t()} | {:error, term()}
 
   def new(%{"market_maker" => nil} = attrs) do
     attrs |> Map.delete("market_maker") |> Map.put("market_makers", []) |> new()
@@ -88,7 +68,7 @@ defmodule Rujira.Fin.Pair do
           "fee_taker" => fee_taker,
           "fee_maker" => fee_maker,
           "fee_address" => fee_address
-        } = attrs
+        }
       ) do
     with {:ok, fee_taker} <- Math.to_decimal(fee_taker),
          {:ok, fee_maker} <- Math.to_decimal(fee_maker),
@@ -108,8 +88,7 @@ defmodule Rujira.Fin.Pair do
          fee_maker: fee_maker,
          fee_address: fee_address,
          book: :not_loaded,
-         summary: :not_loaded,
-         deployment_status: Map.get(attrs, "deployment_status", :live)
+         summary: :not_loaded
        }}
     end
   end
@@ -121,22 +100,18 @@ defmodule Rujira.Fin.Pair do
 
   @spec list() :: {:ok, [t()]} | {:error, term()}
   defmemo list do
-    with {:ok, targets} <- Deployments.list_targets(__MODULE__) do
-      Rujira.Enum.reduce_while_ok(targets, [], fn
-        %{status: :preview} = target ->
-          new(target)
+    targets = Deployments.list_targets(__MODULE__)
 
-        %{module: module, address: address} ->
-          case Contracts.get({module, address}) do
-            {:ok, v} ->
-              {:ok, v}
+    Rujira.Enum.reduce_while_ok(targets, [], fn %{module: module, address: address} ->
+      case Contracts.get({module, address}) do
+        {:ok, v} ->
+          {:ok, v}
 
-            {:error, err} ->
-              Logger.error(__MODULE__, "#{address} error #{inspect(err)}")
-              :skip
-          end
-      end)
-    end
+        {:error, err} ->
+          Logger.error(__MODULE__, "#{address} error #{inspect(err)}")
+          :skip
+      end
+    end)
   end
 
   @spec find_stable(String.t()) :: {:ok, t()} | {:error, term()}
@@ -145,7 +120,7 @@ defmodule Rujira.Fin.Pair do
          %__MODULE__{} = pair <-
            Enum.find(
              pairs,
-             &(&1.token_base == base_denom && &1.deployment_status == :live &&
+             &(&1.token_base == base_denom &&
                  (String.contains?(&1.token_quote, "usdc") ||
                     String.contains?(&1.token_quote, "usdt")))
            ) do
@@ -274,7 +249,7 @@ defmodule Rujira.Fin.Pair do
   end
 
   defp get_mm_tvl(mm) do
-    with {:ok, %Rujira.Deployments.Target{module: module}} <- Deployments.from_address(mm),
+    with {:ok, %Deployments.Target{module: module}} <- Deployments.from_address(mm),
          {:ok, pool} <- module.pool_from_id(mm) do
       {:ok, module.tvl(pool)}
     end

@@ -35,7 +35,6 @@ defmodule RujiraEx.MixProject do
       {:decimal, "~> 2.0"},
       {:grpc, "~> 0.9"},
       {:protobuf, "~> 0.12"},
-      {:yaml_elixir, "~> 2.11"},
       {:json, "~> 1.4"},
       {:bech32, "~> 1.0"},
       {:memoize, "~> 1.4"},

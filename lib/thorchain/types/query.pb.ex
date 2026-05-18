@@ -302,6 +302,18 @@ defmodule Thorchain.Types.Query.Service do
     Thorchain.Types.QueryOraclePriceRequest,
     Thorchain.Types.QueryOraclePriceResponse
   )
+
+  rpc(
+    :ContractInfos,
+    Thorchain.Types.QueryContractInfosRequest,
+    Thorchain.Types.QueryContractInfosResponse
+  )
+
+  rpc(
+    :ContractInfo,
+    Thorchain.Types.QueryContractInfoRequest,
+    Thorchain.Types.QueryContractInfoResponse
+  )
 end
 
 defmodule Thorchain.Types.Query.Stub do

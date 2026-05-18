@@ -11,7 +11,7 @@ defmodule Rujira do
   - `Rujira.Assets` — blockchain asset resolution across 20+ chains
   - `Rujira.Coin` — asset + amount pairs
   - `Rujira.Contracts` — CosmWasm contract queries
-  - `Rujira.Deployments` — YAML-driven deployment configuration
+  - `Rujira.Deployments` — on-chain contract registry resolved live from THORChain
   - `Rujira.Events` — generic multi-protocol event parser
   - `Rujira.Fin` — FIN DEX query API (pairs, orders, ranges)
   - `Rujira.Math` — decimal arithmetic and numeric parsing

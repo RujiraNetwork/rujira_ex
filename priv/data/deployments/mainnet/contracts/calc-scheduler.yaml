@@ -1,8 +1,0 @@
-code: 55
-
-targets:
-  - id: calc-scheduler
-    admin: ${accounts:admin}
-    creator: ${accounts:creator}
-    address: thor1t2cnyn98xusxakgemsenn2p9n3ykd6accr2c0zg22nczh097ln7qeze20f
-    config: {}

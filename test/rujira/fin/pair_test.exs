@@ -2,7 +2,6 @@ defmodule Rujira.Fin.PairTest do
   use ExUnit.Case, async: true
 
   alias Rujira.Fin.Pair
-  alias Rujira.Deployments.Target
 
   describe "new/1 from map" do
     test "parses pair config with market_makers list" do
@@ -32,7 +31,6 @@ defmodule Rujira.Fin.PairTest do
       assert pair.fee_address == "thor1fee"
       assert pair.book == :not_loaded
       assert pair.summary == :not_loaded
-      assert pair.deployment_status == :live
     end
 
     test "normalizes single market_maker to list" do
@@ -63,25 +61,6 @@ defmodule Rujira.Fin.PairTest do
       }
 
       assert {:ok, %Pair{market_makers: []}} = Pair.new(config)
-    end
-  end
-
-  describe "new/1 from Target" do
-    test "creates pair from deployment target" do
-      target = %Target{
-        address: "thor1pair",
-        status: :preview,
-        config: %{
-          "denoms" => ["rune", "tcy"],
-          "fee_address" => "thor1fee"
-        }
-      }
-
-      assert {:ok, %Pair{} = pair} = Pair.new(target)
-      assert pair.address == "thor1pair"
-      assert pair.deployment_status == :preview
-      assert pair.token_base == "rune"
-      assert pair.token_quote == "tcy"
     end
   end
 
