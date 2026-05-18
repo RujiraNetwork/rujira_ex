@@ -4,3 +4,6 @@ deps/
 *.beam
 .DS_Store
 
+*.tar
+doc/
+erl_crash.dump

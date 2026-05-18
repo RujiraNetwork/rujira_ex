@@ -1,0 +1,113 @@
+# Contributing to rujira_ex
+
+Thanks for working on the Rujira domain library. This document covers setup, conventions, verification, and the release flow.
+
+## Repository
+
+- Source: <https://github.com/RujiraNetwork/rujira_ex>
+- Hex package: `rujira_ex`
+- License: MIT
+
+## Setup
+
+```sh
+mix deps.get
+mix compile
+```
+
+Requires Elixir `~> 1.14` and Erlang/OTP 26+.
+
+## Conventions
+
+Two documents are required reading before sending a PR:
+
+- [`guides/conventions.md`](guides/conventions.md) — naming, return values, error atoms, numeric parsing, struct defaults
+- [`guides/architecture.md`](guides/architecture.md) — protocol module shape, event pipeline, adding a new protocol
+
+## Branches and commits
+
+Commit messages follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/):
+
+- Format: `type(scope): description` on a single line. Use `type(scope)!: …` for breaking changes.
+- Allowed `type`s: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`.
+- `scope` is **required** in this project (the spec makes it optional) and names the area being changed: `core`, `deps`, `fin`, `thorchain`, `events`, etc.
+
+Branch names mirror the commit shape: `type/scope-short-desc` (e.g. `feat/fin-range-pricing`, `fix/contracts-spec`).
+
+## Verification — all five must pass
+
+Run before opening or updating a PR:
+
+```sh
+mix format --check-formatted
+mix compile --warnings-as-errors
+mix test
+mix credo --strict
+mix dialyzer
+```
+
+CI runs the same five. A failure on any of them blocks merge.
+
+## Pull requests
+
+- One PR per concern. Splitting is cheap; bundled refactors are expensive to review.
+- Title follows the commit format (`type(scope): description`).
+- Body explains the **why**. The diff already shows the what.
+- Tests cover both the happy path and the error tuple.
+- Update `guides/` if you change a documented convention.
+
+## Versioning and releases
+
+The package follows **Semantic Versioning** (<https://semver.org>):
+
+- `MAJOR` — breaking public-API change
+- `MINOR` — backwards-compatible feature
+- `PATCH` — backwards-compatible fix
+
+The library is in `0.x.y` while the public surface stabilizes. In that range, treat `MINOR` bumps as potentially breaking and pin to `~> 0.x` accordingly.
+
+### Cutting a release
+
+1. Land all PRs targeting the release on `main`.
+2. Bump `@version` in `mix.exs`.
+3. Update `README.md` and any docs that reference the version.
+4. Verify locally:
+   ```sh
+   mix format --check-formatted
+   mix compile --warnings-as-errors
+   mix test
+   mix credo --strict
+   mix dialyzer
+   mix hex.build       # confirms the package builds cleanly
+   ```
+5. Commit: `chore(release): vX.Y.Z`.
+6. Tag the commit: `git tag vX.Y.Z && git push origin vX.Y.Z`. The tag must match `@version` in `mix.exs`.
+7. Publish to Hex: `mix hex.publish` (requires an authenticated maintainer).
+8. Cut a GitHub release from the tag with a short changelog.
+
+Only tagged commits get published. Do not publish from a dirty working tree.
+
+## Adding a dependency
+
+- Justify it in the PR description. "Easier than writing it" is not enough — the runtime cost of every dep is real.
+- Prefer single-purpose libraries over kitchen-sink frameworks.
+- Pin with `~> MAJOR.MINOR` for stable libs and `~> 0.MINOR` for pre-1.0.
+- Dev-only tools (`credo`, `dialyxir`, `ex_doc`) must have `only: [:dev, :test], runtime: false`.
+
+## Reporting bugs
+
+Open a GitHub issue with:
+
+- rujira_ex version
+- Elixir / OTP version
+- Minimal reproduction (a failing test is ideal)
+- Expected vs. actual behavior
+
+## Migration status — consumers
+
+`Rujira.Contracts.get/1` currently supports two protocol-module shapes:
+
+- New: `module.new/1` taking a single `map()` with `"address"` merged in
+- Legacy: `module.from_config(address, config)` — fallback for incremental migrators
+
+The legacy path is **temporary** and will be removed once the in-house consumers finish migrating. New code MUST implement `new/1`. The fallback is marked with a `TODO` in `lib/rujira/contracts.ex`.
