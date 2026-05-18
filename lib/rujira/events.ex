@@ -1,6 +1,6 @@
 defmodule Rujira.Events do
   @moduledoc """
-  Generic event parser for all Rujira protocol events.
+  Generic event parser for all Rujira events.
 
   Takes a raw event, creates a default `Event` struct, then routes it
   to the correct protocol parser. Each protocol returns an envelope

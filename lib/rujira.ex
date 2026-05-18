@@ -1,6 +1,6 @@
 defmodule Rujira do
   @moduledoc """
-  Domain library for the Rujira protocol.
+  Domain library for Rujira.
 
   Provides shared types, query APIs, and event parsing for the Rujira
   DeFi suite built on Cosmos/THORChain.

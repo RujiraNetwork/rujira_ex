@@ -1,6 +1,6 @@
 # Rujira
 
-Domain library for the [Rujira](https://rujira.com) DeFi protocol suite built on Cosmos/THORChain.
+Domain library for [Rujira](https://rujira.com), built on THORChain.
 
 Provides shared types, query APIs, and event parsing for blockchain protocol data across 20+ chains.
 

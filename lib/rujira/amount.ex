@@ -2,7 +2,7 @@ defmodule Rujira.Amount do
   @moduledoc """
   Integer amounts normalized to 8 decimal places.
 
-  All amounts in the Rujira protocol are represented as non-negative integers
+  All amounts in Rujira are represented as non-negative integers
   where `1.0 = 100_000_000` (1e8). This module provides a single entry point
   `new/1` that accepts any numeric input and normalizes it.
 

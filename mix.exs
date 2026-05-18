@@ -9,7 +9,7 @@ defmodule RujiraEx.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      description: "Domain library for the Rujira protocol",
+      description: "Domain library for Rujira",
       package: package()
     ]
   end

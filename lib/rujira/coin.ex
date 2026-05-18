@@ -1,6 +1,6 @@
 defmodule Rujira.Coin do
   @moduledoc """
-  Canonical coin type for the Rujira protocol.
+  Canonical coin type for Rujira.
 
   Represents an asset + amount pair. Amount is always an integer
   in smallest units. Asset is always resolved at construction time.

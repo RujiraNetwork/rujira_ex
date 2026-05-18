@@ -1,6 +1,6 @@
 defmodule Rujira.Assets do
   @moduledoc """
-  Asset resolution for Rujira protocol.
+  Asset resolution for Rujira.
 
   Merges base-layer asset handling (chain/symbol/denom parsing) with
   app-layer token support (x/ruji, x/staking-*, x/bow-xyk-*, etc.).
