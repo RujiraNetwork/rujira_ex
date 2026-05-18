@@ -188,11 +188,26 @@ defmodule Rujira.Contracts do
 
   defmemo get({module, address}) do
     case query_state_smart(address, %{config: %{}}) do
-      {:ok, config} ->
+      {:ok, config} -> construct(module, address, config)
+      err -> err
+    end
+  end
+
+  # TODO: remove the `from_config/2` fallback once rujira-api has migrated every
+  # protocol module to expose `new/1`. Tracks the incremental adoption of
+  # rujira_ex by rujira-api — see CONTRIBUTING.md.
+  defp construct(module, address, config) do
+    Code.ensure_loaded(module)
+
+    cond do
+      function_exported?(module, :new, 1) ->
         config |> Map.put("address", address) |> module.new()
 
-      err ->
-        err
+      function_exported?(module, :from_config, 2) ->
+        module.from_config(address, config)
+
+      true ->
+        {:error, {:no_constructor, module}}
     end
   end
 
