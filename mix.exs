@@ -1,16 +1,21 @@
 defmodule RujiraEx.MixProject do
   use Mix.Project
 
+  @version "0.0.1"
+  @source_url "https://github.com/RujiraNetwork/rujira_ex"
+
   def project do
     [
       app: :rujira_ex,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: "Domain library for Rujira",
-      package: package()
+      package: package(),
+      source_url: @source_url,
+      docs: docs()
     ]
   end
 
@@ -25,8 +30,24 @@ defmodule RujiraEx.MixProject do
 
   defp package do
     [
+      name: "rujira_ex",
       licenses: ["MIT"],
-      links: %{}
+      links: %{"GitHub" => @source_url},
+      files:
+        ~w(lib config .formatter.exs mix.exs README.md LICENSE CONTRIBUTING.md guides)
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      source_ref: "v#{@version}",
+      extras: [
+        "README.md",
+        "CONTRIBUTING.md",
+        "guides/conventions.md",
+        "guides/architecture.md"
+      ]
     ]
   end
 
@@ -39,7 +60,8 @@ defmodule RujiraEx.MixProject do
       {:bech32, "~> 1.0"},
       {:memoize, "~> 1.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end
 end
