@@ -4,7 +4,7 @@ defmodule Thorchain.Types.MsgNoOp do
   use Protobuf, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
 
   field(:observed_tx, 1,
-    type: Thorchain.Types.ObservedTx,
+    type: Thorchain.Common.ObservedTx,
     json_name: "observedTx",
     deprecated: false
   )

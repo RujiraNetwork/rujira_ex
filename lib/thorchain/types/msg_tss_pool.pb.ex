@@ -15,10 +15,17 @@ defmodule Thorchain.Types.MsgTssPool do
 
   field(:pub_keys, 4, repeated: true, type: :string, json_name: "pubKeys")
   field(:height, 5, type: :int64)
-  field(:blame, 6, type: Thorchain.Types.Blame, deprecated: false)
+  field(:blame, 6, repeated: true, type: Thorchain.Types.Blame, deprecated: false)
   field(:chains, 7, repeated: true, type: :string)
   field(:signer, 8, type: :bytes, deprecated: false)
   field(:keygen_time, 9, type: :int64, json_name: "keygenTime")
   field(:keyshares_backup, 10, type: :bytes, json_name: "keysharesBackup")
   field(:secp256k1_signature, 11, type: :bytes, json_name: "secp256k1Signature")
+  field(:pool_pub_key_eddsa, 12, type: :string, json_name: "poolPubKeyEddsa", deprecated: false)
+
+  field(:keyshares_backup_eddsa, 13,
+    type: :bytes,
+    json_name: "keysharesBackupEddsa",
+    deprecated: false
+  )
 end

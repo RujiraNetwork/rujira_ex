@@ -8,6 +8,7 @@ defmodule Thorchain.Types.TxOutItem do
   field(:vault_pub_key, 3, type: :string, json_name: "vaultPubKey", deprecated: false)
   field(:coin, 4, type: Thorchain.Common.Coin, deprecated: false)
   field(:memo, 5, type: :string)
+  field(:original_memo, 16, type: :string, json_name: "originalMemo")
 
   field(:max_gas, 6,
     repeated: true,
@@ -30,6 +31,7 @@ defmodule Thorchain.Types.TxOutItem do
   )
 
   field(:clout_spent, 14, type: :string, json_name: "cloutSpent", deprecated: false)
+  field(:vault_pub_key_eddsa, 15, type: :string, json_name: "vaultPubKeyEddsa", deprecated: false)
 end
 
 defmodule Thorchain.Types.TxOut do

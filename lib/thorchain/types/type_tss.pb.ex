@@ -16,4 +16,5 @@ defmodule Thorchain.Types.TssVoter do
   )
 
   field(:secp256k1_signatures, 8, repeated: true, type: :string, json_name: "secp256k1Signatures")
+  field(:pool_pub_key_eddsa, 9, type: :string, json_name: "poolPubKeyEddsa", deprecated: false)
 end

@@ -23,4 +23,9 @@ defmodule Thorchain.Types.THORName do
   )
 
   field(:aliases, 5, repeated: true, type: Thorchain.Types.ThornameAlias, deprecated: false)
+
+  field(:preferred_asset_outbound_fee_multiplier, 6,
+    type: :int64,
+    json_name: "preferredAssetOutboundFeeMultiplier"
+  )
 end

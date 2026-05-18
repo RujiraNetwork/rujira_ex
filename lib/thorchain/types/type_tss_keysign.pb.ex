@@ -6,5 +6,5 @@ defmodule Thorchain.Types.TssKeysignFailVoter do
   field(:id, 1, type: :string, deprecated: false)
   field(:height, 4, type: :int64)
   field(:signers, 6, repeated: true, type: :string)
-  field(:round7_count, 7, type: :int64, json_name: "round7Count")
+  field(:last_round_count, 7, type: :int64, json_name: "lastRoundCount")
 end

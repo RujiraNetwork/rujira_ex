@@ -9,3 +9,12 @@ defmodule Thorchain.Types.MsgNetworkFee do
   field(:transaction_fee_rate, 4, type: :uint64, json_name: "transactionFeeRate")
   field(:signer, 5, type: :bytes, deprecated: false)
 end
+
+defmodule Thorchain.Types.MsgNetworkFeeQuorum do
+  @moduledoc false
+
+  use Protobuf, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
+
+  field(:quoNetFee, 1, type: Thorchain.Common.QuorumNetworkFee)
+  field(:signer, 2, type: :bytes, deprecated: false)
+end

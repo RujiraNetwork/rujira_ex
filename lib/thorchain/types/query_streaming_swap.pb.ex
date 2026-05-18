@@ -26,6 +26,7 @@ defmodule Thorchain.Types.QueryStreamingSwapResponse do
   field(:out, 12, type: :string, deprecated: false)
   field(:failed_swaps, 13, repeated: true, type: :int64, json_name: "failedSwaps")
   field(:failed_swap_reasons, 14, repeated: true, type: :string, json_name: "failedSwapReasons")
+  field(:initial_height, 15, type: :int64, json_name: "initialHeight")
 end
 
 defmodule Thorchain.Types.QueryStreamingSwapsRequest do

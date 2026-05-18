@@ -188,15 +188,9 @@ defmodule Thorchain.Types.Query.Service do
   rpc(:QuoteSwap, Thorchain.Types.QueryQuoteSwapRequest, Thorchain.Types.QueryQuoteSwapResponse)
 
   rpc(
-    :QuoteSaverDeposit,
-    Thorchain.Types.QueryQuoteSaverDepositRequest,
-    Thorchain.Types.QueryQuoteSaverDepositResponse
-  )
-
-  rpc(
-    :QuoteSaverWithdraw,
-    Thorchain.Types.QueryQuoteSaverWithdrawRequest,
-    Thorchain.Types.QueryQuoteSaverWithdrawResponse
+    :QuoteLimit,
+    Thorchain.Types.QueryQuoteLimitRequest,
+    Thorchain.Types.QueryQuoteLimitResponse
   )
 
   rpc(
@@ -206,6 +200,24 @@ defmodule Thorchain.Types.Query.Service do
   )
 
   rpc(:SwapQueue, Thorchain.Types.QuerySwapQueueRequest, Thorchain.Types.QuerySwapQueueResponse)
+
+  rpc(
+    :SwapDetails,
+    Thorchain.Types.QuerySwapDetailsRequest,
+    Thorchain.Types.QuerySwapDetailsResponse
+  )
+
+  rpc(
+    :LimitSwaps,
+    Thorchain.Types.QueryLimitSwapsRequest,
+    Thorchain.Types.QueryLimitSwapsResponse
+  )
+
+  rpc(
+    :LimitSwapsSummary,
+    Thorchain.Types.QueryLimitSwapsSummaryRequest,
+    Thorchain.Types.QueryLimitSwapsSummaryResponse
+  )
 
   rpc(
     :LastBlocks,
@@ -231,6 +243,12 @@ defmodule Thorchain.Types.Query.Service do
     :VaultsPubkeys,
     Thorchain.Types.QueryVaultsPubkeysRequest,
     Thorchain.Types.QueryVaultsPubkeysResponse
+  )
+
+  rpc(
+    :VaultSolvency,
+    Thorchain.Types.QueryVaultSolvencyRequest,
+    Thorchain.Types.QueryVaultSolvencyResponse
   )
 
   rpc(:TxStages, Thorchain.Types.QueryTxStagesRequest, Thorchain.Types.QueryTxStagesResponse)
@@ -297,11 +315,63 @@ defmodule Thorchain.Types.Query.Service do
     Thorchain.Types.QueryUpgradeVotesResponse
   )
 
+  rpc(:TCYStaker, Thorchain.Types.QueryTCYStakerRequest, Thorchain.Types.QueryTCYStakerResponse)
+
+  rpc(
+    :TCYStakers,
+    Thorchain.Types.QueryTCYStakersRequest,
+    Thorchain.Types.QueryTCYStakersResponse
+  )
+
+  rpc(
+    :TCYClaimer,
+    Thorchain.Types.QueryTCYClaimerRequest,
+    Thorchain.Types.QueryTCYClaimerResponse
+  )
+
+  rpc(
+    :TCYClaimers,
+    Thorchain.Types.QueryTCYClaimersRequest,
+    Thorchain.Types.QueryTCYClaimersResponse
+  )
+
+  rpc(
+    :OraclePrices,
+    Thorchain.Types.QueryOraclePricesRequest,
+    Thorchain.Types.QueryOraclePricesResponse
+  )
+
   rpc(
     :OraclePrice,
     Thorchain.Types.QueryOraclePriceRequest,
     Thorchain.Types.QueryOraclePriceResponse
   )
+
+  rpc(
+    :Eip712TypedData,
+    Thorchain.Types.QueryEip712TypedDataRequest,
+    Thorchain.Types.QueryEip712TypedDataResponse
+  )
+
+  rpc(
+    :ReferenceMemo,
+    Thorchain.Types.QueryReferenceMemoRequest,
+    Thorchain.Types.QueryReferenceMemoResponse
+  )
+
+  rpc(
+    :ReferenceMemoByHash,
+    Thorchain.Types.QueryReferenceMemoByHashRequest,
+    Thorchain.Types.QueryReferenceMemoByHashResponse
+  )
+
+  rpc(
+    :ReferenceMemoPreflight,
+    Thorchain.Types.QueryReferenceMemoPreflightRequest,
+    Thorchain.Types.QueryReferenceMemoPreflightResponse
+  )
+
+  rpc(:Supply, Thorchain.Types.QuerySupplyRequest, Thorchain.Types.QuerySupplyResponse)
 
   rpc(
     :ContractInfos,
@@ -313,6 +383,24 @@ defmodule Thorchain.Types.Query.Service do
     :ContractInfo,
     Thorchain.Types.QueryContractInfoRequest,
     Thorchain.Types.QueryContractInfoResponse
+  )
+
+  rpc(
+    :DynamicL1Fees,
+    Thorchain.Types.QueryDynamicL1FeesRequest,
+    Thorchain.Types.QueryDynamicL1FeesResponse
+  )
+
+  rpc(
+    :DynamicL1FeesByThorname,
+    Thorchain.Types.QueryDynamicL1FeesByThornameRequest,
+    Thorchain.Types.QueryDynamicL1FeesByThornameResponse
+  )
+
+  rpc(
+    :DynamicL1FeesCurrent,
+    Thorchain.Types.QueryDynamicL1FeesCurrentRequest,
+    Thorchain.Types.QueryDynamicL1FeesCurrentResponse
   )
 end
 

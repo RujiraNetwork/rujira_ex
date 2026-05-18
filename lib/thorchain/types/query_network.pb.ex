@@ -14,6 +14,18 @@ defmodule Thorchain.Types.QueryNetworkResponse do
   field(:bond_reward_rune, 1, type: :string, json_name: "bondRewardRune", deprecated: false)
   field(:total_bond_units, 2, type: :string, json_name: "totalBondUnits", deprecated: false)
 
+  field(:available_pools_rune, 15,
+    type: :string,
+    json_name: "availablePoolsRune",
+    deprecated: false
+  )
+
+  field(:vaults_liquidity_rune, 16,
+    type: :string,
+    json_name: "vaultsLiquidityRune",
+    deprecated: false
+  )
+
   field(:effective_security_bond, 3,
     type: :string,
     json_name: "effectiveSecurityBond",
@@ -48,4 +60,5 @@ defmodule Thorchain.Types.QueryNetworkResponse do
 
   field(:rune_price_in_tor, 13, type: :string, json_name: "runePriceInTor", deprecated: false)
   field(:tor_price_in_rune, 14, type: :string, json_name: "torPriceInRune", deprecated: false)
+  field(:tor_price_halted, 17, type: :bool, json_name: "torPriceHalted", deprecated: false)
 end

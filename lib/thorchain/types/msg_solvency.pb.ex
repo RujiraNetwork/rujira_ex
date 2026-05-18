@@ -10,3 +10,12 @@ defmodule Thorchain.Types.MsgSolvency do
   field(:height, 5, type: :int64)
   field(:signer, 6, type: :bytes, deprecated: false)
 end
+
+defmodule Thorchain.Types.MsgSolvencyQuorum do
+  @moduledoc false
+
+  use Protobuf, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
+
+  field(:quoSolvency, 1, type: Thorchain.Common.QuorumSolvency)
+  field(:signer, 2, type: :bytes, deprecated: false)
+end

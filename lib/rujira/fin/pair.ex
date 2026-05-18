@@ -58,18 +58,16 @@ defmodule Rujira.Fin.Pair do
     attrs |> Map.delete("market_maker") |> Map.put("market_makers", [market_maker]) |> new()
   end
 
-  def new(
-        %{
-          "address" => address,
-          "market_makers" => market_makers,
-          "denoms" => denoms,
-          "oracles" => oracles,
-          "tick" => tick,
-          "fee_taker" => fee_taker,
-          "fee_maker" => fee_maker,
-          "fee_address" => fee_address
-        }
-      ) do
+  def new(%{
+        "address" => address,
+        "market_makers" => market_makers,
+        "denoms" => denoms,
+        "oracles" => oracles,
+        "tick" => tick,
+        "fee_taker" => fee_taker,
+        "fee_maker" => fee_maker,
+        "fee_address" => fee_address
+      }) do
     with {:ok, fee_taker} <- Math.to_decimal(fee_taker),
          {:ok, fee_maker} <- Math.to_decimal(fee_maker),
          {:ok, oracle_base} <- oracle_from_config(Enum.at(oracles || [], 0)),

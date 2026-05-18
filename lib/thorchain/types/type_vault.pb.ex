@@ -42,4 +42,5 @@ defmodule Thorchain.Types.Vault do
 
   field(:routers, 22, repeated: true, type: Thorchain.Types.ChainContract, deprecated: false)
   field(:frozen, 23, repeated: true, type: :string)
+  field(:pub_key_eddsa, 24, type: :string, json_name: "pubKeyEddsa", deprecated: false)
 end

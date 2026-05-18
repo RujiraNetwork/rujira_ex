@@ -32,6 +32,7 @@ defmodule Thorchain.Types.QueryVaultResponse do
   field(:routers, 12, repeated: true, type: Thorchain.Types.VaultRouter, deprecated: false)
   field(:addresses, 13, repeated: true, type: Thorchain.Types.VaultAddress, deprecated: false)
   field(:frozen, 14, repeated: true, type: :string)
+  field(:pub_key_eddsa, 15, type: :string, json_name: "pubKeyEddsa", deprecated: false)
 end
 
 defmodule Thorchain.Types.QueryAsgardVaultsRequest do
@@ -78,6 +79,8 @@ defmodule Thorchain.Types.VaultInfo do
 
   field(:pub_key, 1, type: :string, json_name: "pubKey", deprecated: false)
   field(:routers, 2, repeated: true, type: Thorchain.Types.VaultRouter, deprecated: false)
+  field(:pub_key_eddsa, 3, type: :string, json_name: "pubKeyEddsa", deprecated: false)
+  field(:membership, 4, repeated: true, type: :string)
 end
 
 defmodule Thorchain.Types.VaultRouter do
@@ -96,4 +99,29 @@ defmodule Thorchain.Types.VaultAddress do
 
   field(:chain, 1, type: :string, deprecated: false)
   field(:address, 2, type: :string, deprecated: false)
+end
+
+defmodule Thorchain.Types.QueryVaultSolvencyRequest do
+  @moduledoc false
+
+  use Protobuf, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
+
+  field(:height, 1, type: :string)
+end
+
+defmodule Thorchain.Types.VaultSolvencyAsset do
+  @moduledoc false
+
+  use Protobuf, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
+
+  field(:asset, 1, type: Thorchain.Common.Asset, deprecated: false)
+  field(:amount, 2, type: :string, deprecated: false)
+end
+
+defmodule Thorchain.Types.QueryVaultSolvencyResponse do
+  @moduledoc false
+
+  use Protobuf, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
+
+  field(:assets, 1, repeated: true, type: Thorchain.Types.VaultSolvencyAsset, deprecated: false)
 end

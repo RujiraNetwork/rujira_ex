@@ -17,4 +17,9 @@ defmodule Thorchain.Types.MsgManageTHORName do
 
   field(:owner, 7, type: :bytes, deprecated: false)
   field(:signer, 8, type: :bytes, deprecated: false)
+
+  field(:preferred_asset_outbound_fee_multiplier, 9,
+    type: :int64,
+    json_name: "preferredAssetOutboundFeeMultiplier"
+  )
 end

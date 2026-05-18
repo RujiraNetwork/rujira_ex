@@ -47,6 +47,8 @@ defmodule Thorchain.Types.NodeAccount do
   field(:ip_address, 13, type: :string, json_name: "ipAddress", deprecated: false)
   field(:version, 14, type: :string)
   field(:type, 15, type: Thorchain.Types.NodeType, enum: true)
+  field(:missing_blocks, 16, type: :uint64, json_name: "missingBlocks")
+  field(:maintenance, 17, type: :bool)
 end
 
 defmodule Thorchain.Types.BondProvider do

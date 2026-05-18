@@ -73,6 +73,9 @@ defmodule Thorchain.Types.QueryNodeResponse do
     json_name: "preflightStatus",
     deprecated: false
   )
+
+  field(:maintenance, 22, type: :bool, deprecated: false)
+  field(:missing_blocks, 23, type: :int64, json_name: "missingBlocks", deprecated: false)
 end
 
 defmodule Thorchain.Types.QueryNodesRequest do

@@ -3,8 +3,8 @@ defmodule Thorchain.Types.QueryContractInfoRequest do
 
   use Protobuf, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
 
-  field :height, 1, type: :string
-  field :address, 2, type: :string
+  field(:height, 1, type: :string)
+  field(:address, 2, type: :string)
 end
 
 defmodule Thorchain.Types.QueryContractInfoResponse do
@@ -12,7 +12,7 @@ defmodule Thorchain.Types.QueryContractInfoResponse do
 
   use Protobuf, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
 
-  field :info, 1, type: Thorchain.Types.ContractInfo
+  field(:info, 1, type: Thorchain.Types.ContractInfo)
 end
 
 defmodule Thorchain.Types.QueryContractInfosRequest do
@@ -20,9 +20,9 @@ defmodule Thorchain.Types.QueryContractInfosRequest do
 
   use Protobuf, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
 
-  field :height, 1, type: :string
-  field :contract, 2, type: :string
-  field :version, 3, type: :string
+  field(:height, 1, type: :string)
+  field(:contract, 2, type: :string)
+  field(:version, 3, type: :string)
 end
 
 defmodule Thorchain.Types.QueryContractInfosResponse do
@@ -30,5 +30,5 @@ defmodule Thorchain.Types.QueryContractInfosResponse do
 
   use Protobuf, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
 
-  field :infos, 1, repeated: true, type: Thorchain.Types.ContractInfo
+  field(:infos, 1, repeated: true, type: Thorchain.Types.ContractInfo)
 end

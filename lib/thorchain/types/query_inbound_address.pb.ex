@@ -23,6 +23,7 @@ defmodule Thorchain.Types.QueryInboundAddressResponse do
     deprecated: false
   )
 
+  field(:observed_fee_rate, 14, type: :string, json_name: "observedFeeRate")
   field(:gas_rate, 9, type: :string, json_name: "gasRate")
   field(:gas_rate_units, 10, type: :string, json_name: "gasRateUnits")
   field(:outbound_tx_size, 11, type: :string, json_name: "outboundTxSize")

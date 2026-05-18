@@ -23,6 +23,9 @@ defmodule Thorchain.Types.QueryUpgradeProposalResponse do
     json_name: "validatorsToQuorum",
     deprecated: false
   )
+
+  field(:approvers, 7, repeated: true, type: :string, deprecated: false)
+  field(:rejecters, 8, repeated: true, type: :string, deprecated: false)
 end
 
 defmodule Thorchain.Types.QueryUpgradeProposalsRequest do

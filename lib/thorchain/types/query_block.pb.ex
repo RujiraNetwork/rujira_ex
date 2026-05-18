@@ -28,6 +28,13 @@ defmodule Thorchain.Types.QueryBlockResponse do
     deprecated: false
   )
 
+  field(:finalize_block_events, 6,
+    repeated: true,
+    type: Thorchain.Types.BlockEvent,
+    json_name: "finalizeBlockEvents",
+    deprecated: false
+  )
+
   field(:txs, 5, repeated: true, type: Thorchain.Types.QueryBlockTx, deprecated: false)
 end
 

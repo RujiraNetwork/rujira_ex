@@ -6,4 +6,5 @@ defmodule Thorchain.Types.MsgDeposit do
   field(:coins, 1, repeated: true, type: Thorchain.Common.Coin, deprecated: false)
   field(:memo, 2, type: :string)
   field(:signer, 3, type: :bytes, deprecated: false)
+  field(:salt, 4, type: :bytes)
 end

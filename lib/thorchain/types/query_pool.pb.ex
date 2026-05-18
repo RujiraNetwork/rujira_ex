@@ -55,6 +55,21 @@ defmodule Thorchain.Types.QueryPoolResponse do
   )
 
   field(:derived_depth_bps, 23, type: :string, json_name: "derivedDepthBps", deprecated: false)
+  field(:trading_halted, 24, type: :bool, json_name: "tradingHalted", deprecated: false)
+  field(:volume_rune, 25, type: :string, json_name: "volumeRune", deprecated: false)
+  field(:volume_asset, 26, type: :string, json_name: "volumeAsset", deprecated: false)
+
+  field(:pol_reserve_rune_deposited, 27,
+    type: :string,
+    json_name: "polReserveRuneDeposited",
+    deprecated: false
+  )
+
+  field(:rolling_pool_liquidity_fee_rune, 28,
+    type: :string,
+    json_name: "rollingPoolLiquidityFeeRune",
+    deprecated: false
+  )
 end
 
 defmodule Thorchain.Types.QueryPoolsRequest do
