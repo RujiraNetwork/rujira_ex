@@ -122,7 +122,7 @@ defmodule Rujira.Contracts do
   end
 
   @spec by_code(integer()) ::
-          {:ok, list(String.t())} | {:error, GRPC.RPCError.t()}
+          {:ok, list(t())} | {:error, GRPC.RPCError.t()}
   defmemo by_code(code_id) do
     with {:ok, contracts} <- by_code_page(code_id) do
       {:ok, Enum.map(contracts, &%__MODULE__{id: &1, address: &1})}
@@ -167,7 +167,7 @@ defmodule Rujira.Contracts do
   end
 
   @spec by_codes(list(integer())) ::
-          {:ok, list(String.t())} | {:error, GRPC.RPCError.t()}
+          {:ok, list(t())} | {:error, GRPC.RPCError.t()}
   def by_codes(code_ids) do
     Enum.reduce(code_ids, {:ok, []}, fn
       el, {:ok, agg} ->
@@ -195,8 +195,6 @@ defmodule Rujira.Contracts do
         err
     end
   end
-
-  defmemo(get(_channel, loaded), do: {:ok, loaded})
 
   @spec list(module(), list(integer())) ::
           {:ok, list(struct())} | {:error, GRPC.RPCError.t()}

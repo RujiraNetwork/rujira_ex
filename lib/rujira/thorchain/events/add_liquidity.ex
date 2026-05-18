@@ -9,7 +9,7 @@ defmodule Rujira.Thorchain.Events.AddLiquidity do
           asset_address: String.t() | nil
         }
 
-  @spec new(map()) :: {:ok, t()}
+  @spec new(map()) :: {:ok, t()} | {:error, :malformed}
   def new(%{"pool" => pool} = attrs) do
     {:ok,
      %__MODULE__{
@@ -18,4 +18,6 @@ defmodule Rujira.Thorchain.Events.AddLiquidity do
        asset_address: Map.get(attrs, "asset_address")
      }}
   end
+
+  def new(_), do: {:error, :malformed}
 end

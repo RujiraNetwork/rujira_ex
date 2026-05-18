@@ -106,7 +106,7 @@ defmodule Rujira.Deployments do
 
   defp module_from(%{contract: name}) do
     case Map.get(protocol_modules(), name) do
-      nil -> {:error, "not found #{name}"}
+      nil -> {:error, :unknown_protocol}
       module -> {:ok, module}
     end
   end

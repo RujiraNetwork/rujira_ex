@@ -13,7 +13,7 @@ defmodule Rujira.Thorchain.Events.Swap do
           to: String.t() | nil
         }
 
-  @spec new(map()) :: {:ok, t()}
+  @spec new(map()) :: {:ok, t()} | {:error, :malformed}
   def new(%{"pool" => pool} = attrs) do
     {:ok,
      %__MODULE__{
@@ -26,4 +26,6 @@ defmodule Rujira.Thorchain.Events.Swap do
        to: Map.get(attrs, "to")
      }}
   end
+
+  def new(_), do: {:error, :malformed}
 end

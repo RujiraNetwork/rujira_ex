@@ -162,7 +162,7 @@ defmodule Rujira.Assets do
 
   # --- from_denom ---
 
-  @spec from_denom(String.t()) :: {:ok, Asset.t()} | {:error, String.t()}
+  @spec from_denom(String.t()) :: {:ok, Asset.t()} | {:error, :invalid_denom}
   def from_denom("x/ruji") do
     {:ok, %Asset{id: "THOR.RUJI", type: :native, chain: "THOR", symbol: "RUJI", ticker: "RUJI"}}
   end
@@ -251,7 +251,7 @@ defmodule Rujira.Assets do
          }}
 
       _ ->
-        {:error, "Invalid Denom #{denom}"}
+        {:error, :invalid_denom}
     end
   end
 

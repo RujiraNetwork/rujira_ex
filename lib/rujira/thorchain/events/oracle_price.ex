@@ -16,4 +16,6 @@ defmodule Rujira.Thorchain.Events.OraclePrice do
       {:ok, %__MODULE__{symbol: symbol, price: price}}
     end
   end
+
+  def new(_), do: {:error, :malformed}
 end
