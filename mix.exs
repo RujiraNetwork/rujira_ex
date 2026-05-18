@@ -1,15 +1,15 @@
-defmodule RujiraCore.MixProject do
+defmodule RujiraEx.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :rujira_core,
+      app: :rujira_ex,
       version: "0.1.0",
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      description: "Core domain library for Rujira protocol",
+      description: "Domain library for the Rujira protocol",
       package: package()
     ]
   end

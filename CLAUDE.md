@@ -1,4 +1,4 @@
-# Rujira Core
+# Rujira
 
 Follow the conventions and architecture documented in:
 - `guides/conventions.md` — coding style, naming, return values, numeric parsing

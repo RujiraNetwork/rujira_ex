@@ -1,17 +1,17 @@
-# Rujira Core
+# Rujira
 
-Core domain library for the [Rujira](https://rujira.com) DeFi protocol suite built on Cosmos/THORChain.
+Domain library for the [Rujira](https://rujira.com) DeFi protocol suite built on Cosmos/THORChain.
 
 Provides shared types, query APIs, and event parsing for blockchain protocol data across 20+ chains.
 
 ## Installation
 
-Add `rujira_core` to your list of dependencies in `mix.exs`:
+Add `rujira_ex` to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:rujira_core, "~> 0.1.0"}
+    {:rujira_ex, "~> 0.1.0"}
   ]
 end
 ```
@@ -32,7 +32,7 @@ end
 ## Configuration
 
 ```elixir
-config :rujira_core,
+config :rujira_ex,
   node: MyApp.Node,           # required — implement Rujira.Node behaviour
   prices: Rujira.Prices.Default,  # optional — defaults to oracle + FIN mid-price fallback
   cache_ttl: 15_000           # optional — memoization TTL in ms (default: 15s)

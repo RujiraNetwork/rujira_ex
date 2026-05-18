@@ -67,9 +67,9 @@ defmodule Rujira.Deployments do
 
   @spec contract_file_path(String.t()) :: String.t()
   defmemo contract_file_path(name) do
-    plan = Application.get_env(:rujira_core, __MODULE__)[:plan]
+    plan = Application.get_env(:rujira_ex, __MODULE__)[:plan]
 
-    :rujira_core
+    :rujira_ex
     |> :code.priv_dir()
     |> Path.join(@path)
     |> Path.join(plan)
@@ -78,10 +78,10 @@ defmodule Rujira.Deployments do
   end
 
   defmemo load_config!() do
-    plan = Application.get_env(:rujira_core, __MODULE__)[:plan]
+    plan = Application.get_env(:rujira_ex, __MODULE__)[:plan]
 
     deploy_dir =
-      :rujira_core
+      :rujira_ex
       |> :code.priv_dir()
       |> Path.join(@path)
       |> Path.join(plan)
@@ -215,7 +215,7 @@ defmodule Rujira.Deployments do
   def to_module("rujira-fin"), do: Rujira.Fin.Pair
 
   def to_module(protocol) do
-    Map.get(Application.get_env(:rujira_core, :protocol_modules, %{}), protocol)
+    Map.get(Application.get_env(:rujira_ex, :protocol_modules, %{}), protocol)
   end
 
   def parse_arg("targets:" <> id, %{targets: targets, codes: codes} = ctx) do

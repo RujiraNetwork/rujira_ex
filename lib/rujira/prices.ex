@@ -9,7 +9,7 @@ defmodule Rujira.Prices do
 
   Consumers can override via application env:
 
-      config :rujira_core, prices: MyApp.CustomPrices
+      config :rujira_ex, prices: MyApp.CustomPrices
 
   Defaults to `Rujira.Prices.Default`.
 
@@ -31,6 +31,6 @@ defmodule Rujira.Prices do
   end
 
   defp impl do
-    Application.get_env(:rujira_core, :prices, Rujira.Prices.Default)
+    Application.get_env(:rujira_ex, :prices, Rujira.Prices.Default)
   end
 end

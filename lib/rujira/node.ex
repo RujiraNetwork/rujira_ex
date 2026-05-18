@@ -4,7 +4,7 @@ defmodule Rujira.Node do
 
   Consumers configure the implementation via application env:
 
-      config :rujira_core, node: MyApp.NodeImpl
+      config :rujira_ex, node: MyApp.NodeImpl
 
   The implementation must export `query/3`.
   """
@@ -25,8 +25,8 @@ defmodule Rujira.Node do
   end
 
   defp impl do
-    Application.get_env(:rujira_core, :node) ||
-      raise "No :node implementation configured for :rujira_core. " <>
-              "Set `config :rujira_core, node: YourNodeModule`"
+    Application.get_env(:rujira_ex, :node) ||
+      raise "No :node implementation configured for :rujira_ex. " <>
+              "Set `config :rujira_ex, node: YourNodeModule`"
   end
 end

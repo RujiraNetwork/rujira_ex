@@ -2,7 +2,7 @@
 
 ## Overview
 
-Rujira Core is a domain library for querying and parsing blockchain protocol data. It provides:
+Rujira is a domain library for querying and parsing blockchain protocol data. It provides:
 
 - **Protocol modules** — query APIs for each DeFi protocol (FIN, Bow, etc.)
 - **Event parsing** — transforms raw chain events into typed structs

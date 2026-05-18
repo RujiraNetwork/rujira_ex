@@ -1,6 +1,6 @@
 import Config
 
-config :rujira_core,
+config :rujira_ex,
   prices: Rujira.Prices.Noop
 
 if Mix.env() == :test do

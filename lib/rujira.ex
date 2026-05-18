@@ -1,6 +1,6 @@
 defmodule Rujira do
   @moduledoc """
-  Core domain library for the Rujira protocol.
+  Domain library for the Rujira protocol.
 
   Provides shared types, query APIs, and event parsing for the Rujira
   DeFi suite built on Cosmos/THORChain.
@@ -20,7 +20,7 @@ defmodule Rujira do
 
   ## Configuration
 
-      config :rujira_core,
+      config :rujira_ex,
         node: MyApp.Node,
         prices: Rujira.Prices.Default,
         cache_ttl: 15_000
@@ -31,12 +31,12 @@ defmodule Rujira do
 
   Used by all `defmemo` calls with expiration. Configurable via:
 
-      config :rujira_core, cache_ttl: 15_000
+      config :rujira_ex, cache_ttl: 15_000
 
   Defaults to 15 seconds. Set to 0 to disable expiration.
   """
   @spec cache_ttl() :: non_neg_integer()
   def cache_ttl do
-    Application.get_env(:rujira_core, :cache_ttl, 15_000)
+    Application.get_env(:rujira_ex, :cache_ttl, 15_000)
   end
 end
