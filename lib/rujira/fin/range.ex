@@ -82,10 +82,10 @@ defmodule Rujira.Fin.Range do
          {:ok, asset_base} <- Assets.from_denom(token_base),
          {:ok, ask} <- Math.to_decimal(ask),
          {:ok, bid} <- Math.to_decimal(bid),
-         {:ok, base_amount} <- Math.to_decimal(base_amount),
-         {:ok, quote_amount} <- Math.to_decimal(quote_amount),
-         {:ok, fees_base} <- Math.to_decimal(fees_base),
-         {:ok, fees_quote} <- Math.to_decimal(fees_quote),
+         {:ok, base} <- Amount.new(base_amount),
+         {:ok, quote_} <- Amount.new(quote_amount),
+         {:ok, fees_base} <- Amount.new(fees_base),
+         {:ok, fees_quote} <- Amount.new(fees_quote),
          {:ok, price} <- Math.to_decimal(price),
          {:ok, high} <- Math.to_decimal(high),
          {:ok, low} <- Math.to_decimal(low),
@@ -93,11 +93,6 @@ defmodule Rujira.Fin.Range do
          {:ok, spread} <- Math.to_decimal(spread),
          {:ok, fee} <- Math.to_decimal(fee),
          {:ok, idx} <- Math.to_integer(idx) do
-      base_int = Math.floor(base_amount)
-      quote_int = Math.floor(quote_amount)
-      base_fees_int = Math.floor(fees_base)
-      quote_fees_int = Math.floor(fees_quote)
-
       {:ok,
        %__MODULE__{
          id: "#{address}/#{idx}",
@@ -109,16 +104,16 @@ defmodule Rujira.Fin.Range do
          skew: skew,
          spread: spread,
          fee: fee,
-         base: base_int,
-         quote: quote_int,
+         base: base,
+         quote: quote_,
          price: price,
          ask: ask,
          bid: bid,
-         fees_base: base_fees_int,
-         fees_quote: quote_fees_int,
+         fees_base: fees_base,
+         fees_quote: fees_quote,
          value_usd:
-           Prices.value_usd(asset_base.symbol, base_int + base_fees_int) +
-             Prices.value_usd(asset_quote.symbol, quote_int + quote_fees_int)
+           Prices.value_usd(asset_base.symbol, base + fees_base) +
+             Prices.value_usd(asset_quote.symbol, quote_ + fees_quote)
        }}
     end
   end
@@ -132,7 +127,6 @@ defmodule Rujira.Fin.Range do
   @spec list(Rujira.Fin.Pair.t(), String.t() | nil, keyword()) ::
           {:ok, [t()]} | {:error, term()}
   def list(pair, address \\ nil, opts \\ [])
-  def list(%{deployment_status: :preview}, _, _), do: {:ok, []}
 
   def list(pair, address, opts) do
     case query_list(pair.address, address, opts) do
@@ -163,9 +157,7 @@ defmodule Rujira.Fin.Range do
 
   def list_all(address, nil) do
     with {:ok, pairs} <- Rujira.Fin.Pair.list() do
-      pairs
-      |> Enum.filter(&(&1.deployment_status == :live))
-      |> collect(address)
+      collect(pairs, address)
     end
   end
 
@@ -199,9 +191,8 @@ defmodule Rujira.Fin.Range do
   def total_tvl do
     with {:ok, pairs} <- Rujira.Fin.Pair.list(),
          {:ok, tvls} <-
-           pairs
-           |> Enum.filter(&(&1.deployment_status == :live))
-           |> Rujira.Enum.reduce_async_while_ok(
+           Rujira.Enum.reduce_async_while_ok(
+             pairs,
              fn pair ->
                case tvl(pair) do
                  {:ok, _} = ok -> ok

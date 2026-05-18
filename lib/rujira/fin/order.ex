@@ -144,7 +144,6 @@ defmodule Rujira.Fin.Order do
   @spec list(Rujira.Fin.Pair.t(), String.t(), integer()) ::
           {:ok, [t()]} | {:error, term()}
   def list(pair, address, limit \\ 30)
-  def list(%{deployment_status: :preview}, _, _), do: {:ok, []}
 
   def list(pair, address, limit) do
     case query_list(pair.address, address, limit) do

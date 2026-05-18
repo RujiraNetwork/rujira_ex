@@ -14,6 +14,9 @@ defmodule Rujira.Amount do
       iex> Rujira.Amount.new("500")
       {:ok, 500}
 
+      iex> Rujira.Amount.new("1000.75")
+      {:ok, 1000}
+
       iex> Rujira.Amount.new(Decimal.new("1000"))
       {:ok, 1000}
 
@@ -49,8 +52,8 @@ defmodule Rujira.Amount do
   def new(value) when is_integer(value) and value >= 0, do: {:ok, value}
 
   def new(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {n, ""} when n >= 0 -> {:ok, n}
+    case Decimal.parse(value) do
+      {decimal, ""} -> new(decimal)
       _ -> {:error, :invalid_amount}
     end
   end

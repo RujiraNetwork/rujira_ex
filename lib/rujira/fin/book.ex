@@ -95,10 +95,6 @@ defmodule Rujira.Fin.Book do
   @spec load(Pair.t(), integer()) :: {:ok, Pair.t()} | {:error, term()}
   def load(pair, limit \\ 75)
 
-  def load(%{deployment_status: :preview} = pair, _limit) do
-    {:ok, %{pair | book: %__MODULE__{id: pair.address}}}
-  end
-
   def load(pair, limit) do
     with {:ok, res} <- query(pair.address, limit),
          {:ok, book} <- new(pair.address, res) do
