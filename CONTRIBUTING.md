@@ -15,7 +15,7 @@ mix deps.get
 mix compile
 ```
 
-Requires Elixir `~> 1.14` and Erlang/OTP 26+.
+Requires Elixir `~> 1.18` (built-in `JSON`) and Erlang/OTP 26+.
 
 ## Conventions
 
