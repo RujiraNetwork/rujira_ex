@@ -8,7 +8,7 @@ defmodule RujiraEx.MixProject do
     [
       app: :rujira_ex,
       version: @version,
-      elixir: "~> 1.14",
+      elixir: "~> 1.18",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -33,8 +33,7 @@ defmodule RujiraEx.MixProject do
       name: "rujira_ex",
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files:
-        ~w(lib config .formatter.exs mix.exs README.md LICENSE CONTRIBUTING.md guides)
+      files: ~w(lib config .formatter.exs mix.exs README.md LICENSE CONTRIBUTING.md guides)
     ]
   end
 
@@ -56,7 +55,6 @@ defmodule RujiraEx.MixProject do
       {:decimal, "~> 2.0"},
       {:grpc, "~> 0.9"},
       {:protobuf, "~> 0.12"},
-      {:json, "~> 1.4"},
       {:bech32, "~> 1.0"},
       {:memoize, "~> 1.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
