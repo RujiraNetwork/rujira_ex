@@ -129,6 +129,31 @@ defmodule Rujira.Fin.Pair do
     end
   end
 
+  @spec denom_for_symbol(String.t()) :: {:ok, String.t()} | {:error, :not_found}
+  defmemo denom_for_symbol(symbol) do
+    with {:ok, pairs} <- list() do
+      pairs |> Enum.map(& &1.token_base) |> pick_denom(symbol)
+    end
+  end
+
+  @doc false
+  @spec pick_denom([String.t()], String.t()) :: {:ok, String.t()} | {:error, :not_found}
+  def pick_denom(denoms, symbol) do
+    denoms
+    |> Enum.uniq()
+    |> Enum.flat_map(fn denom ->
+      case Assets.from_denom(denom) do
+        {:ok, %{ticker: ^symbol} = asset} -> [{denom, asset}]
+        _ -> []
+      end
+    end)
+    |> Enum.sort_by(fn {_, %{chain: chain}} -> chain != "ETH" end)
+    |> case do
+      [{denom, _} | _] -> {:ok, denom}
+      [] -> {:error, :not_found}
+    end
+  end
+
   @spec find_by_denoms(String.t(), String.t()) :: {:ok, t()} | {:error, term()}
   defmemo find_by_denoms(base_denom, quote_denom) do
     with {:ok, pairs} <- list(),

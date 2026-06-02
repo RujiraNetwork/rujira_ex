@@ -45,9 +45,8 @@ defmodule Rujira.Prices.Default do
   end
 
   defmemo fin_price(symbol), expires_in: Rujira.cache_ttl() do
-    denom = String.downcase(symbol)
-
-    with {:ok, pair} <- Rujira.Fin.get_stable_pair(denom),
+    with {:ok, denom} <- Rujira.Fin.denom_for_symbol(symbol),
+         {:ok, pair} <- Rujira.Fin.get_stable_pair(denom),
          {:ok, %{book: %{center: center}}} <- Rujira.Fin.load_pair(pair, 1),
          false <- Decimal.equal?(center, 0) do
       {:ok, center}

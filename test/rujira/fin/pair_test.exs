@@ -64,6 +64,37 @@ defmodule Rujira.Fin.PairTest do
     end
   end
 
+  describe "pick_denom/2" do
+    test "prefers ETH-chain denom when ticker appears on multiple chains" do
+      denoms = ["bsc-usdc-0xaaa", "eth-usdc-0xbbb", "avax-usdc-0xccc"]
+      assert {:ok, "eth-usdc-0xbbb"} = Pair.pick_denom(denoms, "USDC")
+    end
+
+    test "returns the single match when only one chain carries the ticker" do
+      assert {:ok, "eth-eth"} = Pair.pick_denom(["eth-eth", "btc-btc"], "ETH")
+    end
+
+    test "matches on ticker, not on the full symbol" do
+      assert {:ok, "eth-usdc-0xabc"} = Pair.pick_denom(["eth-usdc-0xabc"], "USDC")
+    end
+
+    test "returns :not_found when no denom matches" do
+      assert {:error, :not_found} = Pair.pick_denom(["eth-eth", "btc-btc"], "DOGE")
+    end
+
+    test "ignores denoms that fail to parse" do
+      assert {:ok, "eth-eth"} = Pair.pick_denom(["not-a-real-denom", "eth-eth"], "ETH")
+    end
+
+    test "deduplicates input denoms" do
+      assert {:ok, "eth-eth"} = Pair.pick_denom(["eth-eth", "eth-eth"], "ETH")
+    end
+
+    test "picks native x/ruji for RUJI when it is the only base denom" do
+      assert {:ok, "x/ruji"} = Pair.pick_denom(["x/ruji", "x/ruji"], "RUJI")
+    end
+  end
+
   describe "init_msg/1" do
     test "builds init message from config" do
       config = %{
