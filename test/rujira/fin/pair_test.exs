@@ -30,7 +30,6 @@ defmodule Rujira.Fin.PairTest do
       assert pair.fee_maker == Decimal.new("0.00075")
       assert pair.fee_address == "thor1fee"
       assert pair.book == :not_loaded
-      assert pair.summary == :not_loaded
     end
 
     test "normalizes single market_maker to list" do
@@ -92,28 +91,6 @@ defmodule Rujira.Fin.PairTest do
 
     test "picks native x/ruji for RUJI when it is the only base denom" do
       assert {:ok, "x/ruji"} = Pair.pick_denom(["x/ruji", "x/ruji"], "RUJI")
-    end
-  end
-
-  describe "init_msg/1" do
-    test "builds init message from config" do
-      config = %{
-        "denoms" => ["rune", "tcy"],
-        "fee_address" => "thor1fee"
-      }
-
-      result = Pair.init_msg(config)
-      assert result.denoms == ["rune", "tcy"]
-      assert result.fee_taker == "0.0015"
-      assert result.fee_maker == "0.00075"
-      assert result.fee_address == "thor1fee"
-      assert result.tick == 6
-    end
-  end
-
-  describe "init_label/2" do
-    test "generates label from denoms" do
-      assert Pair.init_label("id", %{"denoms" => ["rune", "tcy"]}) == "rujira-fin:rune:tcy"
     end
   end
 

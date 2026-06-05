@@ -15,6 +15,8 @@ defmodule Rujira.Fin.Pair do
 
   use Memoize
 
+  # --- Struct ---
+
   defstruct id: nil,
             address: nil,
             market_makers: [],
@@ -26,24 +28,21 @@ defmodule Rujira.Fin.Pair do
             fee_taker: Decimal.new(0),
             fee_maker: Decimal.new(0),
             fee_address: nil,
-            book: :not_loaded,
-            history: :not_loaded,
-            summary: :not_loaded
+            book: :not_loaded
 
   @type t :: %__MODULE__{
-          id: String.t(),
-          address: String.t(),
+          id: String.t() | nil,
+          address: String.t() | nil,
           market_makers: [String.t()],
-          token_base: String.t(),
-          token_quote: String.t(),
+          token_base: String.t() | nil,
+          token_quote: String.t() | nil,
           oracle_base: Oracle.t() | nil,
           oracle_quote: Oracle.t() | nil,
           tick: integer(),
           fee_taker: Decimal.t(),
           fee_maker: Decimal.t(),
-          fee_address: String.t(),
-          book: :not_loaded | Book.t(),
-          summary: :not_loaded | term()
+          fee_address: String.t() | nil,
+          book: :not_loaded | Book.t()
         }
 
   # --- Construction ---
@@ -85,8 +84,7 @@ defmodule Rujira.Fin.Pair do
          fee_taker: fee_taker,
          fee_maker: fee_maker,
          fee_address: fee_address,
-         book: :not_loaded,
-         summary: :not_loaded
+         book: :not_loaded
        }}
     end
   end
@@ -96,6 +94,11 @@ defmodule Rujira.Fin.Pair do
   @spec get(String.t()) :: {:ok, t()} | {:error, term()}
   def get(address), do: Contracts.get({__MODULE__, address})
 
+  @doc """
+  Memoized list of all configured FIN pairs.
+
+  Invalidate with `Memoize.invalidate(Rujira.Fin.Pair, :list)`.
+  """
   @spec list() :: {:ok, [t()]} | {:error, term()}
   defmemo list do
     targets = Deployments.list_targets(__MODULE__)
@@ -129,6 +132,11 @@ defmodule Rujira.Fin.Pair do
     end
   end
 
+  @doc """
+  Memoized lookup of the preferred base denom for a ticker.
+
+  Invalidate with `Memoize.invalidate(Rujira.Fin.Pair, :denom_for_ticker, [ticker])`.
+  """
   @spec denom_for_ticker(String.t()) :: {:ok, String.t()} | {:error, :not_found}
   defmemo denom_for_ticker(ticker) do
     with {:ok, pairs} <- list() do
@@ -154,6 +162,11 @@ defmodule Rujira.Fin.Pair do
     end
   end
 
+  @doc """
+  Memoized pair lookup by base + quote denom.
+
+  Invalidate with `Memoize.invalidate(Rujira.Fin.Pair, :find_by_denoms, [base, quote])`.
+  """
   @spec find_by_denoms(String.t(), String.t()) :: {:ok, t()} | {:error, term()}
   defmemo find_by_denoms(base_denom, quote_denom) do
     with {:ok, pairs} <- list(),
@@ -191,7 +204,7 @@ defmodule Rujira.Fin.Pair do
   def tvl(address) do
     case get(address) do
       {:ok, %__MODULE__{market_makers: mms} = pair} ->
-        mm_tvl = mms |> Enum.map(&mm_tvl_or_zero/1) |> Enum.sum()
+        mm_tvl = mms |> Enum.map(&mm_tvl/1) |> Enum.sum()
 
         case Rujira.Fin.Range.tvl(pair) do
           {:ok, r_tvl} -> {:ok, mm_tvl + r_tvl}
@@ -203,78 +216,21 @@ defmodule Rujira.Fin.Pair do
     end
   end
 
-  # --- Deployment protocol ---
-
-  @spec init_msg(map()) :: map()
-  def init_msg(
-        %{
-          "denoms" => [x, y],
-          "fee_address" => fee_address
-        } = config
-      ) do
-    market_makers = Map.get(config, "market_makers")
-    tick = Map.get(config, "tick", 6)
-
-    with {:ok, base} <- Assets.from_denom(x),
-         {:ok, quote_} <- Assets.from_denom(y) do
-      %{
-        denoms: [x, y],
-        oracles: [
-          %{chain: base.chain, symbol: base.symbol},
-          %{chain: quote_.chain, symbol: quote_.symbol}
-        ],
-        market_makers: market_makers,
-        tick: tick,
-        fee_taker: "0.0015",
-        fee_maker: "0.00075",
-        fee_address: fee_address
-      }
-    else
-      _ ->
-        %{
-          denoms: [x, y],
-          market_makers: market_makers,
-          tick: tick,
-          fee_taker: "0.0015",
-          fee_maker: "0.00075",
-          fee_address: fee_address
-        }
-    end
-  end
-
-  @spec migrate_msg(term(), term(), term()) :: map()
-  def migrate_msg(_from, _to, _), do: %{}
-
-  @spec init_label(term(), map()) :: String.t()
-  def init_label(_, %{"denoms" => [x, y]}), do: "rujira-fin:#{x}:#{y}"
-
   # --- Private ---
 
-  defp oracle_from_config(%{"chain" => chain, "symbol" => symbol}),
-    do: oracle_from_config(%{chain: chain, symbol: symbol})
-
-  defp oracle_from_config(%{chain: chain, symbol: symbol}) do
+  defp oracle_from_config(%{"chain" => chain, "symbol" => symbol}) do
     id = String.upcase(chain) <> "." <> symbol
     {:ok, %Oracle{id: id, symbol: id, asset: Assets.from_string(id)}}
   end
 
-  defp oracle_from_config(str) when is_binary(str) do
-    {:ok, %Oracle{id: String.upcase(str), symbol: String.upcase(str)}}
-  end
-
   defp oracle_from_config(nil), do: {:ok, nil}
 
-  defp mm_tvl_or_zero(mm) do
-    case get_mm_tvl(mm) do
-      {:ok, tvl} -> tvl
-      _ -> 0
-    end
-  end
-
-  defp get_mm_tvl(mm) do
+  defp mm_tvl(mm) do
     with {:ok, %Deployments.Target{module: module}} <- Deployments.from_address(mm),
          {:ok, pool} <- module.pool_from_id(mm) do
-      {:ok, module.tvl(pool)}
+      module.tvl(pool)
+    else
+      _ -> 0
     end
   end
 

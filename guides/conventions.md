@@ -117,7 +117,7 @@ defstruct [:id, :items, :total, :price, :book]
 
 ## Visibility
 
-Every public function on a resource module must be delegated from the facade (`defdelegate` in `Rujira.Protocol`), or be a deployment protocol callback (`init_msg`, `migrate_msg`, `init_label`), or be a `new` constructor. Everything else must be `defp`.
+Every public function on a resource module must be delegated from the facade (`defdelegate` in `Rujira.Protocol`) or be a `new` constructor. Everything else must be `defp`.
 
 ## Error Atoms
 
