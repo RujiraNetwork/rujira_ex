@@ -13,29 +13,33 @@ defmodule Rujira.Fin.Range do
 
   use Memoize
 
+  @max_limit 100
+
+  # --- Struct ---
+
   defstruct id: nil,
             idx: nil,
             pair: nil,
             owner: nil,
-            high: 0,
-            low: 0,
-            skew: 0,
-            spread: 0,
-            fee: 0,
+            high: Decimal.new(0),
+            low: Decimal.new(0),
+            skew: Decimal.new(0),
+            spread: Decimal.new(0),
+            fee: Decimal.new(0),
             base: 0,
             quote: 0,
-            price: 0,
-            ask: 0,
-            bid: 0,
+            price: Decimal.new(0),
+            ask: Decimal.new(0),
+            bid: Decimal.new(0),
             fees_base: 0,
             fees_quote: 0,
             value_usd: 0
 
   @type t :: %__MODULE__{
-          id: String.t(),
-          idx: integer(),
-          pair: String.t(),
-          owner: String.t(),
+          id: String.t() | nil,
+          idx: integer() | nil,
+          pair: String.t() | nil,
+          owner: String.t() | nil,
           high: Decimal.t(),
           low: Decimal.t(),
           skew: Decimal.t(),
@@ -111,9 +115,7 @@ defmodule Rujira.Fin.Range do
          bid: bid,
          fees_base: fees_base,
          fees_quote: fees_quote,
-         value_usd:
-           Prices.value_usd(asset_base.symbol, base + fees_base) +
-             Prices.value_usd(asset_quote.symbol, quote_ + fees_quote)
+         value_usd: value_usd(asset_base, asset_quote, base, quote_, fees_base, fees_quote)
        }}
     end
   end
@@ -124,17 +126,13 @@ defmodule Rujira.Fin.Range do
 
   # --- Queries ---
 
-  @spec list(Rujira.Fin.Pair.t(), String.t() | nil, keyword()) ::
+  @spec list(Rujira.Fin.Pair.t(), String.t() | nil, integer() | nil) ::
           {:ok, [t()]} | {:error, term()}
-  def list(pair, address \\ nil, opts \\ [])
-
-  def list(pair, address, opts) do
-    case query_list(pair.address, address, opts) do
-      {:ok, ranges} when is_list(ranges) ->
-        Rujira.Enum.reduce_while_ok(ranges, [], &new(pair, &1))
-
-      err ->
-        err
+  def list(pair, owner \\ nil, limit \\ nil) do
+    with {:ok, ranges} <- query_ranges(pair.address, owner) do
+      ranges
+      |> take(limit)
+      |> Rujira.Enum.reduce_while_ok(&new(pair, &1))
     end
   end
 
@@ -153,17 +151,9 @@ defmodule Rujira.Fin.Range do
   end
 
   @spec list_all(String.t() | nil, [String.t()] | nil) :: {:ok, [t()]} | {:error, term()}
-  def list_all(address \\ nil, contracts \\ nil)
-
-  def list_all(address, nil) do
-    with {:ok, pairs} <- Rujira.Fin.Pair.list() do
-      collect(pairs, address)
-    end
-  end
-
-  def list_all(address, contracts) when is_list(contracts) do
-    with {:ok, pairs} <- Rujira.Enum.reduce_while_ok(contracts, [], &Rujira.Fin.Pair.get/1) do
-      collect(pairs, address)
+  def list_all(owner \\ nil, contracts \\ nil) do
+    with {:ok, pairs} <- resolve_pairs(contracts) do
+      collect(pairs, owner)
     end
   end
 
@@ -174,16 +164,15 @@ defmodule Rujira.Fin.Range do
          {:ok, pair} <- Rujira.Fin.Pair.get(pair_address) do
       load(pair, idx)
     else
-      {:error, err} -> {:error, err}
+      {:error, _} = err -> err
       _ -> {:error, :invalid_id}
     end
   end
 
   @spec tvl(Rujira.Fin.Pair.t()) :: {:ok, non_neg_integer()} | {:error, term()}
   def tvl(pair) do
-    case list(pair) do
-      {:ok, ranges} -> {:ok, Enum.reduce(ranges, 0, fn r, acc -> acc + r.value_usd end)}
-      {:error, _} = err -> err
+    with {:ok, ranges} <- list(pair) do
+      {:ok, Enum.sum_by(ranges, & &1.value_usd)}
     end
   end
 
@@ -191,44 +180,68 @@ defmodule Rujira.Fin.Range do
   def total_tvl do
     with {:ok, pairs} <- Rujira.Fin.Pair.list(),
          {:ok, tvls} <-
-           Rujira.Enum.reduce_async_while_ok(
-             pairs,
-             fn pair ->
-               case tvl(pair) do
-                 {:ok, _} = ok -> ok
-                 {:error, _} -> {:ok, 0}
-               end
-             end,
-             timeout: 30_000
-           ) do
+           Rujira.Enum.reduce_async_while_ok(pairs, &tvl_or_zero/1, timeout: 30_000) do
       {:ok, Enum.sum(tvls)}
     end
   end
 
+  @doc """
+  Memoized full fetch of ranges on a contract, optionally filtered by `owner`.
+
+  Returns the flat list of raw range maps from the chain, paginated internally.
+  Invalidate with `Memoize.invalidate(Rujira.Fin.Range, :query_ranges, [contract, owner])`.
+  """
+  @spec query_ranges(String.t(), String.t() | nil) :: {:ok, [map()]} | {:error, term()}
+  defmemo query_ranges(contract, owner) do
+    query_ranges_page(contract, owner, nil)
+  end
+
+  @doc """
+  Memoized fetch of a single range by `idx` on a contract.
+
+  Invalidate with `Memoize.invalidate(Rujira.Fin.Range, :query, [address, idx])`.
+  """
+  @spec query(String.t(), integer()) :: {:ok, map()} | {:error, term()}
+  defmemo query(address, idx) do
+    Contracts.query_state_smart(address, %{range: Kernel.to_string(idx)})
+  end
+
   # --- Private ---
 
-  defp collect(pairs, address) do
+  defp resolve_pairs(nil), do: Rujira.Fin.Pair.list()
+
+  defp resolve_pairs(contracts) when is_list(contracts),
+    do: Rujira.Enum.reduce_while_ok(contracts, &Rujira.Fin.Pair.get/1)
+
+  defp collect(pairs, owner) do
     with {:ok, ranges} <-
-           Rujira.Enum.reduce_async_while_ok(pairs, &list(&1, address), timeout: 15_000) do
+           Rujira.Enum.reduce_async_while_ok(pairs, &list(&1, owner), timeout: 15_000) do
       {:ok, List.flatten(ranges)}
     end
   end
 
-  defmemo query_list(contract, address, opts, cursor \\ nil, limit \\ 30) do
-    Contracts.query_state_smart(
-      contract,
-      %{ranges: %{owner: address, cursor: cursor, limit: limit}},
-      opts
-    )
-    |> Contracts.paginate("ranges", limit, fn ranges ->
-      query_list(contract, address, opts, List.last(ranges)["idx"], limit)
-    end)
+  defp tvl_or_zero(pair) do
+    case tvl(pair) do
+      {:ok, _} = ok -> ok
+      {:error, _} -> {:ok, 0}
+    end
   end
 
-  defmemop query(address, idx) do
-    Contracts.query_state_smart(
-      address,
-      %{range: Kernel.to_string(idx)}
-    )
+  defp take(ranges, nil), do: ranges
+  defp take(ranges, n), do: Enum.take(ranges, n)
+
+  defp value_usd(asset_base, asset_quote, base, quote_, fees_base, fees_quote) do
+    Prices.value_usd(asset_base.symbol, base + fees_base) +
+      Prices.value_usd(asset_quote.symbol, quote_ + fees_quote)
+  end
+
+  defp query_ranges_page(contract, owner, cursor) do
+    contract
+    |> Contracts.query_state_smart_with_retry(%{
+      ranges: %{owner: owner, cursor: cursor, limit: @max_limit}
+    })
+    |> Contracts.paginate("ranges", @max_limit, fn ranges ->
+      query_ranges_page(contract, owner, List.last(ranges)["idx"])
+    end)
   end
 end

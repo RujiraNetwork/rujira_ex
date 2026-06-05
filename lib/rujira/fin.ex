@@ -39,7 +39,7 @@ defmodule Rujira.Fin do
 
   # --- Range ---
 
-  defdelegate list_ranges(pair, address \\ nil, opts \\ []), to: Range, as: :list
+  def list_ranges(pair, address \\ nil, _opts \\ []), do: Range.list(pair, address)
   defdelegate load_range(pair, idx), to: Range, as: :load
   defdelegate list_all_ranges(address \\ nil, contracts \\ nil), to: Range, as: :list_all
   defdelegate range_from_id(id), to: Range, as: :from_id
