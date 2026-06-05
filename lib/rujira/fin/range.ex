@@ -231,8 +231,8 @@ defmodule Rujira.Fin.Range do
   defp take(ranges, n), do: Enum.take(ranges, n)
 
   defp value_usd(asset_base, asset_quote, base, quote_, fees_base, fees_quote) do
-    Prices.value_usd(asset_base.symbol, base + fees_base) +
-      Prices.value_usd(asset_quote.symbol, quote_ + fees_quote)
+    Prices.value_usd(asset_base.ticker, base + fees_base) +
+      Prices.value_usd(asset_quote.ticker, quote_ + fees_quote)
   end
 
   defp query_ranges_page(contract, owner, cursor) do

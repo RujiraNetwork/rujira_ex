@@ -129,21 +129,21 @@ defmodule Rujira.Fin.Pair do
     end
   end
 
-  @spec denom_for_symbol(String.t()) :: {:ok, String.t()} | {:error, :not_found}
-  defmemo denom_for_symbol(symbol) do
+  @spec denom_for_ticker(String.t()) :: {:ok, String.t()} | {:error, :not_found}
+  defmemo denom_for_ticker(ticker) do
     with {:ok, pairs} <- list() do
-      pairs |> Enum.map(& &1.token_base) |> pick_denom(symbol)
+      pairs |> Enum.map(& &1.token_base) |> pick_denom(ticker)
     end
   end
 
   @doc false
   @spec pick_denom([String.t()], String.t()) :: {:ok, String.t()} | {:error, :not_found}
-  def pick_denom(denoms, symbol) do
+  def pick_denom(denoms, ticker) do
     denoms
     |> Enum.uniq()
     |> Enum.flat_map(fn denom ->
       case Assets.from_denom(denom) do
-        {:ok, %{ticker: ^symbol} = asset} -> [{denom, asset}]
+        {:ok, %{ticker: ^ticker} = asset} -> [{denom, asset}]
         _ -> []
       end
     end)

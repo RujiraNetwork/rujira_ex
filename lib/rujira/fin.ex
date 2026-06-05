@@ -16,7 +16,7 @@ defmodule Rujira.Fin do
   defdelegate get_pair(address), to: Pair, as: :get
   defdelegate list_pairs(), to: Pair, as: :list
   defdelegate get_stable_pair(denom), to: Pair, as: :find_stable
-  defdelegate denom_for_symbol(symbol), to: Pair
+  defdelegate denom_for_ticker(ticker), to: Pair
   defdelegate get_pair_from_denoms(base, quote_denom), to: Pair, as: :find_by_denoms
   defdelegate pair_from_id(id), to: Pair, as: :from_id
   defdelegate ticker_id!(pair), to: Pair

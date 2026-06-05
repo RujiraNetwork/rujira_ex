@@ -22,12 +22,18 @@ defmodule Rujira.Prices do
   @callback get(String.t()) :: {:ok, Decimal.t()} | {:error, term()}
   @callback value_usd(String.t(), integer(), integer()) :: integer()
 
+  @doc """
+  Fetches the USD price for an asset.
+
+  `ticker` must be the bare ticker from `Rujira.Assets.Asset.ticker` (e.g. `"USDC"`),
+  not the full symbol (e.g. `"USDC-0xAbc..."`).
+  """
   @spec get(String.t()) :: {:ok, Decimal.t()} | {:error, term()}
-  def get(symbol), do: impl().get(symbol)
+  def get(ticker), do: impl().get(ticker)
 
   @spec value_usd(String.t(), integer(), integer()) :: integer()
-  def value_usd(symbol, amount, decimals \\ 8) do
-    impl().value_usd(symbol, amount, decimals)
+  def value_usd(ticker, amount, decimals \\ 8) do
+    impl().value_usd(ticker, amount, decimals)
   end
 
   defp impl do

@@ -233,8 +233,8 @@ defmodule Rujira.Fin.Order do
   defp value(amount, rate, :quote), do: Math.div_floor(amount, rate)
 
   defp value_usd(:quote, base, quote_, remaining, filled),
-    do: Prices.value_usd(quote_.symbol, remaining) + Prices.value_usd(base.symbol, filled)
+    do: Prices.value_usd(quote_.ticker, remaining) + Prices.value_usd(base.ticker, filled)
 
   defp value_usd(:base, base, quote_, remaining, filled),
-    do: Prices.value_usd(base.symbol, remaining) + Prices.value_usd(quote_.symbol, filled)
+    do: Prices.value_usd(base.ticker, remaining) + Prices.value_usd(quote_.ticker, filled)
 end
