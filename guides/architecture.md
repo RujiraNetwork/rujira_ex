@@ -74,8 +74,8 @@ Cache lives on the resource module that defines `defmemo`. Invalidate the module
 ```elixir
 Memoize.invalidate(Rujira.Fin.Pair, :list, [])
 Memoize.invalidate(Rujira.Fin.Pair, :find_by_denoms, ["rune", "tcy"])
-Memoize.invalidate(Rujira.Fin.Book, :query, ["thor1pair", 100])
-Memoize.invalidate(Rujira.Fin.Order, :query_list, ["thor1pair", "thor1user", 30])
+Memoize.invalidate(Rujira.Fin.Book, :query, ["thor1pair"])
+Memoize.invalidate(Rujira.Fin.Order, :query_orders, ["thor1pair", "thor1user"])
 ```
 
 The facade uses `defdelegate` — it does not cache.

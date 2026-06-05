@@ -32,7 +32,7 @@ defmodule Rujira.Fin do
   # --- Order ---
 
   defdelegate list_orders(pair, address, limit \\ 30), to: Order, as: :list
-  defdelegate list_pair_orders(pair, opts), to: Order, as: :list_all
+  def list_pair_orders(pair, _opts \\ []), do: Order.list(pair)
   defdelegate load_order(pair, side, price, owner), to: Order, as: :load
   defdelegate list_all_orders(address), to: Order, as: :list_all_pairs
   defdelegate order_from_id(id), to: Order, as: :from_id

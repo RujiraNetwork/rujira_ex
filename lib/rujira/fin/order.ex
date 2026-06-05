@@ -13,11 +13,15 @@ defmodule Rujira.Fin.Order do
 
   use Memoize
 
+  @max_limit 100
+
+  # --- Struct ---
+
   defstruct id: nil,
             pair: nil,
             owner: nil,
             side: nil,
-            rate: 0,
+            rate: Decimal.new(0),
             updated_at: nil,
             offer: 0,
             offer_value: 0,
@@ -34,12 +38,12 @@ defmodule Rujira.Fin.Order do
   @type deviation :: nil | integer()
   @type type_order :: :fixed | :oracle
   @type t :: %__MODULE__{
-          id: String.t(),
-          pair: String.t(),
-          owner: String.t(),
-          side: side,
+          id: String.t() | nil,
+          pair: String.t() | nil,
+          owner: String.t() | nil,
+          side: side | nil,
           rate: Decimal.t(),
-          updated_at: DateTime.t(),
+          updated_at: DateTime.t() | nil,
           offer: Amount.t(),
           offer_value: Amount.t(),
           remaining: Amount.t(),
@@ -48,7 +52,7 @@ defmodule Rujira.Fin.Order do
           filled_value: Amount.t(),
           filled_fee: Amount.t(),
           value_usd: Amount.t(),
-          type: type_order,
+          type: type_order | nil,
           deviation: deviation
         }
 
@@ -85,11 +89,6 @@ defmodule Rujira.Fin.Order do
          {:ok, asset_base} <- Assets.from_denom(token_base) do
       side = String.to_existing_atom(side)
 
-      filled_fee = Math.mul_floor(filled, fee_taker)
-
-      remaining_value = value(remaining, rate, side)
-      filled_value = value(filled, Decimal.div(Decimal.new(1), rate), side)
-
       {:ok,
        %__MODULE__{
          id: "#{address}/#{side}/#{price_id}/#{owner}",
@@ -101,22 +100,13 @@ defmodule Rujira.Fin.Order do
          offer: offer,
          offer_value: value(offer, rate, side),
          remaining: remaining,
-         remaining_value: remaining_value,
+         remaining_value: value(remaining, rate, side),
          filled: filled,
-         filled_value: filled_value,
-         filled_fee: filled_fee,
+         filled_value: value(filled, Decimal.div(Decimal.new(1), rate), side),
+         filled_fee: Math.mul_floor(filled, fee_taker),
          type: type,
          deviation: deviation,
-         value_usd:
-           case side do
-             :quote ->
-               Prices.value_usd(asset_quote.symbol, remaining) +
-                 Prices.value_usd(asset_base.symbol, filled)
-
-             :base ->
-               Prices.value_usd(asset_base.symbol, remaining) +
-                 Prices.value_usd(asset_quote.symbol, filled)
-           end
+         value_usd: value_usd(side, asset_base, asset_quote, remaining, filled)
        }}
     end
   end
@@ -141,24 +131,13 @@ defmodule Rujira.Fin.Order do
 
   # --- Queries ---
 
-  @spec list(Rujira.Fin.Pair.t(), String.t(), integer()) ::
+  @spec list(Rujira.Fin.Pair.t(), String.t() | nil, integer() | nil) ::
           {:ok, [t()]} | {:error, term()}
-  def list(pair, address, limit \\ 30)
-
-  def list(pair, address, limit) do
-    case query_list(pair.address, address, limit) do
-      {:ok, %{"orders" => orders}} ->
-        Rujira.Enum.reduce_while_ok(orders, &new(pair, &1))
-
-      err ->
-        err
-    end
-  end
-
-  @spec list_all(Rujira.Fin.Pair.t(), keyword()) :: {:ok, [t()]} | {:error, term()}
-  def list_all(%{address: address} = pair, opts) do
-    with {:ok, raw_orders} <- query_all(address, opts) do
-      Rujira.Enum.reduce_while_ok(raw_orders, &new(pair, &1))
+  def list(pair, owner \\ nil, limit \\ nil) do
+    with {:ok, orders} <- query_orders(pair.address, owner) do
+      orders
+      |> take(limit)
+      |> Rujira.Enum.reduce_while_ok(&new(pair, &1))
     end
   end
 
@@ -192,7 +171,7 @@ defmodule Rujira.Fin.Order do
          {:ok, pair} <- Rujira.Fin.Pair.get(pair_address) do
       load(pair, side, price, owner)
     else
-      {:error, err} -> {:error, err}
+      {:error, _} = err -> err
       _ -> {:error, :invalid_id}
     end
   end
@@ -209,33 +188,53 @@ defmodule Rujira.Fin.Order do
     %{oracle: val}
   end
 
-  defmemop query(address, owner, side, price) do
+  @doc """
+  Memoized fetch of a single order by `(owner, side, price)` on a contract.
+
+  Invalidate with `Memoize.invalidate(Rujira.Fin.Order, :query, [address, owner, side, price])`.
+  """
+  @spec query(String.t(), String.t(), String.t(), String.t()) ::
+          {:ok, map()} | {:error, term()}
+  defmemo query(address, owner, side, price) do
     Contracts.query_state_smart(
       address,
       %{order: [owner, side, decode_price(price)]}
     )
   end
 
-  defmemo query_list(contract, address, limit \\ 30) do
-    Contracts.query_state_smart_with_retry(contract, %{
-      orders: %{owner: address, limit: limit}
-    })
+  @doc """
+  Memoized full fetch of orders on a contract, optionally filtered by `owner`.
+
+  Returns the flat list of raw order maps from the chain, paginated internally.
+  Invalidate with `Memoize.invalidate(Rujira.Fin.Order, :query_orders, [contract, owner])`.
+  """
+  @spec query_orders(String.t(), String.t() | nil) :: {:ok, [map()]} | {:error, term()}
+  defmemo query_orders(contract, owner) do
+    query_orders_page(contract, owner, nil)
   end
 
-  defp query_all(contract, opts, cursor \\ nil, limit \\ 30) do
-    Contracts.query_state_smart(
-      contract,
-      %{orders: %{owner: nil, start_after: to_cursor(cursor), limit: limit}},
-      opts
-    )
-    |> Contracts.paginate("orders", limit, fn orders ->
-      query_all(contract, opts, List.last(orders), limit)
+  defp query_orders_page(contract, owner, cursor) do
+    contract
+    |> Contracts.query_state_smart_with_retry(%{
+      orders: %{owner: owner, start_after: to_cursor(cursor), limit: @max_limit}
+    })
+    |> Contracts.paginate("orders", @max_limit, fn orders ->
+      query_orders_page(contract, owner, List.last(orders))
     end)
   end
 
   defp to_cursor(nil), do: nil
   defp to_cursor(%{"owner" => o, "side" => s, "price" => p}), do: [o, s, p]
 
+  defp take(orders, nil), do: orders
+  defp take(orders, n), do: Enum.take(orders, n)
+
   defp value(amount, rate, :base), do: Math.mul_floor(amount, rate)
   defp value(amount, rate, :quote), do: Math.div_floor(amount, rate)
+
+  defp value_usd(:quote, base, quote_, remaining, filled),
+    do: Prices.value_usd(quote_.symbol, remaining) + Prices.value_usd(base.symbol, filled)
+
+  defp value_usd(:base, base, quote_, remaining, filled),
+    do: Prices.value_usd(base.symbol, remaining) + Prices.value_usd(quote_.symbol, filled)
 end
