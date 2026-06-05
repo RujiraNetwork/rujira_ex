@@ -12,6 +12,8 @@ defmodule Rujira.Fin.Book do
 
   use Memoize
 
+  @max_limit 255
+
   defmodule Price do
     @moduledoc """
     Represents a price level in the order book with associated order details.
@@ -96,9 +98,9 @@ defmodule Rujira.Fin.Book do
   def load(pair, limit \\ 75)
 
   def load(pair, limit) do
-    with {:ok, res} <- query(pair.address, limit),
+    with {:ok, res} <- query(pair.address),
          {:ok, book} <- new(pair.address, res) do
-      {:ok, %{pair | book: book}}
+      {:ok, %{pair | book: take(book, limit)}}
     else
       {:error, err} ->
         Logger.error(__MODULE__, "load #{pair.address} #{inspect(err)}")
@@ -109,7 +111,7 @@ defmodule Rujira.Fin.Book do
   @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
   def from_id(id) do
     with {:ok, res} <- Pair.get(id),
-         {:ok, %{book: book}} <- load(res, 100) do
+         {:ok, %{book: book}} <- load(res, @max_limit) do
       {:ok, book}
     end
   end
@@ -161,7 +163,12 @@ defmodule Rujira.Fin.Book do
 
   # --- Private ---
 
-  defmemo query(contract, limit \\ 100) do
-    Contracts.query_state_smart_with_retry(contract, %{book: %{limit: limit}})
+  @spec take(t(), non_neg_integer()) :: t()
+  defp take(%__MODULE__{bids: bids, asks: asks} = book, limit) do
+    %{book | bids: Enum.take(bids, limit), asks: Enum.take(asks, limit)}
+  end
+
+  defmemo query(contract) do
+    Contracts.query_state_smart_with_retry(contract, %{book: %{limit: @max_limit}})
   end
 end
