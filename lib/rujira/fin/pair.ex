@@ -220,11 +220,12 @@ defmodule Rujira.Fin.Pair do
 
   defp oracle_from_config(%{"chain" => chain, "symbol" => symbol}) do
     id = String.upcase(chain) <> "." <> symbol
-    {:ok, %Oracle{id: id, symbol: id, asset: Assets.from_string(id)}}
+    asset = Assets.from_string(id)
+    {:ok, %Oracle{id: id, ticker: asset.ticker, asset: asset}}
   end
 
-  defp oracle_from_config(symbol) when is_binary(symbol) do
-    {:ok, %Oracle{id: symbol, symbol: symbol, asset: nil}}
+  defp oracle_from_config(ticker) when is_binary(ticker) do
+    {:ok, %Oracle{id: ticker, ticker: ticker, asset: nil}}
   end
 
   defp oracle_from_config(nil), do: {:ok, nil}

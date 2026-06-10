@@ -46,8 +46,8 @@ defmodule Rujira.Fin.PairTest do
       }
 
       assert {:ok, %Pair{oracle_base: base, oracle_quote: quote}} = Pair.new(config)
-      assert base == %Oracle{id: "RUNE", symbol: "RUNE", asset: nil}
-      assert %Oracle{id: "ETH.USDC", symbol: "ETH.USDC", asset: %{}} = quote
+      assert base == %Oracle{id: "RUNE", ticker: "RUNE", asset: nil}
+      assert %Oracle{id: "ETH.USDC", ticker: "USDC", asset: %{}} = quote
     end
 
     test "normalizes single market_maker to list" do
@@ -130,7 +130,26 @@ defmodule Rujira.Fin.PairTest do
 
       assert {:ok, %Pair{oracle_base: base, oracle_quote: quote_}} = Pair.new(config)
       assert base.id == "GAIA.ATOM"
+      assert base.ticker == "ATOM"
       assert quote_.id == "ETH.USDC"
+      assert quote_.ticker == "USDC"
+    end
+
+    test "derives ticker from asset, stripping contract suffix" do
+      config = %{
+        "address" => "thor1pair",
+        "market_makers" => [],
+        "denoms" => ["gaia-atom", "eth-usdc-0xabc"],
+        "oracles" => [%{"chain" => "ETH", "symbol" => "USDC-0xabc"}],
+        "tick" => 6,
+        "fee_taker" => "0.0015",
+        "fee_maker" => "0.00075",
+        "fee_address" => "thor1fee"
+      }
+
+      assert {:ok, %Pair{oracle_base: base}} = Pair.new(config)
+      assert base.id == "ETH.USDC-0xabc"
+      assert base.ticker == "USDC"
     end
 
     test "handles nil oracles" do
