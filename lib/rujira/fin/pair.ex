@@ -223,7 +223,12 @@ defmodule Rujira.Fin.Pair do
     {:ok, %Oracle{id: id, symbol: id, asset: Assets.from_string(id)}}
   end
 
+  defp oracle_from_config(symbol) when is_binary(symbol) do
+    {:ok, %Oracle{id: symbol, symbol: symbol, asset: nil}}
+  end
+
   defp oracle_from_config(nil), do: {:ok, nil}
+  defp oracle_from_config(_), do: {:ok, nil}
 
   defp mm_tvl(mm) do
     with {:ok, %Deployments.Target{module: module}} <- Deployments.from_address(mm),

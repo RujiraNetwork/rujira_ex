@@ -2,6 +2,7 @@ defmodule Rujira.Fin.PairTest do
   use ExUnit.Case, async: true
 
   alias Rujira.Fin.Pair
+  alias Rujira.Thorchain.Oracle
 
   describe "new/1 from map" do
     test "parses pair config with market_makers list" do
@@ -30,6 +31,23 @@ defmodule Rujira.Fin.PairTest do
       assert pair.fee_maker == Decimal.new("0.00075")
       assert pair.fee_address == "thor1fee"
       assert pair.book == :not_loaded
+    end
+
+    test "parses enshrined oracle from bare symbol string" do
+      config = %{
+        "address" => "thor1pair",
+        "market_makers" => [],
+        "denoms" => ["rune", "eth-usdc-0xabc"],
+        "oracles" => ["RUNE", %{"chain" => "ETH", "symbol" => "USDC"}],
+        "tick" => 6,
+        "fee_taker" => "0.0015",
+        "fee_maker" => "0.00075",
+        "fee_address" => "thor1fee"
+      }
+
+      assert {:ok, %Pair{oracle_base: base, oracle_quote: quote}} = Pair.new(config)
+      assert base == %Oracle{id: "RUNE", symbol: "RUNE", asset: nil}
+      assert %Oracle{id: "ETH.USDC", symbol: "ETH.USDC", asset: %{}} = quote
     end
 
     test "normalizes single market_maker to list" do
