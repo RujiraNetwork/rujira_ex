@@ -1,19 +1,24 @@
 defmodule Rujira.Fin.Events.RangeDeposit do
   @moduledoc "A range deposit event (`wasm-rujira-fin/range.deposit`)."
 
+  alias Rujira.Amount
   alias Rujira.Math
 
-  defstruct idx: 0, owner: nil
+  defstruct idx: 0, owner: nil, base: 0, quote: 0
 
   @type t :: %__MODULE__{
           idx: non_neg_integer(),
-          owner: String.t()
+          owner: String.t(),
+          base: Amount.t(),
+          quote: Amount.t()
         }
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
-  def new(%{"idx" => idx, "owner" => owner}) do
-    with {:ok, idx} <- Math.to_integer(idx) do
-      {:ok, %__MODULE__{idx: idx, owner: owner}}
+  def new(%{"idx" => idx, "owner" => owner, "base" => base, "quote" => quote}) do
+    with {:ok, idx} <- Math.to_integer(idx),
+         {:ok, base} <- Amount.new(base),
+         {:ok, quote} <- Amount.new(quote) do
+      {:ok, %__MODULE__{idx: idx, owner: owner, base: base, quote: quote}}
     end
   end
 

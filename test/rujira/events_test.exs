@@ -16,7 +16,14 @@ defmodule Rujira.EventsTest do
     test "routes wasm-rujira-fin/* to Fin envelope" do
       event = %{
         type: "wasm-rujira-fin/trade",
-        attributes: %{"_contract_address" => "thor1abc", "side" => "Base", "price" => "100"}
+        attributes: %{
+          "_contract_address" => "thor1abc",
+          "side" => "Base",
+          "price" => "fixed:100",
+          "rate" => "100",
+          "offer" => "1",
+          "bid" => "100"
+        }
       }
 
       assert {:ok, %FinEvent{address: "thor1abc", data: %Trade{side: :base}}} =
@@ -26,7 +33,18 @@ defmodule Rujira.EventsTest do
     test "routes range events to Fin envelope" do
       event = %{
         type: "wasm-rujira-fin/range.create",
-        attributes: %{"_contract_address" => "thor1abc", "idx" => "1", "owner" => "thor1x"}
+        attributes: %{
+          "_contract_address" => "thor1abc",
+          "idx" => "1",
+          "owner" => "thor1x",
+          "high" => "2.0",
+          "low" => "1.0",
+          "skew" => "0",
+          "spread" => "0.01",
+          "fee" => "0.003",
+          "base" => "1000",
+          "quote" => "2000"
+        }
       }
 
       assert {:ok, %FinEvent{address: "thor1abc", data: %RangeCreate{idx: 1}}} =
@@ -36,7 +54,14 @@ defmodule Rujira.EventsTest do
     test "matches all FIN events at protocol level" do
       event = %{
         type: "wasm-rujira-fin/trade",
-        attributes: %{"_contract_address" => "thor1abc", "side" => "Base", "price" => "100"}
+        attributes: %{
+          "_contract_address" => "thor1abc",
+          "side" => "Base",
+          "price" => "fixed:100",
+          "rate" => "100",
+          "offer" => "1",
+          "bid" => "100"
+        }
       }
 
       assert {:ok, %FinEvent{}} = Events.parse(event)

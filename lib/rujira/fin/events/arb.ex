@@ -1,5 +1,5 @@
-defmodule Rujira.Fin.Events.RangeFee do
-  @moduledoc "A range fee accrual event (`wasm-rujira-fin/range.fee`)."
+defmodule Rujira.Fin.Events.Arb do
+  @moduledoc "An arbitrage capture event (`wasm-rujira-fin/arb`)."
 
   alias Rujira.Amount
 
