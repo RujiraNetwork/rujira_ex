@@ -74,16 +74,42 @@ defmodule Rujira.Fin.EventsTest do
                  "rate" => "0.95",
                  "offer" => "1052",
                  "bid" => "1000",
-                 "ranges" => "0:100:50:10:9::1,1:200:75:20:18:2:"
+                 "ranges" => "0:10-20:100:50:10:9::1,1:30-40:200:75:20:18:2:"
                })
 
       assert %Price.Ccl{rate: rate} = data.price
       assert Decimal.equal?(rate, Decimal.new("0.95"))
       assert [base_fill, quote_fill] = data.ranges
       assert %TradeRange{idx: 0, side: :base} = base_fill
+      assert Decimal.equal?(base_fill.low, Decimal.new("10"))
+      assert Decimal.equal?(base_fill.high, Decimal.new("20"))
       assert Decimal.equal?(base_fill.fee, Decimal.new("1"))
       assert %TradeRange{idx: 1, side: :quote} = quote_fill
       assert Decimal.equal?(quote_fill.fee, Decimal.new("2"))
+    end
+
+    test "parses a real high-precision range entry" do
+      ranges =
+        "1:48-130:3745471358.610017999149322488:432374745.239347707518992478:2079070:99974982.0045::0"
+
+      assert {:ok, %FinEvent{data: %{ranges: [range]}}} =
+               parse("wasm-rujira-fin/trade", %{
+                 "side" => "Base",
+                 "price" => "ccl:0.115",
+                 "rate" => "0.115",
+                 "offer" => "2079070",
+                 "bid" => "99974982",
+                 "ranges" => ranges
+               })
+
+      assert %TradeRange{idx: 1, side: :base} = range
+      assert Decimal.equal?(range.low, Decimal.new("48"))
+      assert Decimal.equal?(range.high, Decimal.new("130"))
+      assert Decimal.equal?(range.base, Decimal.new("3745471358.610017999149322488"))
+      assert Decimal.equal?(range.quote, Decimal.new("432374745.239347707518992478"))
+      assert Decimal.equal?(range.deduct, Decimal.new("2079070"))
+      assert Decimal.equal?(range.add, Decimal.new("99974982.0045"))
+      assert Decimal.equal?(range.fee, Decimal.new("0"))
     end
   end
 

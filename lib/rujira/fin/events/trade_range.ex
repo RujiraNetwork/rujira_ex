@@ -3,19 +3,22 @@ defmodule Rujira.Fin.Events.TradeRange do
   A single range touched by a concentrated-liquidity trade.
 
   The contract joins one entry per range into the trade event's `ranges`
-  attribute with commas. Each entry is colon-separated and the fee occupies a
-  different slot depending on the fill side:
+  attribute with commas. Each entry is colon-separated. The leading segment is
+  the range id, which itself embeds the price bounds as `idx:low-high`, so a
+  full entry has the shape:
 
-    * base-side fill:  `idx:base:quote:deduct:add::fee`  (6th slot empty)
-    * quote-side fill: `idx:base:quote:deduct:add:fee:`  (7th slot empty)
+    * base-side fill:  `idx:low-high:base:quote:deduct:add::fee`  (7th slot empty)
+    * quote-side fill: `idx:low-high:base:quote:deduct:add:fee:`  (8th slot empty)
 
-  All amounts are the range's internal full-precision `Decimal` values, not
-  8-decimal token integers.
+  All amounts and bounds are the range's internal full-precision `Decimal`
+  values, not 8-decimal token integers.
   """
 
   alias Rujira.Math
 
   defstruct idx: 0,
+            low: Decimal.new(0),
+            high: Decimal.new(0),
             side: :base,
             base: Decimal.new(0),
             quote: Decimal.new(0),
@@ -25,6 +28,8 @@ defmodule Rujira.Fin.Events.TradeRange do
 
   @type t :: %__MODULE__{
           idx: non_neg_integer(),
+          low: Decimal.t(),
+          high: Decimal.t(),
           side: :base | :quote,
           base: Decimal.t(),
           quote: Decimal.t(),
@@ -55,9 +60,12 @@ defmodule Rujira.Fin.Events.TradeRange do
 
   @spec parse(String.t()) :: {:ok, t()} | {:error, term()}
   def parse(entry) when is_binary(entry) do
-    with [idx, base, quote, deduct, add, f6, f7] <- String.split(entry, ":"),
-         {:ok, {side, fee}} <- fee_slot(f6, f7),
+    with [idx, bounds, base, quote, deduct, add, f7, f8] <- String.split(entry, ":"),
+         [low, high] <- String.split(bounds, "-"),
+         {:ok, {side, fee}} <- fee_slot(f7, f8),
          {:ok, idx} <- Math.to_integer(idx),
+         {:ok, low} <- Math.to_decimal(low),
+         {:ok, high} <- Math.to_decimal(high),
          {:ok, base} <- Math.to_decimal(base),
          {:ok, quote} <- Math.to_decimal(quote),
          {:ok, deduct} <- Math.to_decimal(deduct),
@@ -66,6 +74,8 @@ defmodule Rujira.Fin.Events.TradeRange do
       {:ok,
        %__MODULE__{
          idx: idx,
+         low: low,
+         high: high,
          side: side,
          base: base,
          quote: quote,
