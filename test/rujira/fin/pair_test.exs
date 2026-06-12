@@ -112,6 +112,36 @@ defmodule Rujira.Fin.PairTest do
     end
   end
 
+  describe "pick_default/2" do
+    @pairs [
+      %Pair{address: "p_btc_rune", token_base: "btc-btc", token_quote: "thor.rune"},
+      %Pair{address: "p_btc_usdc", token_base: "btc-btc", token_quote: "eth-usdc-0xabc"},
+      %Pair{address: "p_eth_rune", token_base: "eth-eth", token_quote: "thor.rune"}
+    ]
+
+    test "prefers the stable (usdc/usdt) pair when one exists" do
+      assert {:ok, %Pair{address: "p_btc_usdc"}} = Pair.pick_default(@pairs, "btc-btc")
+    end
+
+    test "falls back to the first pair quoting the base when no stable exists" do
+      assert {:ok, %Pair{address: "p_eth_rune"}} = Pair.pick_default(@pairs, "eth-eth")
+    end
+
+    test "does not treat a usdc quote for a different base as a match" do
+      pairs = [%Pair{address: "p_eth_usdc", token_base: "eth-eth", token_quote: "eth-usdc-0xabc"}]
+      assert {:error, :not_found} = Pair.pick_default(pairs, "btc-btc")
+    end
+
+    test "returns :not_found when no pair quotes the base" do
+      assert {:error, :not_found} = Pair.pick_default(@pairs, "doge-doge")
+    end
+
+    test "tolerates a nil token_quote" do
+      pairs = [%Pair{address: "p_nil_quote", token_base: "btc-btc", token_quote: nil}]
+      assert {:ok, %Pair{address: "p_nil_quote"}} = Pair.pick_default(pairs, "btc-btc")
+    end
+  end
+
   describe "new/1 oracle parsing" do
     test "parses oracles from config maps" do
       config = %{

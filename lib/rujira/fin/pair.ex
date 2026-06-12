@@ -118,19 +118,43 @@ defmodule Rujira.Fin.Pair do
   @spec find_stable(String.t()) :: {:ok, t()} | {:error, term()}
   def find_stable(base_denom) do
     with {:ok, pairs} <- list(),
-         %__MODULE__{} = pair <-
-           Enum.find(
-             pairs,
-             &(&1.token_base == base_denom &&
-                 (String.contains?(&1.token_quote, "usdc") ||
-                    String.contains?(&1.token_quote, "usdt")))
-           ) do
+         %__MODULE__{} = pair <- Enum.find(pairs, &stable_pair?(&1, base_denom)) do
       {:ok, pair}
     else
       nil -> {:error, :not_found}
       err -> err
     end
   end
+
+  @doc """
+  Finds the default pair for a base denom: prefers a stable (usdc/usdt) quote,
+  otherwise falls back to the first pair quoting that base.
+  """
+  @spec find_default(String.t()) :: {:ok, t()} | {:error, term()}
+  def find_default(base_denom) do
+    with {:ok, pairs} <- list() do
+      pick_default(pairs, base_denom)
+    end
+  end
+
+  @doc false
+  @spec pick_default([t()], String.t()) :: {:ok, t()} | {:error, :not_found}
+  def pick_default(pairs, base_denom) do
+    stable = Enum.find(pairs, &stable_pair?(&1, base_denom))
+    first = Enum.find(pairs, &(&1.token_base == base_denom))
+
+    case stable || first do
+      %__MODULE__{} = pair -> {:ok, pair}
+      nil -> {:error, :not_found}
+    end
+  end
+
+  defp stable_pair?(%__MODULE__{token_base: base_denom, token_quote: quote}, base_denom)
+       when is_binary(quote) do
+    String.contains?(quote, "usdc") or String.contains?(quote, "usdt")
+  end
+
+  defp stable_pair?(_, _), do: false
 
   @doc """
   Memoized lookup of the preferred base denom for a ticker.

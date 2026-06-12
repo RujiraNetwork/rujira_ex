@@ -55,7 +55,8 @@ defmodule Rujira.Prices.Default do
   end
 
   @doc """
-  Memoized FIN-derived price: mid-price of the asset's stable pair, multiplied
+  Memoized FIN-derived price: mid-price of the asset's default pair (a stable
+  pair when one exists, otherwise the first pair quoting that asset), multiplied
   by the quote asset's USD price.
 
   Invalidate with `Memoize.invalidate(Rujira.Prices.Default, :fin_price, [ticker])`.
@@ -63,7 +64,7 @@ defmodule Rujira.Prices.Default do
   @spec fin_price(String.t()) :: {:ok, Decimal.t()} | {:error, :no_price}
   defmemo fin_price(ticker), expires_in: Rujira.cache_ttl() do
     with {:ok, denom} <- Rujira.Fin.denom_for_ticker(ticker),
-         {:ok, pair} <- Rujira.Fin.get_stable_pair(denom),
+         {:ok, pair} <- Rujira.Fin.get_default_pair(denom),
          {:ok, %{book: %{center: center}}} <- Rujira.Fin.load_pair(pair, 1),
          false <- Decimal.equal?(center, 0),
          {:ok, quote_asset} <- Assets.from_denom(pair.token_quote),
