@@ -5,6 +5,7 @@ defmodule Rujira.Thorchain.EventsTest do
   alias Rujira.Events.Event
   alias Rujira.Thorchain.Events
   alias Rujira.Thorchain.Events.Event, as: TcEvent
+  alias Rujira.Thorchain.Events.PoolReward
 
   defp event(type, attrs), do: Event.new(type, attrs)
 
@@ -208,6 +209,74 @@ defmodule Rujira.Thorchain.EventsTest do
                  "to" => "thor1to",
                  "memo" => "REBOND:thor1node",
                  "coin" => "100 THOR.RUNE"
+               })
+             )
+  end
+
+  test "parses rewards with signed pool rewards, ignoring non-asset keys" do
+    assert {:ok, %TcEvent{data: data}} =
+             Events.parse(
+               event("rewards", %{
+                 "bond_reward" => "1000",
+                 "dev_fund_reward" => "10",
+                 "income_burn" => "5",
+                 "tcy_stake_reward" => "20",
+                 "marketing_fund_reward" => "30",
+                 "pol_reserve_reward" => "40",
+                 "BTC.BTC" => "12345",
+                 "ETH.ETH" => "-500",
+                 "mode" => "BeginBlock"
+               })
+             )
+
+    assert %Events.Rewards{bond_reward: 1000, dev_fund_reward: 10, income_burn: 5} = data
+
+    assert [
+             %PoolReward{amount: 12_345} = btc,
+             %PoolReward{amount: -500} = eth
+           ] = data.pool_rewards
+
+    assert btc.asset.id == "BTC.BTC"
+    assert eth.asset.id == "ETH.ETH"
+  end
+
+  test "parses rewards with no pool rewards" do
+    assert {:ok, %TcEvent{data: %Events.Rewards{pool_rewards: []}}} =
+             Events.parse(
+               event("rewards", %{
+                 "bond_reward" => "1000",
+                 "dev_fund_reward" => "10",
+                 "income_burn" => "5",
+                 "tcy_stake_reward" => "20",
+                 "marketing_fund_reward" => "30",
+                 "pol_reserve_reward" => "40"
+               })
+             )
+  end
+
+  test "parses affiliate_fee" do
+    assert {:ok,
+            %TcEvent{
+              data: %Events.AffiliateFee{
+                tx_id: "TX1",
+                thorname: "t",
+                rune_address: "thor1r",
+                asset: "BTC.BTC",
+                gross_amount: 1000,
+                fee_bps: 50,
+                fee_amount: 5
+              }
+            }} =
+             Events.parse(
+               event("affiliate_fee", %{
+                 "tx_id" => "TX1",
+                 "memo" => "=:BTC.BTC",
+                 "thorname" => "t",
+                 "rune_address" => "thor1r",
+                 "asset" => "BTC.BTC",
+                 "gross_amount" => "1000",
+                 "fee_bps" => "50",
+                 "fee_amount" => "5"
                })
              )
   end
