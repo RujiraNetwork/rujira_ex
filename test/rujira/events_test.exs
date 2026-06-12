@@ -5,9 +5,11 @@ defmodule Rujira.EventsTest do
   alias Rujira.Fin.Events.Event, as: FinEvent
   alias Rujira.Fin.Events.RangeCreate
   alias Rujira.Fin.Events.Trade
+  alias Rujira.Thorchain.Events.AffiliateFee
   alias Rujira.Thorchain.Events.Bond
   alias Rujira.Thorchain.Events.Event, as: TcEvent
   alias Rujira.Thorchain.Events.OraclePrice
+  alias Rujira.Thorchain.Events.Rewards
   alias Rujira.Thorchain.Events.SetMimir
   alias Rujira.Thorchain.Events.Swap
   alias Rujira.Thorchain.Events.Transfer
@@ -128,6 +130,38 @@ defmodule Rujira.EventsTest do
                    "to" => "thor1to",
                    "memo" => "BOND:thor1node",
                    "coin" => "100 THOR.RUNE"
+                 }
+               })
+    end
+
+    test "routes rewards" do
+      assert {:ok, %TcEvent{data: %Rewards{bond_reward: 1000}}} =
+               Events.parse(%{
+                 type: "rewards",
+                 attributes: %{
+                   "bond_reward" => "1000",
+                   "dev_fund_reward" => "10",
+                   "income_burn" => "5",
+                   "tcy_stake_reward" => "20",
+                   "marketing_fund_reward" => "30",
+                   "pol_reserve_reward" => "40"
+                 }
+               })
+    end
+
+    test "routes affiliate_fee" do
+      assert {:ok, %TcEvent{data: %AffiliateFee{thorname: "t"}}} =
+               Events.parse(%{
+                 type: "affiliate_fee",
+                 attributes: %{
+                   "tx_id" => "TX1",
+                   "memo" => "=:BTC.BTC",
+                   "thorname" => "t",
+                   "rune_address" => "thor1r",
+                   "asset" => "BTC.BTC",
+                   "gross_amount" => "1000",
+                   "fee_bps" => "50",
+                   "fee_amount" => "5"
                  }
                })
     end

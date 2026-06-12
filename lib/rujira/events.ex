@@ -74,7 +74,7 @@ defmodule Rujira.Events do
     do: Rujira.Fin.Events.parse(event)
 
   defp route(%Event{type: type} = event)
-       when type in ~w(swap transfer add_liquidity withdraw pending_liquidity oracle_price bond rebond set_mimir),
+       when type in ~w(swap transfer add_liquidity withdraw pending_liquidity oracle_price bond rebond rewards affiliate_fee set_mimir),
        do: Rujira.Thorchain.Events.parse(event)
 
   # --- Not yet implemented ---
