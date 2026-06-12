@@ -12,6 +12,7 @@ defmodule Rujira.Thorchain.Events do
   alias Rujira.Thorchain.Events.Event, as: TcEvent
   alias Rujira.Thorchain.Events.OraclePrice
   alias Rujira.Thorchain.Events.PendingLiquidity
+  alias Rujira.Thorchain.Events.Rebond
   alias Rujira.Thorchain.Events.SetMimir
   alias Rujira.Thorchain.Events.Swap
   alias Rujira.Thorchain.Events.Transfer
@@ -33,8 +34,8 @@ defmodule Rujira.Thorchain.Events do
   defp new("withdraw", attrs), do: Withdraw.new(attrs)
   defp new("pending_liquidity", attrs), do: PendingLiquidity.new(attrs)
   defp new("oracle_price", attrs), do: OraclePrice.new(attrs)
-  defp new("bond", attrs), do: Bond.new(:bond, attrs)
-  defp new("rebond", attrs), do: Bond.new(:rebond, attrs)
+  defp new("bond", attrs), do: Bond.new(attrs)
+  defp new("rebond", attrs), do: Rebond.new(attrs)
   defp new("set_mimir", attrs), do: SetMimir.new(attrs)
   defp new(_, _), do: :pass
 end

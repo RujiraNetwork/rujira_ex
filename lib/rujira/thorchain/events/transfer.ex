@@ -1,20 +1,20 @@
 defmodule Rujira.Thorchain.Events.Transfer do
-  @moduledoc "A THORChain token transfer event."
+  @moduledoc "A THORChain (cosmos bank) token transfer event."
 
-  alias Rujira.Amount
+  alias Rujira.Coin
 
-  defstruct sender: nil, recipient: nil, amount: 0
+  defstruct sender: nil, recipient: nil, coins: []
 
   @type t :: %__MODULE__{
           sender: String.t(),
           recipient: String.t(),
-          amount: Amount.t()
+          coins: [Coin.t()]
         }
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
   def new(%{"sender" => sender, "recipient" => recipient, "amount" => amount}) do
-    with {:ok, amount} <- Amount.new(amount) do
-      {:ok, %__MODULE__{sender: sender, recipient: recipient, amount: amount}}
+    with {:ok, coins} <- Coin.parse(amount) do
+      {:ok, %__MODULE__{sender: sender, recipient: recipient, coins: coins}}
     end
   end
 

@@ -1,13 +1,13 @@
-defmodule Rujira.Thorchain.Events.Bond do
-  @moduledoc "A THORChain bond event (`bond`)."
+defmodule Rujira.Thorchain.Events.Rebond do
+  @moduledoc "A THORChain rebond event (`rebond`)."
 
   alias Rujira.Amount
   alias Rujira.Coin
 
   defstruct amount: 0,
-            bond_type: nil,
             node_address: nil,
-            bond_address: nil,
+            old_bond_address: nil,
+            new_bond_address: nil,
             id: nil,
             chain: nil,
             from: nil,
@@ -17,9 +17,9 @@ defmodule Rujira.Thorchain.Events.Bond do
 
   @type t :: %__MODULE__{
           amount: Amount.t(),
-          bond_type: String.t(),
           node_address: String.t(),
-          bond_address: String.t(),
+          old_bond_address: String.t(),
+          new_bond_address: String.t(),
           id: String.t(),
           chain: String.t(),
           from: String.t(),
@@ -31,9 +31,9 @@ defmodule Rujira.Thorchain.Events.Bond do
   @spec new(map()) :: {:ok, t()} | {:error, term()}
   def new(%{
         "amount" => amount,
-        "bond_type" => bond_type,
         "node_address" => node_address,
-        "bond_address" => bond_address,
+        "old_bond_address" => old_bond_address,
+        "new_bond_address" => new_bond_address,
         "id" => id,
         "chain" => chain,
         "from" => from,
@@ -46,9 +46,9 @@ defmodule Rujira.Thorchain.Events.Bond do
       {:ok,
        %__MODULE__{
          amount: amount,
-         bond_type: bond_type,
          node_address: node_address,
-         bond_address: bond_address,
+         old_bond_address: old_bond_address,
+         new_bond_address: new_bond_address,
          id: id,
          chain: chain,
          from: from,

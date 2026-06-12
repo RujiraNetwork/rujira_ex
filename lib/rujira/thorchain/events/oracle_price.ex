@@ -3,16 +3,16 @@ defmodule Rujira.Thorchain.Events.OraclePrice do
 
   alias Rujira.Math
 
-  defstruct symbol: nil, price: nil
+  defstruct symbol: nil, price: Decimal.new(0)
 
   @type t :: %__MODULE__{
           symbol: String.t(),
-          price: Decimal.t() | nil
+          price: Decimal.t()
         }
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
-  def new(%{"symbol" => symbol} = attrs) do
-    with {:ok, price} <- Math.to_decimal(Map.get(attrs, "price")) do
+  def new(%{"symbol" => symbol, "price" => price}) do
+    with {:ok, price} <- Math.to_decimal(price) do
       {:ok, %__MODULE__{symbol: symbol, price: price}}
     end
   end

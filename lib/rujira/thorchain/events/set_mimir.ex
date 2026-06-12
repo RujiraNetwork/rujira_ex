@@ -5,12 +5,12 @@ defmodule Rujira.Thorchain.Events.SetMimir do
 
   @type t :: %__MODULE__{
           key: String.t(),
-          value: String.t() | nil
+          value: String.t()
         }
 
   @spec new(map()) :: {:ok, t()} | {:error, :invalid_attrs}
-  def new(%{"key" => key} = attrs) do
-    {:ok, %__MODULE__{key: key, value: Map.get(attrs, "value")}}
+  def new(%{"key" => key, "value" => value}) do
+    {:ok, %__MODULE__{key: key, value: value}}
   end
 
   def new(_), do: {:error, :invalid_attrs}
