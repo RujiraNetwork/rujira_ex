@@ -1,8 +1,16 @@
 defmodule Rujira.Ghost.Vault.Status do
-  @moduledoc "Live interest and utilization state of a Ghost vault."
+  @moduledoc """
+  Live interest and utilization state of a Ghost vault.
+
+  Struct, construction, and queries. Use `Rujira.Ghost` as the public API.
+  """
 
   alias Rujira.Amount
+  alias Rujira.Contracts
+  alias Rujira.Ghost.Vault
   alias Rujira.Math
+
+  use Memoize
 
   defmodule DebtPool do
     @moduledoc "Share pool that accounts for accrued debt interest (`shares` is a `Decimal`)."
@@ -17,6 +25,8 @@ defmodule Rujira.Ghost.Vault.Status do
 
     @type t :: %__MODULE__{size: Rujira.Amount.t(), shares: Rujira.Amount.t(), ratio: Decimal.t()}
   end
+
+  # --- Struct ---
 
   defstruct last_updated: nil,
             utilization_ratio: Decimal.new(0),
@@ -33,6 +43,8 @@ defmodule Rujira.Ghost.Vault.Status do
           debt_pool: DebtPool.t() | nil,
           deposit_pool: DepositPool.t() | nil
         }
+
+  # --- Construction ---
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
   def new(%{
@@ -63,6 +75,29 @@ defmodule Rujira.Ghost.Vault.Status do
   end
 
   def new(_), do: {:error, :invalid_attrs}
+
+  # --- Queries ---
+
+  @doc "Loads the vault's live status into its `status` field."
+  @spec load(Vault.t()) :: {:ok, Vault.t()} | {:error, term()}
+  def load(%Vault{address: address} = vault) do
+    with {:ok, res} <- query(address),
+         {:ok, status} <- new(res) do
+      {:ok, %{vault | status: status}}
+    end
+  end
+
+  @doc """
+  Memoized fetch of a vault's live status.
+
+  Invalidate with `Memoize.invalidate(Rujira.Ghost.Vault.Status, :query, [address])`.
+  """
+  @spec query(String.t()) :: {:ok, map()} | {:error, term()}
+  defmemo query(address) do
+    Contracts.query_state_smart(address, %{status: %{}})
+  end
+
+  # --- Private ---
 
   defp debt_pool(%{"size" => size, "shares" => shares, "ratio" => ratio}) do
     with {:ok, size} <- Amount.new(size),
