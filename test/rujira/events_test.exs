@@ -5,6 +5,8 @@ defmodule Rujira.EventsTest do
   alias Rujira.Fin.Events.Event, as: FinEvent
   alias Rujira.Fin.Events.RangeCreate
   alias Rujira.Fin.Events.Trade
+  alias Rujira.Ghost.Vault.Events.Deposit, as: GhostVaultDeposit
+  alias Rujira.Ghost.Vault.Events.Event, as: GhostVaultEvent
   alias Rujira.Thorchain.Events.AffiliateFee
   alias Rujira.Thorchain.Events.Bond
   alias Rujira.Thorchain.Events.Event, as: TcEvent
@@ -190,6 +192,20 @@ defmodule Rujira.EventsTest do
       assert {:ok,
               %ThorchainSwapEvent{address: "thor1abc", data: %ThorchainSwapSwap{memo: "dummy"}}} =
                Events.parse(%{type: "wasm-rujira-thorchain-swap/swap", attributes: attrs})
+    end
+  end
+
+  describe "parse/1 — Ghost.Vault routing" do
+    test "routes wasm-rujira-ghost-vault/* to Ghost.Vault envelope" do
+      attrs = %{
+        "_contract_address" => "thor1abc",
+        "owner" => "thor1owner",
+        "amount" => "1000",
+        "shares" => "1000"
+      }
+
+      assert {:ok, %GhostVaultEvent{address: "thor1abc", data: %GhostVaultDeposit{amount: 1000}}} =
+               Events.parse(%{type: "wasm-rujira-ghost-vault/deposit", attributes: attrs})
     end
   end
 

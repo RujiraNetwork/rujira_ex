@@ -56,11 +56,17 @@ defmodule Rujira.Events do
   unrecognized events so consumers never lose data.
   """
   alias Rujira.Fin.Events.Event, as: FinEvent
+  alias Rujira.Ghost.Vault.Events.Event, as: GhostVaultEvent
   alias Rujira.Thorchain.Events.Event, as: TcEvent
   alias Rujira.ThorchainSwap.Events.Event, as: ThorchainSwapEvent
 
   @spec parse(map() | BlockEvent.t()) ::
-          {:ok, FinEvent.t() | TcEvent.t() | ThorchainSwapEvent.t() | Event.t()}
+          {:ok,
+           FinEvent.t()
+           | TcEvent.t()
+           | ThorchainSwapEvent.t()
+           | GhostVaultEvent.t()
+           | Event.t()}
           | {:error, term()}
 
   def parse(%BlockEvent{} = event), do: event |> cast() |> parse()
@@ -78,14 +84,16 @@ defmodule Rujira.Events do
   defp route(%Event{type: "wasm-rujira-thorchain-swap/" <> _} = event),
     do: Rujira.ThorchainSwap.Events.parse(event)
 
+  defp route(%Event{type: "wasm-rujira-ghost-vault/" <> _} = event),
+    do: Rujira.Ghost.Vault.Events.parse(event)
+
   defp route(%Event{type: type} = event)
        when type in ~w(swap transfer add_liquidity withdraw pending_liquidity oracle_price bond rebond rewards affiliate_fee set_mimir),
        do: Rujira.Thorchain.Events.parse(event)
 
   # --- Not yet implemented ---
   # defp route(%Event{type: "wasm-rujira-bow/" <> _} = event), do: Rujira.Bow.Events.parse(event)
-  # defp route(%Event{type: "wasm-rujira-ghost-vault/" <> _} = event), do: Rujira.Ghost.Events.parse(event)
-  # defp route(%Event{type: "wasm-rujira-ghost-credit/" <> _} = event), do: Rujira.Ghost.Events.parse(event)
+  # defp route(%Event{type: "wasm-rujira-ghost-credit/" <> _} = event), do: Rujira.Ghost.Credit.Events.parse(event)
   # defp route(%Event{type: "wasm-rujira-staking/" <> _} = event), do: Rujira.Staking.Events.parse(event)
   # defp route(%Event{type: "wasm-rujira-merge/" <> _} = event), do: Rujira.Merge.Events.parse(event)
   # defp route(%Event{type: "wasm-rujira-brune/" <> _} = event), do: Rujira.Brune.Events.parse(event)
