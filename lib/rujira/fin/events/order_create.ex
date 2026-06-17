@@ -2,7 +2,7 @@ defmodule Rujira.Fin.Events.OrderCreate do
   @moduledoc "An order creation event (`wasm-rujira-fin/order.create`)."
 
   alias Rujira.Amount
-  alias Rujira.Fin.Events.Price
+  alias Rujira.Fin.Price
 
   defstruct owner: nil, side: :base, price: nil, offer: 0
 

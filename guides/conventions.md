@@ -115,6 +115,27 @@ defstruct id: nil,
 defstruct [:id, :items, :total, :price, :book]
 ```
 
+## Query Boundaries
+
+Public query functions take and return **domain types**, never wire strings. If a
+function hands back a typed value (an enum atom, a struct), callers must be able to
+query — and therefore invalidate — with that same typed value.
+
+- Wire serialization happens in exactly one place per query: the gRPC call inside
+  the `defmemo`. Keep `Atom.to_string/1`, struct→map encoders, etc. there.
+- `defmemo` cache keys are domain types (e.g. `Range.query(address, idx)` keys on
+  the integer `idx`; `Order.query/4` keys on `:base | :quote` + `Price.order()`).
+- Construction **canonicalizes** so equal values are equal terms — otherwise a typed
+  cache key can miss (e.g. `1.5` vs `1.50`). `Price.parse/1` normalizes decimals for
+  this reason.
+
+Because keys are typed, invalidation needs no special API — invalidate with the same
+typed values you query with:
+
+```elixir
+Memoize.invalidate(Rujira.Fin.Order, :query, [pair, owner, side, price])
+```
+
 ## Visibility
 
 Every public function on a resource module must be delegated from the facade (`defdelegate` in `Rujira.Protocol`) or be a `new` constructor. Everything else must be `defp`.

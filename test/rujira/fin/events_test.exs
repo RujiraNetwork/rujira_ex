@@ -9,7 +9,7 @@ defmodule Rujira.Fin.EventsTest do
   alias Rujira.Fin.Events.OrderIncrease
   alias Rujira.Fin.Events.OrderRetract
   alias Rujira.Fin.Events.OrderWithdraw
-  alias Rujira.Fin.Events.Price
+  alias Rujira.Fin.Price
   alias Rujira.Fin.Events.RangeClaim
   alias Rujira.Fin.Events.RangeClose
   alias Rujira.Fin.Events.RangeCreate

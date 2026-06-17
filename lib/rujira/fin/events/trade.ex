@@ -2,8 +2,8 @@ defmodule Rujira.Fin.Events.Trade do
   @moduledoc "A FIN trade event (`wasm-rujira-fin/trade`)."
 
   alias Rujira.Amount
-  alias Rujira.Fin.Events.Price
   alias Rujira.Fin.Events.TradeRange
+  alias Rujira.Fin.Price
   alias Rujira.Math
 
   defstruct side: :base, price: nil, rate: Decimal.new(0), offer: 0, bid: 0, ranges: nil

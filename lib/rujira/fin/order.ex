@@ -3,12 +3,19 @@ defmodule Rujira.Fin.Order do
   Trading order for the FIN protocol.
 
   Struct, construction, and queries. Use `Rujira.Fin` as the public API.
+
+  The query boundary is typed: `side` is `:base | :quote` and `price` is a
+  `Rujira.Fin.Price.order/0`. Wire serialisation happens only at the gRPC edge,
+  so the same typed values used to query are used to invalidate:
+
+      Memoize.invalidate(Rujira.Fin.Order, :query, [pair, owner, side, price])
   """
 
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Contracts
   alias Rujira.Fin.Pair
+  alias Rujira.Fin.Price
   alias Rujira.Math
   alias Rujira.Prices
 
@@ -22,6 +29,7 @@ defmodule Rujira.Fin.Order do
             pair: nil,
             owner: nil,
             side: nil,
+            price: nil,
             rate: Decimal.new(0),
             updated_at: nil,
             offer: 0,
@@ -43,6 +51,7 @@ defmodule Rujira.Fin.Order do
           pair: String.t() | nil,
           owner: String.t() | nil,
           side: side | nil,
+          price: Price.order() | nil,
           rate: Decimal.t(),
           updated_at: DateTime.t() | nil,
           offer: Amount.t(),
@@ -78,7 +87,7 @@ defmodule Rujira.Fin.Order do
           "filled" => filled
         }
       ) do
-    with {type, deviation, price_id} <- parse_price(price),
+    with {:ok, price} <- Price.from_query(price),
          {:ok, rate} <- Math.to_decimal(rate),
          {:ok, updated_at} <- Math.to_integer(updated_at),
          {:ok, updated_at} <- DateTime.from_unix(updated_at, :nanosecond),
@@ -92,10 +101,11 @@ defmodule Rujira.Fin.Order do
 
       {:ok,
        %__MODULE__{
-         id: "#{address}/#{side}/#{price_id}/#{owner}",
+         id: "#{address}/#{side}/#{Price.to_id(price)}/#{owner}",
          pair: address,
          owner: owner,
          side: side,
+         price: price,
          rate: rate,
          updated_at: updated_at,
          offer: offer,
@@ -105,28 +115,27 @@ defmodule Rujira.Fin.Order do
          filled: filled,
          filled_value: value(filled, Decimal.div(Decimal.new(1), rate), side),
          filled_fee: Math.mul_floor(filled, fee_taker),
-         type: type,
-         deviation: deviation,
+         type: type(price),
+         deviation: deviation(price),
          value_usd: value_usd(side, asset_base, asset_quote, remaining, filled)
        }}
     end
   end
 
   defp placeholder(address, side, price, owner) do
-    [type | _] = String.split(price, ":")
-
     %__MODULE__{
-      id: "#{address}/#{side}/#{price}/#{owner}",
+      id: "#{address}/#{side}/#{Price.to_id(price)}/#{owner}",
       pair: address,
       owner: owner,
-      side: String.to_existing_atom(side),
+      side: side,
+      price: price,
       rate: Decimal.new(0),
       updated_at: DateTime.utc_now(),
       offer: 0,
       remaining: 0,
       filled: 0,
-      type: String.to_existing_atom(type),
-      deviation: nil
+      type: type(price),
+      deviation: deviation(price)
     }
   end
 
@@ -142,7 +151,7 @@ defmodule Rujira.Fin.Order do
     end
   end
 
-  @spec load(Pair.t(), String.t(), String.t(), String.t()) ::
+  @spec load(Pair.t(), side(), Price.order(), String.t()) ::
           {:ok, t()} | {:error, term()}
   def load(%{address: address} = pair, side, price, owner) do
     case query(address, owner, side, price) do
@@ -169,8 +178,9 @@ defmodule Rujira.Fin.Order do
   @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
   def from_id(id) do
     with [pair_address, side, price, owner] <- String.split(id, "/"),
+         {:ok, price} <- Price.parse_order(price),
          {:ok, pair} <- Pair.get(pair_address) do
-      load(pair, side, price, owner)
+      load(pair, String.to_existing_atom(side), price, owner)
     else
       {:error, _} = err -> err
       _ -> {:error, :invalid_id}
@@ -179,27 +189,23 @@ defmodule Rujira.Fin.Order do
 
   # --- Private ---
 
-  defp parse_price(%{"fixed" => v}), do: {:fixed, nil, "fixed:#{v}"}
-  defp parse_price(%{"oracle" => v}), do: {:oracle, v, "oracle:#{v}"}
+  defp type(%Price.Fixed{}), do: :fixed
+  defp type(%Price.Oracle{}), do: :oracle
 
-  defp decode_price("fixed:" <> v), do: %{fixed: v}
-
-  defp decode_price("oracle:" <> v) do
-    {:ok, val} = Math.to_integer(v)
-    %{oracle: val}
-  end
+  defp deviation(%Price.Oracle{deviation: deviation}), do: deviation
+  defp deviation(%Price.Fixed{}), do: nil
 
   @doc """
   Memoized fetch of a single order by `(owner, side, price)` on a contract.
 
   Invalidate with `Memoize.invalidate(Rujira.Fin.Order, :query, [address, owner, side, price])`.
   """
-  @spec query(String.t(), String.t(), String.t(), String.t()) ::
+  @spec query(String.t(), String.t(), side(), Price.order()) ::
           {:ok, map()} | {:error, term()}
   defmemo query(address, owner, side, price) do
     Contracts.query_state_smart(
       address,
-      %{order: [owner, side, decode_price(price)]}
+      %{order: [owner, Atom.to_string(side), Price.to_query(price)]}
     )
   end
 

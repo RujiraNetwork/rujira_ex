@@ -2,7 +2,7 @@ defmodule Rujira.Fin.Events.OrderRetract do
   @moduledoc "An order retract event (`wasm-rujira-fin/order.retract`)."
 
   alias Rujira.Amount
-  alias Rujira.Fin.Events.Price
+  alias Rujira.Fin.Price
 
   defstruct owner: nil, side: :base, price: nil, amount: 0
 

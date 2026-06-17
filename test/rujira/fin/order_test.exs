@@ -2,6 +2,7 @@ defmodule Rujira.Fin.OrderTest do
   use ExUnit.Case, async: true
 
   alias Rujira.Fin.Order
+  alias Rujira.Fin.Price
 
   describe "new/2" do
     test "parses order with fixed price from pair context" do
@@ -28,6 +29,9 @@ defmodule Rujira.Fin.OrderTest do
       assert order.owner == "thor1owner"
       assert order.side == :base
       assert order.type == :fixed
+      assert %Price.Fixed{value: value} = order.price
+      assert Decimal.equal?(value, Decimal.new("1000000"))
+      assert order.id == "thor1pair/base/fixed:1000000/thor1owner"
       assert order.rate == Decimal.new("1.5")
       assert order.offer == 100_000_000
       assert order.remaining == 50_000_000
@@ -53,7 +57,8 @@ defmodule Rujira.Fin.OrderTest do
         "filled" => "0"
       }
 
-      assert {:ok, %Order{type: :oracle, deviation: 5}} = Order.new(pair, attrs)
+      assert {:ok, %Order{type: :oracle, deviation: 5, price: %Price.Oracle{deviation: 5}}} =
+               Order.new(pair, attrs)
     end
   end
 end
