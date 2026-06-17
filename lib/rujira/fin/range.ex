@@ -277,7 +277,7 @@ defmodule Rujira.Fin.Range do
       ranges: %{owner: owner, cursor: cursor, limit: @max_limit}
     })
     |> Contracts.paginate("ranges", @max_limit, fn ranges ->
-      query_ranges_page(contract, owner, List.last(ranges)["idx"])
+      query_ranges_page(contract, owner, ranges |> List.last() |> Map.get("idx"))
     end)
   end
 
