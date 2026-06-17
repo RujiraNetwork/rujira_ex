@@ -103,6 +103,7 @@ defmodule Rujira.Deployments do
   end
 
   defp module_from(%{contract: "rujira-fin"}), do: {:ok, Rujira.Fin.Pair}
+  defp module_from(%{contract: "rujira-ghost-vault"}), do: {:ok, Rujira.Ghost.Vault}
 
   defp module_from(%{contract: name}) do
     case Map.get(protocol_modules(), name) do
