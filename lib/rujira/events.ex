@@ -57,9 +57,11 @@ defmodule Rujira.Events do
   """
   alias Rujira.Fin.Events.Event, as: FinEvent
   alias Rujira.Thorchain.Events.Event, as: TcEvent
+  alias Rujira.ThorchainSwap.Events.Event, as: ThorchainSwapEvent
 
   @spec parse(map() | BlockEvent.t()) ::
-          {:ok, FinEvent.t() | TcEvent.t() | Event.t()} | {:error, term()}
+          {:ok, FinEvent.t() | TcEvent.t() | ThorchainSwapEvent.t() | Event.t()}
+          | {:error, term()}
 
   def parse(%BlockEvent{} = event), do: event |> cast() |> parse()
 
@@ -73,6 +75,9 @@ defmodule Rujira.Events do
   defp route(%Event{type: "wasm-rujira-fin/" <> _} = event),
     do: Rujira.Fin.Events.parse(event)
 
+  defp route(%Event{type: "wasm-rujira-thorchain-swap/" <> _} = event),
+    do: Rujira.ThorchainSwap.Events.parse(event)
+
   defp route(%Event{type: type} = event)
        when type in ~w(swap transfer add_liquidity withdraw pending_liquidity oracle_price bond rebond rewards affiliate_fee set_mimir),
        do: Rujira.Thorchain.Events.parse(event)
@@ -84,7 +89,6 @@ defmodule Rujira.Events do
   # defp route(%Event{type: "wasm-rujira-staking/" <> _} = event), do: Rujira.Staking.Events.parse(event)
   # defp route(%Event{type: "wasm-rujira-merge/" <> _} = event), do: Rujira.Merge.Events.parse(event)
   # defp route(%Event{type: "wasm-rujira-brune/" <> _} = event), do: Rujira.Brune.Events.parse(event)
-  # defp route(%Event{type: "wasm-rujira-thorchain-swap/" <> _} = event), do: Rujira.Thorchain.Swap.Events.parse(event)
   # defp route(%Event{type: "wasm-rujira-ventures-factory/" <> _} = event), do: Rujira.Keiko.Events.parse(event)
   # defp route(%Event{type: "wasm-calc-" <> _} = event), do: Rujira.Calc.Events.parse(event)
 

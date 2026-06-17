@@ -13,6 +13,8 @@ defmodule Rujira.EventsTest do
   alias Rujira.Thorchain.Events.SetMimir
   alias Rujira.Thorchain.Events.Swap
   alias Rujira.Thorchain.Events.Transfer
+  alias Rujira.ThorchainSwap.Events.Event, as: ThorchainSwapEvent
+  alias Rujira.ThorchainSwap.Events.Swap, as: ThorchainSwapSwap
 
   describe "parse/1 — FIN routing" do
     test "routes wasm-rujira-fin/* to Fin envelope" do
@@ -169,6 +171,25 @@ defmodule Rujira.EventsTest do
     test "matches all Thorchain events at protocol level" do
       assert {:ok, %TcEvent{}} =
                Events.parse(%{type: "set_mimir", attributes: %{"key" => "Halt", "value" => "1"}})
+    end
+  end
+
+  describe "parse/1 — ThorchainSwap routing" do
+    test "routes wasm-rujira-thorchain-swap/* to ThorchainSwap envelope" do
+      attrs = %{
+        "_contract_address" => "thor1abc",
+        "amount" => "58btc-btc",
+        "quote_return" => "991226rune",
+        "min_return" => "900000rune",
+        "reserve_fee" => "199rune",
+        "amm_fee" => "14868rune",
+        "returned" => "900000rune",
+        "memo" => "dummy"
+      }
+
+      assert {:ok,
+              %ThorchainSwapEvent{address: "thor1abc", data: %ThorchainSwapSwap{memo: "dummy"}}} =
+               Events.parse(%{type: "wasm-rujira-thorchain-swap/swap", attributes: attrs})
     end
   end
 
