@@ -15,7 +15,20 @@ defmodule RujiraEx.MixProject do
       description: "Domain library for Rujira",
       package: package(),
       source_url: @source_url,
-      docs: docs()
+      docs: docs(),
+      test_coverage: [tool: ExCoveralls]
+    ]
+  end
+
+  def cli do
+    [
+      preferred_envs: [
+        coveralls: :test,
+        "coveralls.detail": :test,
+        "coveralls.html": :test,
+        "coveralls.json": :test,
+        "coveralls.post": :test
+      ]
     ]
   end
 
@@ -59,6 +72,7 @@ defmodule RujiraEx.MixProject do
       {:memoize, "~> 1.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:excoveralls, "~> 0.18", only: [:test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end

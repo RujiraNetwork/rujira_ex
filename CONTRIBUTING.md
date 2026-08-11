@@ -48,6 +48,41 @@ mix dialyzer
 
 CI runs the same five. A failure on any of them blocks merge.
 
+## Test coverage
+
+Coverage is measured by [`excoveralls`](https://hex.pm/packages/excoveralls).
+All tasks run under `MIX_ENV=test` automatically — `preferred_cli_env` is
+already wired in `mix.exs`.
+
+```sh
+# Plain summary in the terminal
+mix coveralls
+
+# Per-line breakdown for a single module (or partial match)
+mix coveralls.detail --filter Rujira.Fin.Events
+
+# Full HTML report — writes to ./cover/excoveralls.html
+mix coveralls.html
+# then open the file in a browser:
+xdg-open cover/excoveralls.html       # Linux
+open cover/excoveralls.html           # macOS
+
+# Machine-readable JSON (useful for CI artifacts / diffing)
+mix coveralls.json
+```
+
+The `cover/` directory is gitignored. Re-run the report any time after
+`mix test` — coverage data is regenerated from the same compiled test
+binaries.
+
+`coveralls.json` at the repo root configures the report. It currently skips
+the generated protobuf modules (`lib/cosmos/`, `lib/cosmwasm/`,
+`lib/tendermint/`, `lib/thorchain/`) and test support files, so the report
+lists only hand-written `lib/rujira/` code. Add a `coverage_options` block
+there to set a minimum coverage threshold — see the
+[excoveralls README](https://github.com/parroty/excoveralls#configuration)
+for the schema.
+
 ## Pull requests
 
 - One PR per concern. Splitting is cheap; bundled refactors are expensive to review.
