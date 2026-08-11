@@ -107,7 +107,10 @@ defmodule Rujira.Amount do
   ## Examples
 
       iex> Rujira.Amount.to_decimal(100_000_000)
-      Decimal.new("1.00000000")
+      Decimal.new("1")
+
+      iex> Rujira.Amount.to_decimal(50_000)
+      Decimal.new("0.0005")
   """
   @spec to_decimal(t()) :: Decimal.t()
   def to_decimal(amount) when is_integer(amount) do
@@ -119,13 +122,19 @@ defmodule Rujira.Amount do
   @doc """
   Formats an 8-decimal integer amount as a human-readable string.
 
+  Trailing zeros are **not** padded — the output width varies with the value.
+  Whether that is the intended behaviour for a display helper is under review.
+
   ## Examples
 
       iex> Rujira.Amount.format(100_000_000)
-      "1.00000000"
+      "1"
 
       iex> Rujira.Amount.format(50_000)
-      "0.00050000"
+      "0.0005"
+
+      iex> Rujira.Amount.format(123_456_789)
+      "1.23456789"
   """
   @spec format(t()) :: String.t()
   def format(amount) when is_integer(amount) do
