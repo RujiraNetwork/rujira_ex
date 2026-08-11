@@ -46,7 +46,16 @@ mix credo --strict
 mix dialyzer
 ```
 
-CI runs the same five. A failure on any of them blocks merge.
+CI runs the same five on every pull request and on every push to `main`
+(`.github/workflows/ci.yml`). A failure on any of them blocks merge.
+
+On top of the five, CI also runs a few checks that need no local discipline:
+
+| Check | Why |
+| --- | --- |
+| `mix deps.unlock --check-unused` | Catches `mix.lock` entries left behind by a removed dependency. |
+| `mix hex.audit` | Flags retired packages — this library is published to Hex. |
+| `mix docs` | Build check only; a hard failure here would break a release. |
 
 ## Test coverage
 
@@ -74,6 +83,11 @@ mix coveralls.json
 The `cover/` directory is gitignored. Re-run the report any time after
 `mix test` — coverage data is regenerated from the same compiled test
 binaries.
+
+CI generates the same report on every run. The total percentage and a
+per-module breakdown appear in the run's **summary** page, and the full HTML
+report is attached to the run as the **`coverage-html`** artifact (retained 14
+days) — download it from the bottom of the workflow run page.
 
 `coveralls.json` at the repo root configures the report. It currently skips
 the generated protobuf modules (`lib/cosmos/`, `lib/cosmwasm/`,

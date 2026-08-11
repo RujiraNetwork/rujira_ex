@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Erlang and Elixir
+        id: beam
+        uses: erlef/setup-beam@v1
+        with:
+          version-file: .tool-versions
+          version-type: strict
+
+      # Caches deps/ and _build/. The Dialyzer PLT lives at
+      # _build/dev/dialyxir_erlang-*_elixir-*.plt, so it is covered here too and
+      # needs no plt_local_path setting in mix.exs.
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-ex${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            mix-${{ runner.os }}-otp${{ steps.beam.outputs.otp-version }}-ex${{ steps.beam.outputs.elixir-version }}-
+
+      - name: Fetch dependencies
+        run: mix deps.get
+
+      - name: Check for unused dependencies
+        run: mix deps.unlock --check-unused
+
+      # The five gates documented in CONTRIBUTING.md, in the same order.
+      - name: Check formatting
+        run: mix format --check-formatted
+
+      - name: Compile
+        run: mix compile --warnings-as-errors
+
+      - name: Test
+        run: mix test
+
+      - name: Lint
+        run: mix credo --strict
+
+      - name: Static analysis
+        run: mix dialyzer
+
+      - name: Audit for retired packages
+        run: mix hex.audit
+
+      # Build check only: this package publishes docs to HexDocs, so a hard
+      # failure here would break a release. Pre-existing ex_doc warnings mean
+      # --warnings-as-errors cannot be enabled yet.
+      - name: Build docs
+        run: mix docs
+
+      # MIX_ENV is deliberately never set at the workflow level: cli/0 in mix.exs
+      # sets preferred_envs, and an explicit MIX_ENV would override it and run
+      # coveralls in the wrong environment.
+      - name: Coverage
+        shell: bash
+        run: |
+          mix coveralls.html | tee coverage.log
+          total=$(grep -oE '\[TOTAL\][[:space:]]+[0-9.]+%' coverage.log | grep -oE '[0-9.]+%' || true)
+          {
+            echo "## Test coverage: ${total:-unknown}"
+            echo
+            echo "Generated modules and test support are excluded via \`coveralls.json\`."
+            echo
+            echo "<details><summary>Per-module breakdown</summary>"
+            echo
+            echo '```'
+            sed -n '/^COV/,/^\[TOTAL\]/p' coverage.log
+            echo '```'
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: cover/excoveralls.html
+          retention-days: 14
