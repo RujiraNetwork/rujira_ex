@@ -124,6 +124,8 @@ If the contract does not exist on chain, the error tuple from `query_state_smart
 ## Event Pipeline
 
 Data flows in one direction — each layer transforms forward, never backward.
+For a worked example tracing a single `wasm-rujira-fin/trade` event through
+every layer, see [`event_pipeline.md`](event_pipeline.md).
 
 ```
 raw input → Events.cast/1 → Events.parse/1 → route/1 → Protocol.parse/1 → {:ok, envelope}
