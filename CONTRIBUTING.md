@@ -94,6 +94,19 @@ per-module breakdown appear in the run's **summary** page, and the full HTML
 report is attached to the run as the **`coverage-html`** artifact (retained 14
 days) — download it from the bottom of the workflow run page.
 
+### The coverage floor
+
+`coveralls.json` sets a `minimum_coverage` floor. Drop below it and `mix
+coveralls` fails:
+
+```
+FAILED: Expected minimum coverage of 36%, got 34.1%.
+```
+
+This is a **ratchet**. If your PR trips it, add tests — do not lower the floor.
+If your PR *raises* coverage, raise the floor to match in the same PR, so the
+gain cannot be lost later.
+
 `coveralls.json` at the repo root configures the report. It currently skips
 the generated protobuf modules (`lib/cosmos/`, `lib/cosmwasm/`,
 `lib/tendermint/`, `lib/thorchain/`) and test support files, so the report
