@@ -6,4 +6,5 @@ deps/
 
 *.tar
 doc/
+cover/
 erl_crash.dump

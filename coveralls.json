@@ -1,0 +1,9 @@
+{
+  "skip_files": [
+    "lib/cosmos/",
+    "lib/cosmwasm/",
+    "lib/tendermint/",
+    "lib/thorchain/",
+    "test/"
+  ]
+}
