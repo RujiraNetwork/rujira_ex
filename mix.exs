@@ -58,7 +58,8 @@ defmodule RujiraEx.MixProject do
         "README.md",
         "CONTRIBUTING.md",
         "guides/conventions.md",
-        "guides/architecture.md"
+        "guides/architecture.md",
+        "guides/event_pipeline.md"
       ]
     ]
   end
