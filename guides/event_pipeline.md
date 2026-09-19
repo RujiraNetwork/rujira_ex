@@ -22,7 +22,7 @@ attributes: %{
   "rate"              => "0.99",       # optional
   "offer"             => "1000x/uusd", # Amount-encoded
   "bid"               => "810rune",    # Amount-encoded
-  "ranges"            => "..."         # optional
+  "ranges"            => "..."         # optional, one entry per range filled
 }
 ```
 
@@ -41,10 +41,10 @@ The goal of the pipeline is to turn this stringly-typed map into:
   address: "thor1...",
   data: %Rujira.Fin.Events.Trade{
     side: :base,
-    price: "1.2345",
+    price: %Rujira.Fin.Events.Price.Fixed{value: #Decimal<1.2345>},
     rate: #Decimal<0.99>,
-    offer: %Rujira.Amount{...},
-    bid:   %Rujira.Amount{...},
+    offer: 1000,
+    bid:   810,
     ranges: nil
   }
 }
@@ -181,10 +181,12 @@ envelope, or of the routing layer. That decoupling is what makes the
 sub-events easy to test in isolation.
 
 ```elixir
-def new(%{"side" => side, "price" => price} = attrs) do
-  with {:ok, rate}  <- Math.to_decimal(Map.get(attrs, "rate")),
-       {:ok, offer} <- Amount.new(Map.get(attrs, "offer")),
-       {:ok, bid}   <- Amount.new(Map.get(attrs, "bid")) do
+def new(%{"side" => side, "price" => price, "rate" => rate, "offer" => offer, "bid" => bid} = attrs) do
+  with {:ok, price}  <- Price.parse(price),
+       {:ok, rate}   <- Math.to_decimal(rate),
+       {:ok, offer}  <- Amount.new(offer),
+       {:ok, bid}    <- Amount.new(bid),
+       {:ok, ranges} <- TradeRange.parse_list(Map.get(attrs, "ranges")) do
     {:ok,
      %__MODULE__{
        side: side |> String.downcase() |> String.to_existing_atom(),
@@ -192,7 +194,7 @@ def new(%{"side" => side, "price" => price} = attrs) do
        rate: rate,
        offer: offer,
        bid: bid,
-       ranges: Map.get(attrs, "ranges")
+       ranges: ranges
      }}
   end
 end
@@ -202,18 +204,57 @@ def new(_), do: {:error, :invalid_attrs}
 
 Notable details:
 
-- **Required fields go in the head.** `side` and `price` are matched in the
-  function head; if they're missing the second clause runs and returns
-  `{:error, :invalid_attrs}`.
-- **Optional fields use `Map.get/2`.** `rate`, `offer`, `bid`, `ranges` are
-  optional and are passed through the appropriate parsers, which all accept
-  `nil` and return `{:ok, nil}` if absent.
+- **Required fields go in the head.** `side`, `price`, `rate`, `offer` and
+  `bid` are matched in the function head; if any is missing the second clause
+  runs and returns `{:error, :invalid_attrs}`.
+- **Optional fields use `Map.get/2`.** `ranges` is only present on a
+  concentrated-liquidity fill. `TradeRange.parse_list/1` accepts `nil` and
+  returns `{:ok, nil}`, following the `nil` in → `{:ok, nil}` out rule that
+  every parser in `guides/conventions.md` obeys.
 - **Strings are converted at the edge.** `Math.to_decimal/1` for `rate`,
   `Amount.new/1` for `offer`/`bid`. The string `side` is downcased and
   converted with `String.to_existing_atom/1` so unknown sides crash loudly
   rather than minting new atoms.
+- **Composite attributes get their own parser.** `price` and `ranges` are
+  packed strings rather than scalars, so each has a dedicated module —
+  `Rujira.Fin.Events.Price` and `Rujira.Fin.Events.TradeRange`.
 - **`with` short-circuits.** Any `{:error, _}` from the field parsers bubbles
   out unchanged, where the protocol parser propagates it to the caller.
+
+#### Variant payloads
+
+FIN has two range implementations, and they share both the `range.*` event
+names and the trade event's `ranges` attribute. Where an event's shape depends
+on which implementation produced it, the struct carries the identity fields and
+nests the implementation-specific state under `range:`:
+
+```elixir
+%Rujira.Fin.Events.TradeRange{
+  idx: 7,
+  side: :base,
+  range: %Rujira.Fin.Events.TradeRange.Dynamic{aep: #Decimal<120>, ...}
+}
+
+%Rujira.Fin.Events.RangeCreate{
+  idx: 5,
+  owner: "thor1...",
+  range: %Rujira.Fin.Events.RangeCreate.Fixed{high: #Decimal<2>, low: #Decimal<1>, ...}
+}
+```
+
+A consumer that only cares about one kind matches it directly; one that handles
+both matches the action and then the variant. The same shape is used by the
+query-side `Rujira.Fin.Range`.
+
+Two details worth knowing when reading these parsers:
+
+- **The discriminator is an attribute, not the event name.** A dynamic range
+  sets `range_type=dynamic`; a fixed one sends no `range_type` at all. Each
+  sub-event dispatches on that in its function heads, so
+  `Rujira.Fin.Events.parse/1`'s action table needs no variant knowledge.
+- **An unrecognised `range_type` returns `:pass`, not an error.** A third range
+  implementation would surface as a raw `%Event{}` inside the envelope rather
+  than breaking the consumer — the same degradation path as an unknown action.
 
 ### 5. The envelope — `Rujira.Fin.Events.Event`
 
