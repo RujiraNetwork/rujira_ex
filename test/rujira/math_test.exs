@@ -41,6 +41,30 @@ defmodule Rujira.MathTest do
       assert {:ok, nil} = Math.to_decimal(nil)
     end
 
+    test "accepts the widest value a CosmWasm Decimal can serialise" do
+      # u128 mantissa, 18 decimal places — 39 significant digits, which is past
+      # the 34-digit decimal128 default that Decimal 3 would otherwise enforce.
+      cw_max = "340282366920938463463.374607431768211455"
+
+      assert {:ok, decimal} = Math.to_decimal(cw_max)
+      assert Decimal.to_string(decimal, :normal) == cw_max
+    end
+
+    test "accepts the widest value a CosmWasm Decimal256 can serialise" do
+      cw256_max = String.duplicate("9", 78) <> "." <> String.duplicate("9", 18)
+
+      assert {:ok, _} = Math.to_decimal(cw256_max)
+    end
+
+    test "still rejects exponent-amplification payloads (CVE-2026-32686)" do
+      assert {:error, :invalid_decimal} = Math.to_decimal("1e1000000000")
+      assert {:error, :invalid_decimal} = Math.to_decimal("1E999999999")
+    end
+
+    test "rejects a value wider than any chain type" do
+      assert {:error, :invalid_decimal} = Math.to_decimal(String.duplicate("9", 97))
+    end
+
     test "returns Decimals unchanged" do
       d = Decimal.new("1.5")
       assert {:ok, ^d} = Math.to_decimal(d)

@@ -17,6 +17,7 @@ defmodule Rujira.Contracts do
   alias Cosmwasm.Wasm.V1.QueryRawContractStateRequest
   alias Cosmwasm.Wasm.V1.QuerySmartContractStateRequest
   alias Rujira.Logger
+  alias Rujira.Node
 
   use Memoize
 
@@ -30,10 +31,10 @@ defmodule Rujira.Contracts do
   end
 
   @spec code_info(non_neg_integer()) ::
-          {:ok, CodeInfoResponse.t()} | {:error, GRPC.RPCError.t()}
+          {:ok, CodeInfoResponse.t()} | {:error, Node.rpc_error()}
   defmemo code_info(code_id) do
     with {:ok, %{code_info: code_info}} <-
-           Rujira.Node.query(&Stub.code/2, %QueryCodeRequest{code_id: code_id}) do
+           Node.query(&Stub.code/2, %QueryCodeRequest{code_id: code_id}) do
       {:ok, code_info}
     end
   end
@@ -63,7 +64,7 @@ defmodule Rujira.Contracts do
 
   defmemo build_address(salt, creator, hash) do
     with {:ok, %{address: address}} <-
-           Rujira.Node.query(
+           Node.query(
              &Stub.build_address/2,
              %QueryBuildAddressRequest{
                code_hash: hash,
@@ -82,10 +83,10 @@ defmodule Rujira.Contracts do
   end
 
   @spec info(String.t()) ::
-          {:ok, ContractInfo.t()} | {:error, GRPC.RPCError.t()}
+          {:ok, ContractInfo.t()} | {:error, Node.rpc_error()}
   defmemo info(address) do
     with {:ok, %{contract_info: contract_info}} <-
-           Rujira.Node.query(
+           Node.query(
              &Stub.contract_info/2,
              %QueryContractInfoRequest{address: address}
            ) do
@@ -93,7 +94,7 @@ defmodule Rujira.Contracts do
     end
   end
 
-  @spec codes() :: {:ok, list(CodeInfoResponse.t())} | {:error, GRPC.RPCError.t()}
+  @spec codes() :: {:ok, list(CodeInfoResponse.t())} | {:error, Node.rpc_error()}
   defmemo codes() do
     codes_page()
   end
@@ -102,7 +103,7 @@ defmodule Rujira.Contracts do
 
   defp codes_page(nil) do
     with {:ok, %{code_infos: code_infos, pagination: %{next_key: next_key}}} <-
-           Rujira.Node.query(&Stub.codes/2, %QueryCodesRequest{}),
+           Node.query(&Stub.codes/2, %QueryCodesRequest{}),
          {:ok, next} <- codes_page(next_key) do
       {:ok, Enum.concat(code_infos, next)}
     end
@@ -112,7 +113,7 @@ defmodule Rujira.Contracts do
 
   defp codes_page(key) do
     with {:ok, %{code_infos: code_infos, pagination: %{next_key: next_key}}} <-
-           Rujira.Node.query(
+           Node.query(
              &Stub.codes/2,
              %QueryCodesRequest{pagination: %PageRequest{key: key}}
            ),
@@ -122,7 +123,7 @@ defmodule Rujira.Contracts do
   end
 
   @spec by_code(integer()) ::
-          {:ok, list(t())} | {:error, GRPC.RPCError.t()}
+          {:ok, list(t())} | {:error, Node.rpc_error()}
   defmemo by_code(code_id) do
     with {:ok, contracts} <- by_code_page(code_id) do
       {:ok, Enum.map(contracts, &%__MODULE__{id: &1, address: &1})}
@@ -133,7 +134,7 @@ defmodule Rujira.Contracts do
 
   defp by_code_page(code_id, nil) do
     with {:ok, %{contracts: contracts, pagination: %{next_key: next_key}}} <-
-           Rujira.Node.query(
+           Node.query(
              &Stub.contracts_by_code/2,
              %QueryContractsByCodeRequest{code_id: code_id}
            ),
@@ -146,7 +147,7 @@ defmodule Rujira.Contracts do
 
   defp by_code_page(code_id, key) do
     with {:ok, %{contracts: contracts, pagination: %{next_key: next_key}}} <-
-           Rujira.Node.query(
+           Node.query(
              &Stub.contracts_by_code/2,
              %QueryContractsByCodeRequest{
                code_id: code_id,
@@ -158,16 +159,16 @@ defmodule Rujira.Contracts do
     end
   end
 
-  @spec code(integer()) :: {:ok, QueryCodeResponse} | {:error, GRPC.RPCError.t()}
+  @spec code(integer()) :: {:ok, QueryCodeResponse} | {:error, Node.rpc_error()}
   defmemo code(id) do
     with {:ok, %{code_info: code_info}} <-
-           Rujira.Node.query(&Stub.code/2, %QueryCodeRequest{code_id: id}) do
+           Node.query(&Stub.code/2, %QueryCodeRequest{code_id: id}) do
       {:ok, code_info}
     end
   end
 
   @spec by_codes(list(integer())) ::
-          {:ok, list(t())} | {:error, GRPC.RPCError.t()}
+          {:ok, list(t())} | {:error, Node.rpc_error()}
   def by_codes(code_ids) do
     Enum.reduce(code_ids, {:ok, []}, fn
       el, {:ok, agg} ->
@@ -212,7 +213,7 @@ defmodule Rujira.Contracts do
   end
 
   @spec list(module(), list(integer())) ::
-          {:ok, list(struct())} | {:error, GRPC.RPCError.t()}
+          {:ok, list(struct())} | {:error, Node.rpc_error()}
   defmemo list(module, code_ids) when is_list(code_ids) do
     with {:ok, contracts} <- by_codes(code_ids) do
       Rujira.Enum.reduce_async_while_ok(contracts, &get({module, &1}), timeout: 30_000)
@@ -220,9 +221,9 @@ defmodule Rujira.Contracts do
   end
 
   @spec query_state_raw(String.t(), binary()) ::
-          {:ok, term()} | {:error, :not_found} | {:error, GRPC.RPCError.t()}
+          {:ok, term()} | {:error, :not_found} | {:error, Node.rpc_error()}
   def query_state_raw(address, query) do
-    case Rujira.Node.query(
+    case Node.query(
            &Stub.raw_contract_state/2,
            %QueryRawContractStateRequest{
              address: address,
@@ -236,10 +237,10 @@ defmodule Rujira.Contracts do
   end
 
   @spec query_state_smart(String.t(), map()) ::
-          {:ok, map()} | {:error, GRPC.RPCError.t()}
+          {:ok, map()} | {:error, Node.rpc_error()}
   def query_state_smart(address, query) do
     with {:ok, %{data: data}} <-
-           Rujira.Node.query(&Stub.smart_contract_state/2, %QuerySmartContractStateRequest{
+           Node.query(&Stub.smart_contract_state/2, %QuerySmartContractStateRequest{
              address: address,
              query_data: JSON.encode!(query)
            }) do
@@ -248,10 +249,10 @@ defmodule Rujira.Contracts do
   end
 
   @spec query_state_smart(String.t(), map(), keyword()) ::
-          {:ok, map()} | {:error, GRPC.RPCError.t()}
+          {:ok, map()} | {:error, Node.rpc_error()}
   def query_state_smart(address, query, opts) do
     with {:ok, %{data: data}} <-
-           Rujira.Node.query(
+           Node.query(
              &Stub.smart_contract_state/3,
              %QuerySmartContractStateRequest{
                address: address,
@@ -288,14 +289,14 @@ defmodule Rujira.Contracts do
 
   @doc "Queries the full, raw contract state at an address"
   @spec query_state_all(String.t()) ::
-          {:ok, map()} | {:error, GRPC.RPCError.t()}
+          {:ok, map()} | {:error, Node.rpc_error()}
   defmemo query_state_all(address) do
     query_state_all_page(address, nil)
   end
 
   defp query_state_all_page(address, page) do
     with {:ok, %{models: models, pagination: %{next_key: next_key}}} when next_key != "" <-
-           Rujira.Node.query(
+           Node.query(
              &Stub.all_contract_state/2,
              %QueryAllContractStateRequest{address: address, pagination: page}
            ),
@@ -319,7 +320,7 @@ defmodule Rujira.Contracts do
   def stream_state_all(address) do
     Stream.resource(
       fn ->
-        Rujira.Node.query(
+        Node.query(
           &Stub.all_contract_state/2,
           %QueryAllContractStateRequest{address: address}
         )
@@ -332,7 +333,7 @@ defmodule Rujira.Contracts do
          }}
         when next_key != "" ->
           next =
-            Rujira.Node.query(
+            Node.query(
               &Stub.all_contract_state/2,
               %QueryAllContractStateRequest{
                 address: address,

@@ -52,7 +52,7 @@ defmodule Rujira.Amount do
   def new(value) when is_integer(value) and value >= 0, do: {:ok, value}
 
   def new(value) when is_binary(value) do
-    case Decimal.parse(value) do
+    case Decimal.parse(value, max_digits: Rujira.Math.max_digits()) do
       {decimal, ""} -> new(decimal)
       _ -> {:error, :invalid_amount}
     end

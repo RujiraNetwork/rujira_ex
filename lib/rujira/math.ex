@@ -3,6 +3,23 @@ defmodule Rujira.Math do
   Math utilities for Rujira financial calculations
   """
 
+  # Decimal 3 defaults to decimal128 limits, rejecting inputs over 34 significant
+  # digits. That is narrower than the chain: a CosmWasm `Decimal` serialises up to
+  # 39 digits and a `Decimal256` up to 96 (78 integer + 18 fractional), so the
+  # default would reject legitimate on-chain values. Widening the digit count is
+  # safe because the CVE-2026-32686 vector is exponent amplification (`1e1000000`),
+  # which the still-bounded `:max_exponent` default rejects — a 96-character
+  # literal carries no amplification.
+  @max_digits 96
+
+  @doc """
+  Significant-digit ceiling used when parsing chain-sourced decimal strings.
+
+  Wide enough for every CosmWasm fixed-point type, narrow enough to stay finite.
+  """
+  @spec max_digits() :: pos_integer()
+  def max_digits, do: @max_digits
+
   @doc """
   Parses any value to an integer. `nil` passes through.
 
@@ -35,7 +52,7 @@ defmodule Rujira.Math do
   def to_decimal(value) when is_float(value), do: {:ok, Decimal.from_float(value)}
 
   def to_decimal(value) when is_binary(value) do
-    case Decimal.parse(value) do
+    case Decimal.parse(value, max_digits: @max_digits) do
       {d, ""} -> {:ok, d}
       _ -> {:error, :invalid_decimal}
     end

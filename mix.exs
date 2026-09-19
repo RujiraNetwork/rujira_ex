@@ -66,7 +66,7 @@ defmodule RujiraEx.MixProject do
 
   defp deps do
     [
-      {:decimal, "~> 2.0"},
+      {:decimal, "~> 2.4 or ~> 3.0"},
       {:grpc, "~> 0.9 or ~> 1.0"},
       {:protobuf, "~> 0.12"},
       {:bech32, "~> 1.0"},

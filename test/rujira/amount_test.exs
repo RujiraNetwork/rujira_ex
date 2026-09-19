@@ -24,6 +24,15 @@ defmodule Rujira.AmountTest do
       assert {:ok, nil} = Amount.new(nil)
     end
 
+    test "accepts the widest value a CosmWasm Decimal can serialise" do
+      assert {:ok, 340_282_366_920_938_463_463} =
+               Amount.new("340282366920938463463.374607431768211455")
+    end
+
+    test "still rejects exponent-amplification payloads (CVE-2026-32686)" do
+      assert {:error, :invalid_amount} = Amount.new("1e1000000000")
+    end
+
     test "accepts non-negative integers" do
       assert {:ok, 0} = Amount.new(0)
       assert {:ok, 100} = Amount.new(100)

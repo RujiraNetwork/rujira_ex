@@ -9,12 +9,25 @@ defmodule Rujira.Node do
   The implementation must export `query/3`.
   """
 
+  @typedoc """
+  An error returned by the chain node.
+
+  grpc 1.0 moved `GRPC.RPCError` into the `grpc_core` package and dropped its
+  `t/0`, as it did for `GRPC.Channel`. Both structs are therefore named directly
+  and shared from this module rather than referenced as `GRPC.RPCError.t()`
+  across the codebase.
+  """
+  @type rpc_error :: %GRPC.RPCError{}
+
+  @typedoc "An open connection to a chain node."
+  @type channel :: %GRPC.Channel{}
+
   @type query_fun ::
-          (GRPC.Channel.t(), term() -> {:ok, term()} | {:error, GRPC.RPCError.t() | term()})
+          (channel(), term() -> {:ok, term()} | {:error, rpc_error() | term()})
 
   @type query_fun3 ::
-          (GRPC.Channel.t(), term(), keyword() ->
-             {:ok, term()} | {:error, GRPC.RPCError.t() | term()})
+          (channel(), term(), keyword() ->
+             {:ok, term()} | {:error, rpc_error() | term()})
 
   @callback query(query_fun() | query_fun3(), term(), keyword()) ::
               {:ok, term()} | {:error, term()}
