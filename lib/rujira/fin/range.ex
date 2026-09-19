@@ -68,7 +68,7 @@ defmodule Rujira.Fin.Range do
           {:ok, [t()]} | {:error, term()}
   def list(pair, owner \\ nil, limit \\ nil) do
     with {:ok, fixed} <- query_ranges(pair.address, owner),
-         {:ok, dynamic} <- query_dynamic_ranges(pair.address, owner) do
+         {:ok, dynamic} <- list_dynamic(pair.address, owner) do
       (fixed ++ dynamic)
       |> take(limit)
       |> Rujira.Enum.reduce_while_ok(&new(pair, &1))
@@ -196,6 +196,9 @@ defmodule Rujira.Fin.Range do
 
   defp build(_, _, _), do: {:error, :invalid_attrs}
 
+  # Both arms of the union are queried behind one `idx`, so "not found" and
+  # "this deployment predates dynamic ranges" mean the same thing here: the
+  # index is not a dynamic range, and the caller gets a placeholder.
   defp load_dynamic(%{address: address} = pair, idx) do
     case query_dynamic(address, idx) do
       {:ok, range} ->
@@ -204,10 +207,33 @@ defmodule Rujira.Fin.Range do
       {:error, %GRPC.RPCError{status: 2, message: "NotFound: query wasm contract failed"}} ->
         {:ok, placeholder(address, idx)}
 
-      err ->
-        err
+      {:error, error} ->
+        error
+        |> Contracts.unsupported_query?()
+        |> absent_dynamic_range(address, idx, error)
     end
   end
+
+  defp absent_dynamic_range(true, address, idx, _error), do: {:ok, placeholder(address, idx)}
+  defp absent_dynamic_range(false, _address, _idx, error), do: {:error, error}
+
+  # A FIN build from before dynamic ranges cannot parse the `dynamic` variant of
+  # the ranges query. Degrade to "this pair has no dynamic ranges" so a rollout
+  # in progress does not break listing; every other error still propagates.
+  defp list_dynamic(address, owner) do
+    case query_dynamic_ranges(address, owner) do
+      {:ok, ranges} ->
+        {:ok, ranges}
+
+      {:error, error} ->
+        error
+        |> Contracts.unsupported_query?()
+        |> no_dynamic_ranges(error)
+    end
+  end
+
+  defp no_dynamic_ranges(true, _error), do: {:ok, []}
+  defp no_dynamic_ranges(false, error), do: {:error, error}
 
   defp placeholder(address, idx) do
     %__MODULE__{id: "#{address}/#{idx}", idx: idx, pair: address}
