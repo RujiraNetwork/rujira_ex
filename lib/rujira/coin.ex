@@ -69,25 +69,22 @@ defmodule Rujira.Coin do
     trimmed = String.trim(str)
 
     case String.split(trimmed, " ", parts: 2) do
-      [amount_str, denom] when denom != "" ->
-        with {:ok, amount} <- Amount.new(amount_str) do
-          new(denom, amount)
-        else
-          _ -> {:error, :invalid_amount}
-        end
+      [amount_str, denom] when denom != "" -> build(denom, amount_str)
+      _ -> parse_unspaced(trimmed)
+    end
+  end
 
-      _ ->
-        case Regex.run(@coin_regex, trimmed) do
-          [_, amount_str, denom] ->
-            with {:ok, amount} <- Amount.new(amount_str) do
-              new(denom, amount)
-            else
-              _ -> {:error, :invalid_amount}
-            end
+  defp parse_unspaced(trimmed) do
+    case Regex.run(@coin_regex, trimmed) do
+      [_, amount_str, denom] -> build(denom, amount_str)
+      _ -> {:error, :invalid_coin_format}
+    end
+  end
 
-          _ ->
-            {:error, :invalid_coin_format}
-        end
+  defp build(denom, amount_str) do
+    case Amount.new(amount_str) do
+      {:ok, amount} -> new(denom, amount)
+      _ -> {:error, :invalid_amount}
     end
   end
 end

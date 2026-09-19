@@ -5,18 +5,24 @@
       strict: true,
       files: %{
         included: ["lib/"],
+        # Everything outside `lib/rujira` is generated protobuf code. It is not
+        # hand-written and is regenerated wholesale, so linting it is noise.
         excluded: [
-          ~r"/proto/",
+          ~r"\.pb\.ex$",
           "lib/cosmos/",
           "lib/cosmwasm/",
           "lib/tendermint/",
-          "lib/thorchain/thorchain/"
+          "lib/thorchain/"
         ]
       },
       checks: %{
-        enabled: [
-          {Credo.Check.Readability.ModuleDoc, false},
-          {Credo.Check.Design.TagTODO, false}
+        # `disabled:` keeps every other default check enabled. Do not switch this
+        # to `enabled:` — that *replaces* the check list, which silently reduced
+        # this config to running zero checks.
+        disabled: [
+          # The TODOs in this codebase are deliberate trackers that name the
+          # condition for their own removal, not lint debt.
+          {Credo.Check.Design.TagTODO, []}
         ]
       }
     }

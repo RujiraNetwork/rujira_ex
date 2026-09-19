@@ -214,11 +214,8 @@ defmodule Rujira.Contracts do
   @spec list(module(), list(integer())) ::
           {:ok, list(struct())} | {:error, GRPC.RPCError.t()}
   defmemo list(module, code_ids) when is_list(code_ids) do
-    with {:ok, contracts} <- by_codes(code_ids),
-         {:ok, struct} <-
-           contracts
-           |> Rujira.Enum.reduce_async_while_ok(&get({module, &1}), timeout: 30_000) do
-      {:ok, struct}
+    with {:ok, contracts} <- by_codes(code_ids) do
+      Rujira.Enum.reduce_async_while_ok(contracts, &get({module, &1}), timeout: 30_000)
     end
   end
 

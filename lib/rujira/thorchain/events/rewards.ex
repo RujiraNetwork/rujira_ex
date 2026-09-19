@@ -61,21 +61,24 @@ defmodule Rujira.Thorchain.Events.Rewards do
   # a signed integer value. Keep the attributes whose key resolves to an asset.
   defp pool_rewards(attrs) do
     attrs
-    |> Enum.reduce_while({:ok, []}, fn {denom, amount}, {:ok, acc} ->
-      case Assets.from_denom(denom) do
-        {:ok, asset} ->
-          case Math.to_integer(amount) do
-            {:ok, amount} -> {:cont, {:ok, [%PoolReward{asset: asset, amount: amount} | acc]}}
-            {:error, _} = err -> {:halt, err}
-          end
-
-        {:error, _} ->
-          {:cont, {:ok, acc}}
-      end
-    end)
+    |> Enum.reduce_while({:ok, []}, &pool_reward/2)
     |> case do
       {:ok, list} -> {:ok, Enum.sort_by(list, & &1.asset.id)}
       err -> err
+    end
+  end
+
+  defp pool_reward({denom, amount}, {:ok, acc}) do
+    case Assets.from_denom(denom) do
+      {:ok, asset} -> accumulate(asset, amount, acc)
+      {:error, _} -> {:cont, {:ok, acc}}
+    end
+  end
+
+  defp accumulate(asset, amount, acc) do
+    case Math.to_integer(amount) do
+      {:ok, amount} -> {:cont, {:ok, [%PoolReward{asset: asset, amount: amount} | acc]}}
+      {:error, _} = err -> {:halt, err}
     end
   end
 end

@@ -8,6 +8,7 @@ defmodule Rujira.Fin.Order do
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Contracts
+  alias Rujira.Fin.Pair
   alias Rujira.Math
   alias Rujira.Prices
 
@@ -58,7 +59,7 @@ defmodule Rujira.Fin.Order do
 
   # --- Construction ---
 
-  @spec new(Rujira.Fin.Pair.t(), map()) :: {:ok, t()} | {:error, term()}
+  @spec new(Pair.t(), map()) :: {:ok, t()} | {:error, term()}
   def new(
         %{
           address: address,
@@ -131,7 +132,7 @@ defmodule Rujira.Fin.Order do
 
   # --- Queries ---
 
-  @spec list(Rujira.Fin.Pair.t(), String.t() | nil, integer() | nil) ::
+  @spec list(Pair.t(), String.t() | nil, integer() | nil) ::
           {:ok, [t()]} | {:error, term()}
   def list(pair, owner \\ nil, limit \\ nil) do
     with {:ok, orders} <- query_orders(pair.address, owner) do
@@ -141,7 +142,7 @@ defmodule Rujira.Fin.Order do
     end
   end
 
-  @spec load(Rujira.Fin.Pair.t(), String.t(), String.t(), String.t()) ::
+  @spec load(Pair.t(), String.t(), String.t(), String.t()) ::
           {:ok, t()} | {:error, term()}
   def load(%{address: address} = pair, side, price, owner) do
     case query(address, owner, side, price) do
@@ -158,7 +159,7 @@ defmodule Rujira.Fin.Order do
 
   @spec list_all_pairs(String.t()) :: {:ok, [t()]} | {:error, term()}
   def list_all_pairs(address) do
-    with {:ok, pairs} <- Rujira.Fin.Pair.list(),
+    with {:ok, pairs} <- Pair.list(),
          {:ok, orders} <-
            Rujira.Enum.reduce_async_while_ok(pairs, &list(&1, address), timeout: 15_000) do
       {:ok, List.flatten(orders)}
@@ -168,7 +169,7 @@ defmodule Rujira.Fin.Order do
   @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
   def from_id(id) do
     with [pair_address, side, price, owner] <- String.split(id, "/"),
-         {:ok, pair} <- Rujira.Fin.Pair.get(pair_address) do
+         {:ok, pair} <- Pair.get(pair_address) do
       load(pair, side, price, owner)
     else
       {:error, _} = err -> err
