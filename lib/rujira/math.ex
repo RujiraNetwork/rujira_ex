@@ -23,11 +23,14 @@ defmodule Rujira.Math do
   @doc """
   Parses any value to an integer. `nil` passes through.
 
+  `nil` and `""` pass through as `{:ok, nil}`.
+
   Returns `{:ok, integer}`, `{:ok, nil}`, or `{:error, :invalid_integer}`.
   """
   @spec to_integer(nil | integer() | String.t()) ::
           {:ok, integer() | nil} | {:error, :invalid_integer}
   def to_integer(nil), do: {:ok, nil}
+  def to_integer(""), do: {:ok, nil}
   def to_integer(value) when is_integer(value), do: {:ok, value}
 
   def to_integer(value) when is_binary(value) do
@@ -42,11 +45,14 @@ defmodule Rujira.Math do
   @doc """
   Parses any value to a Decimal. `nil` passes through.
 
+  `nil` and `""` pass through as `{:ok, nil}`.
+
   Returns `{:ok, Decimal.t}`, `{:ok, nil}`, or `{:error, :invalid_decimal}`.
   """
   @spec to_decimal(nil | integer() | float() | String.t() | Decimal.t()) ::
           {:ok, Decimal.t() | nil} | {:error, :invalid_decimal}
   def to_decimal(nil), do: {:ok, nil}
+  def to_decimal(""), do: {:ok, nil}
   def to_decimal(%Decimal{} = value), do: {:ok, value}
   def to_decimal(value) when is_integer(value), do: {:ok, Decimal.new(value)}
   def to_decimal(value) when is_float(value), do: {:ok, Decimal.from_float(value)}
@@ -113,7 +119,7 @@ defmodule Rujira.Math do
   end
 
   defp do_normalize(a, from, to) do
-    Decimal.mult(a, Decimal.from_float(10 ** (to - from)))
+    Decimal.div(a, Decimal.new(10 ** (from - to)))
   end
 
   @doc """

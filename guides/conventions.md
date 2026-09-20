@@ -73,13 +73,18 @@ Always prefer pattern matching in function heads over `case`, `cond`, or `if` in
 
 ## Numeric Parsing
 
-One function per type. `nil` in → `{:ok, nil}` out. Use `with` chains. Never use raw `Decimal.parse` or `Integer.parse` with `{val, ""}` pattern.
+One function per type. Absent values (`nil` and `""`) in → `{:ok, nil}` out. Use `with` chains. Never use raw `Decimal.parse` or `Integer.parse` with `{val, ""}` pattern.
 
-| Domain | Function | nil → | valid → | invalid → |
+Chain queries and event attributes render an absent field as `""`, not as a missing
+key, so `""` is an absent value rather than a parse failure.
+
+| Domain | Function | nil / `""` → | valid → | invalid → |
 |--------|----------|-------|---------|-----------|
 | Financial amount | `Amount.new/1` | `{:ok, nil}` | `{:ok, integer}` | `{:error, :invalid_amount}` |
 | Decimal/price | `Math.to_decimal/1` | `{:ok, nil}` | `{:ok, Decimal.t}` | `{:error, :invalid_decimal}` |
 | Plain integer | `Math.to_integer/1` | `{:ok, nil}` | `{:ok, integer}` | `{:error, :invalid_integer}` |
+
+For plain strings, `Rujira.String.nil_if_empty/1` applies the same rule.
 
 ## Amounts vs Coins
 

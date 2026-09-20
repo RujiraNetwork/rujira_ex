@@ -4,8 +4,9 @@ defmodule Rujira.MathTest do
   alias Rujira.Math
 
   describe "to_integer/1" do
-    test "passes nil through" do
+    test "passes absent values through" do
       assert {:ok, nil} = Math.to_integer(nil)
+      assert {:ok, nil} = Math.to_integer("")
     end
 
     test "returns integers unchanged" do
@@ -26,7 +27,6 @@ defmodule Rujira.MathTest do
 
     test "rejects non-numeric strings" do
       assert {:error, :invalid_integer} = Math.to_integer("abc")
-      assert {:error, :invalid_integer} = Math.to_integer("")
     end
 
     test "rejects other types" do
@@ -37,8 +37,9 @@ defmodule Rujira.MathTest do
   end
 
   describe "to_decimal/1" do
-    test "passes nil through" do
+    test "passes absent values through" do
       assert {:ok, nil} = Math.to_decimal(nil)
+      assert {:ok, nil} = Math.to_decimal("")
     end
 
     test "accepts the widest value a CosmWasm Decimal can serialise" do
@@ -91,7 +92,6 @@ defmodule Rujira.MathTest do
 
     test "rejects non-numeric strings" do
       assert {:error, :invalid_decimal} = Math.to_decimal("abc")
-      assert {:error, :invalid_decimal} = Math.to_decimal("")
     end
 
     test "rejects other types" do

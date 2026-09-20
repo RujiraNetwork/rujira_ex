@@ -3,6 +3,7 @@ defmodule Rujira.Ghost.Vault.Events.Borrow do
 
   alias Rujira.Amount
   alias Rujira.Math
+  alias Rujira.String
 
   defstruct borrower: nil, delegate: nil, amount: 0, shares: Decimal.new(0)
 
@@ -20,7 +21,7 @@ defmodule Rujira.Ghost.Vault.Events.Borrow do
       {:ok,
        %__MODULE__{
          borrower: borrower,
-         delegate: delegate(Map.get(attrs, "delegate")),
+         delegate: String.nil_if_empty(Map.get(attrs, "delegate")),
          amount: amount,
          shares: shares
        }}
@@ -28,8 +29,4 @@ defmodule Rujira.Ghost.Vault.Events.Borrow do
   end
 
   def new(_), do: {:error, :invalid_attrs}
-
-  defp delegate(nil), do: nil
-  defp delegate(""), do: nil
-  defp delegate(delegate), do: delegate
 end

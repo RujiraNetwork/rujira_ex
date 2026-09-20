@@ -42,13 +42,14 @@ defmodule Rujira.Amount do
 
   Accepts nil, integers, binary strings, Decimals, and floats.
   Decimals and floats are floored to the nearest integer.
-  `nil` passes through as `{:ok, nil}`.
+  `nil` and `""` pass through as `{:ok, nil}`.
 
   Returns `{:ok, amount}`, `{:ok, nil}`, or `{:error, :invalid_amount}`.
   """
   @spec new(nil | integer() | String.t() | Decimal.t() | float()) ::
           {:ok, t() | nil} | {:error, :invalid_amount}
   def new(nil), do: {:ok, nil}
+  def new(""), do: {:ok, nil}
   def new(value) when is_integer(value) and value >= 0, do: {:ok, value}
 
   def new(value) when is_binary(value) do

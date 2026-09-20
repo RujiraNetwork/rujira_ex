@@ -20,8 +20,9 @@ defmodule Rujira.AmountTest do
   end
 
   describe "new/1" do
-    test "passes nil through" do
+    test "passes absent values through" do
       assert {:ok, nil} = Amount.new(nil)
+      assert {:ok, nil} = Amount.new("")
     end
 
     test "accepts the widest value a CosmWasm Decimal can serialise" do
@@ -57,7 +58,6 @@ defmodule Rujira.AmountTest do
 
     test "rejects unparseable strings" do
       assert {:error, :invalid_amount} = Amount.new("abc")
-      assert {:error, :invalid_amount} = Amount.new("")
       assert {:error, :invalid_amount} = Amount.new("12abc")
     end
 
