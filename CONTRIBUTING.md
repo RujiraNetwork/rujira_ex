@@ -54,13 +54,13 @@ On top of the five, CI also runs a few checks that need no local discipline:
 | Check | Why |
 | --- | --- |
 | `mix deps.unlock --check-unused` | Catches `mix.lock` entries left behind by a removed dependency. |
-| `mix hex.audit` | Flags retired packages and security advisories — this library is published to Hex. Non-blocking while #10 is open. |
+| `mix hex.audit` | Flags retired packages and security advisories — this library is published to Hex. Blocking: a new advisory fails the run. To accept one deliberately, list it under `hex: [ignore_advisories: [...]]` in `mix.exs` with the reason in the PR. |
 | `mix docs` | Build check only; a hard failure here would break a release. |
 
-> **Note:** `mix hex.audit` only reports security advisories on Hex 2.5 and
-> later. On older Hex it checks retired packages alone and prints
-> `No retired packages found` — a false all-clear. Trust the CI run, not a
-> local audit, unless you have checked your Hex version with `mix hex --version`.
+> **Note:** `mix hex.audit` only reports security advisories on Hex 2.5.0 and
+> later; CI pins Hex 2.5.1. On older Hex it checks retired packages alone and
+> prints `No retired packages found` — a false all-clear. Trust the CI run, not
+> a local audit, unless `mix hex --version` shows 2.5.0 or newer.
 
 ## Test coverage
 
