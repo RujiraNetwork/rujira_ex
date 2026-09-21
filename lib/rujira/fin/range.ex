@@ -7,7 +7,9 @@ defmodule Rujira.Fin.Range do
   `range:` as either a `Rujira.Fin.Range.Fixed` or a `Rujira.Fin.Range.Dynamic`.
 
   Both draw from a single on-chain index counter, so an `idx` identifies exactly
-  one range of one kind within a pair.
+  one range of one kind within a pair — but not which kind. Queries therefore
+  name the kind, and a dynamic range's `id` carries it: `<pair>/dynamic/<idx>`
+  against `<pair>/<idx>` for a fixed one.
 
   Struct, construction, and queries. Use `Rujira.Fin` as the public API.
   """
@@ -62,13 +64,14 @@ defmodule Rujira.Fin.Range do
   Lists every range on a pair, of both kinds.
 
   Fixed and dynamic ranges are separately paginated on-chain, so this issues one
-  query per kind.
+  query per kind. A contract that only has fixed ranges contributes those alone —
+  see `query_dynamic_ranges/2`.
   """
   @spec list(Pair.t(), String.t() | nil, integer() | nil) ::
           {:ok, [t()]} | {:error, term()}
   def list(pair, owner \\ nil, limit \\ nil) do
     with {:ok, fixed} <- query_ranges(pair.address, owner),
-         {:ok, dynamic} <- list_dynamic(pair.address, owner) do
+         {:ok, dynamic} <- query_dynamic_ranges(pair.address, owner) do
       (fixed ++ dynamic)
       |> take(limit)
       |> Rujira.Enum.reduce_while_ok(&new(pair, &1))
@@ -76,24 +79,18 @@ defmodule Rujira.Fin.Range do
   end
 
   @doc """
-  Loads a single range by index.
+  Loads a single range of a named kind.
 
-  The kind isn't knowable from the index alone, so the fixed arm is tried first
-  and the dynamic arm on miss. A range that is in neither returns a placeholder.
+  A bare `idx` is a fixed range, `{:dynamic, idx}` a dynamic one — the index
+  alone does not say which, so the caller names it. An index the named kind does
+  not hold returns a placeholder.
   """
-  @spec load(Pair.t(), integer()) :: {:ok, t()} | {:error, term()}
-  def load(%{address: address} = pair, idx) do
-    case query(address, idx) do
-      {:ok, range} ->
-        new(pair, range)
+  @spec load(Pair.t(), integer() | {:dynamic, integer()}) :: {:ok, t()} | {:error, term()}
+  def load(%{address: address} = pair, {:dynamic, idx}),
+    do: loaded(pair, idx, Dynamic, query_dynamic(address, idx))
 
-      {:error, %GRPC.RPCError{status: 2, message: "NotFound: query wasm contract failed"}} ->
-        load_dynamic(pair, idx)
-
-      err ->
-        err
-    end
-  end
+  def load(%{address: address} = pair, idx),
+    do: loaded(pair, idx, Fixed, query(address, idx))
 
   @spec list_all(String.t() | nil, [String.t()] | nil) :: {:ok, [t()]} | {:error, term()}
   def list_all(owner \\ nil, contracts \\ nil) do
@@ -103,16 +100,7 @@ defmodule Rujira.Fin.Range do
   end
 
   @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
-  def from_id(id) do
-    with [pair_address, idx] <- String.split(id, "/"),
-         {:ok, idx} <- Math.to_integer(idx),
-         {:ok, pair} <- Pair.get(pair_address) do
-      load(pair, idx)
-    else
-      {:error, _} = err -> err
-      _ -> {:error, :invalid_id}
-    end
-  end
+  def from_id(id), do: id |> String.split("/") |> load_parts()
 
   @spec tvl(Pair.t()) :: {:ok, non_neg_integer()} | {:error, term()}
   def tvl(pair) do
@@ -144,11 +132,18 @@ defmodule Rujira.Fin.Range do
   @doc """
   Memoized full fetch of dynamic ranges on a contract, optionally filtered by `owner`.
 
+  Dynamic ranges are an addition to FIN. A build that only has fixed ones does
+  not reject this query — it ignores the `dynamic` selector and answers with
+  fixed ranges — so the response is kept to the dynamic shape and such a
+  contract reads as having none, which is what it has.
+
   Invalidate with `Memoize.invalidate(Rujira.Fin.Range, :query_dynamic_ranges, [contract, owner])`.
   """
   @spec query_dynamic_ranges(String.t(), String.t() | nil) :: {:ok, [map()]} | {:error, term()}
   defmemo query_dynamic_ranges(contract, owner) do
-    query_dynamic_ranges_page(contract, owner, nil)
+    with {:ok, ranges} <- query_dynamic_ranges_page(contract, owner, nil) do
+      {:ok, Enum.filter(ranges, &Map.has_key?(&1, "aep"))}
+    end
   end
 
   @doc """
@@ -184,7 +179,7 @@ defmodule Rujira.Fin.Range do
          {:ok, range} <- variant.new(attrs) do
       {:ok,
        %__MODULE__{
-         id: "#{address}/#{idx}",
+         id: id(address, idx, variant),
          idx: idx,
          pair: address,
          owner: owner,
@@ -196,48 +191,37 @@ defmodule Rujira.Fin.Range do
 
   defp build(_, _, _), do: {:error, :invalid_attrs}
 
-  # Both arms of the union are queried behind one `idx`, so "not found" and
-  # "this deployment predates dynamic ranges" mean the same thing here: the
-  # index is not a dynamic range, and the caller gets a placeholder.
-  defp load_dynamic(%{address: address} = pair, idx) do
-    case query_dynamic(address, idx) do
-      {:ok, range} ->
-        new(pair, range)
+  defp load_parts([address, "dynamic", idx]), do: load_part(address, idx, &{:dynamic, &1})
+  defp load_parts([address, idx]), do: load_part(address, idx, & &1)
+  defp load_parts(_), do: {:error, :invalid_id}
 
-      {:error, %GRPC.RPCError{status: 2, message: "NotFound: query wasm contract failed"}} ->
-        {:ok, placeholder(address, idx)}
-
-      {:error, error} ->
-        error
-        |> Contracts.unsupported_query?()
-        |> absent_dynamic_range(address, idx, error)
+  defp load_part(address, idx, kind) do
+    with {:ok, idx} <- Math.to_integer(idx),
+         {:ok, pair} <- Pair.get(address) do
+      load(pair, kind.(idx))
     end
   end
 
-  defp absent_dynamic_range(true, address, idx, _error), do: {:ok, placeholder(address, idx)}
-  defp absent_dynamic_range(false, _address, _idx, error), do: {:error, error}
+  defp loaded(pair, _idx, _variant, {:ok, range}), do: new(pair, range)
 
-  # A FIN build from before dynamic ranges cannot parse the `dynamic` variant of
-  # the ranges query. Degrade to "this pair has no dynamic ranges" so a rollout
-  # in progress does not break listing; every other error still propagates.
-  defp list_dynamic(address, owner) do
-    case query_dynamic_ranges(address, owner) do
-      {:ok, ranges} ->
-        {:ok, ranges}
+  defp loaded(
+         %{address: address},
+         idx,
+         variant,
+         {:error, %GRPC.RPCError{status: 2, message: "NotFound: query wasm contract failed"}}
+       ),
+       do: {:ok, placeholder(address, idx, variant)}
 
-      {:error, error} ->
-        error
-        |> Contracts.unsupported_query?()
-        |> no_dynamic_ranges(error)
-    end
+  defp loaded(_pair, _idx, _variant, err), do: err
+
+  defp placeholder(address, idx, variant) do
+    %__MODULE__{id: id(address, idx, variant), idx: idx, pair: address}
   end
 
-  defp no_dynamic_ranges(true, _error), do: {:ok, []}
-  defp no_dynamic_ranges(false, error), do: {:error, error}
-
-  defp placeholder(address, idx) do
-    %__MODULE__{id: "#{address}/#{idx}", idx: idx, pair: address}
-  end
+  # A dynamic range's id names its kind, so it round-trips through `from_id/1`
+  # to the query that can actually find it.
+  defp id(address, idx, Dynamic), do: "#{address}/dynamic/#{idx}"
+  defp id(address, idx, Fixed), do: "#{address}/#{idx}"
 
   defp resolve_pairs(nil), do: Pair.list()
 
@@ -287,7 +271,7 @@ defmodule Rujira.Fin.Range do
       ranges: %{dynamic: %{owner: owner, cursor: cursor, limit: @max_limit}}
     })
     |> Contracts.paginate("ranges", @max_limit, fn ranges ->
-      query_dynamic_ranges_page(contract, owner, List.last(ranges)["idx"])
+      query_dynamic_ranges_page(contract, owner, Map.get(List.last(ranges), "idx"))
     end)
   end
 end

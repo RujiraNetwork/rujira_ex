@@ -353,24 +353,6 @@ defmodule Rujira.Contracts do
     )
   end
 
-  @doc """
-  Whether an error means the contract could not deserialize the query message.
-
-  A contract deployed before a query variant existed cannot parse it, and
-  answers with a CosmWasm `ParseErr` — `"Error parsing into type <type>: <msg>"`
-  — rather than failing. That is the deployment telling us the feature does not
-  exist there, which is answerable, unlike a genuine query failure.
-
-  Callers adding a query that older deployments will not recognise use this to
-  degrade to an empty result instead of erroring, so a rollout in progress does
-  not break reads against pairs that have not been migrated yet.
-  """
-  @spec unsupported_query?(term()) :: boolean()
-  def unsupported_query?(%{message: message}) when is_binary(message),
-    do: String.contains?(message, "Error parsing into type")
-
-  def unsupported_query?(_), do: false
-
   @spec query_state_smart_with_retry(String.t(), map()) ::
           {:ok, map()} | {:error, term()}
   def query_state_smart_with_retry(address, query) do
@@ -399,21 +381,10 @@ defmodule Rujira.Contracts do
     end)
   end
 
-  defp log_retry({:error, %GRPC.RPCError{} = error} = err, address, query) do
-    error
-    |> unsupported_query?()
-    |> log_rpc_error(error, address, query)
-
+  defp log_retry({:error, %GRPC.RPCError{status: status, message: message}} = err, address, query) do
+    Logger.error(__MODULE__, "GRPC Retry: #{address} #{inspect(query)} #{status} #{message}")
     err
   end
 
   defp log_retry(other, _, _), do: other
-
-  # An unsupported query is an answer, not a fault — the caller degrades on it.
-  # Logging it would put an error line on every read against a deployment that
-  # has not been migrated yet.
-  defp log_rpc_error(true, _error, _address, _query), do: :ok
-
-  defp log_rpc_error(false, %GRPC.RPCError{status: status, message: message}, address, query),
-    do: Logger.error(__MODULE__, "GRPC Retry: #{address} #{inspect(query)} #{status} #{message}")
 end

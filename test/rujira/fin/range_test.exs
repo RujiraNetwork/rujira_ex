@@ -62,7 +62,7 @@ defmodule Rujira.Fin.RangeTest do
       }
 
       assert {:ok, %Range{} = range} = Range.new(@pair, attrs)
-      assert range.id == "thor1pair/9"
+      assert range.id == "thor1pair/dynamic/9"
       assert range.idx == 9
       assert range.owner == "thor1owner"
 
@@ -94,7 +94,7 @@ defmodule Rujira.Fin.RangeTest do
     end
   end
 
-  describe "list/3 against a deployment that predates dynamic ranges" do
+  describe "list/3" do
     setup do
       # `query_ranges`/`query_dynamic_ranges` are memoized on (contract, owner).
       Memoize.invalidate(Rujira.Fin.Range)
@@ -102,33 +102,7 @@ defmodule Rujira.Fin.RangeTest do
       :ok
     end
 
-    test "falls back to the fixed ranges instead of failing" do
-      MockNode.expect(fn
-        # A pre-DCL FIN build cannot deserialize the `dynamic` variant.
-        %{"ranges" => %{"dynamic" => _}} ->
-          {:error, parse_error()}
-
-        %{"ranges" => _} ->
-          MockNode.ok(%{"ranges" => [fixed_response()]})
-      end)
-
-      assert {:ok, [%Range{idx: 5, range: %Fixed{}}]} = Range.list(@pair)
-    end
-
-    test "a genuine failure on the dynamic arm still propagates" do
-      MockNode.expect(fn
-        %{"ranges" => %{"dynamic" => _}} ->
-          {:error, not_found()}
-
-        %{"ranges" => _} ->
-          MockNode.ok(%{"ranges" => [fixed_response()]})
-      end)
-
-      assert {:error, %GRPC.RPCError{message: "NotFound: query wasm contract failed"}} =
-               Range.list(@pair)
-    end
-
-    test "both arms are returned when the deployment understands them" do
+    test "returns both kinds when the contract has both" do
       MockNode.expect(fn
         %{"ranges" => %{"dynamic" => _}} -> MockNode.ok(%{"ranges" => [dynamic_response()]})
         %{"ranges" => _} -> MockNode.ok(%{"ranges" => [fixed_response()]})
@@ -138,22 +112,112 @@ defmodule Rujira.Fin.RangeTest do
                Range.list(@pair)
     end
 
-    test "load/2 returns a placeholder rather than failing" do
-      MockNode.expect(fn
-        %{"range" => %{"dynamic" => _}} -> {:error, parse_error()}
-        %{"range" => _} -> {:error, not_found()}
-      end)
+    test "counts a fixed range once when the contract has no dynamic ranges" do
+      # A build without dynamic ranges ignores the `dynamic` selector and answers
+      # with fixed ranges, which the fixed arm has already returned.
+      MockNode.expect(fn _ -> MockNode.ok(%{"ranges" => [fixed_response()]}) end)
 
-      assert {:ok, %Range{id: "thor1pair/5", idx: 5, range: nil}} = Range.load(@pair, 5)
+      assert {:ok, [%Range{idx: 5, range: %Fixed{}}]} = Range.list(@pair)
     end
 
-    test "load/2 still finds a dynamic range on a migrated deployment" do
+    test "does not attribute those fixed ranges to the owner filter" do
+      # That answer ignores `owner` too, so it carries ranges the filter excludes.
       MockNode.expect(fn
-        %{"range" => %{"dynamic" => _}} -> MockNode.ok(dynamic_response())
-        %{"range" => _} -> {:error, not_found()}
+        %{"ranges" => %{"dynamic" => _}} -> MockNode.ok(%{"ranges" => [fixed_response()]})
+        %{"ranges" => _} -> MockNode.ok(%{"ranges" => []})
       end)
 
-      assert {:ok, %Range{idx: 9, range: %Dynamic{}}} = Range.load(@pair, 9)
+      assert {:ok, []} = Range.list(@pair, "thor1other")
+    end
+
+    test "a genuine failure on the dynamic arm still propagates" do
+      MockNode.expect(fn
+        %{"ranges" => %{"dynamic" => _}} -> {:error, not_found()}
+        %{"ranges" => _} -> MockNode.ok(%{"ranges" => [fixed_response()]})
+      end)
+
+      assert {:error, %GRPC.RPCError{message: "NotFound: query wasm contract failed"}} =
+               Range.list(@pair)
+    end
+  end
+
+  describe "load/2" do
+    setup do
+      # `query`/`query_dynamic` are memoized on (address, idx).
+      Memoize.invalidate(Rujira.Fin.Range)
+      on_exit(fn -> Memoize.invalidate(Rujira.Fin.Range) end)
+      :ok
+    end
+
+    test "a bare index asks only the fixed query" do
+      MockNode.expect(fn
+        %{"range" => %{"dynamic" => _}} -> flunk("the dynamic query was issued for a bare index")
+        %{"range" => "5"} -> MockNode.ok(fixed_response())
+      end)
+
+      assert {:ok, %Range{id: "thor1pair/5", idx: 5, range: %Fixed{}}} = Range.load(@pair, 5)
+    end
+
+    test "a dynamic index asks only the dynamic query" do
+      MockNode.expect(fn
+        %{"range" => %{"dynamic" => "9"}} -> MockNode.ok(dynamic_response())
+        %{"range" => _} -> flunk("the fixed query was issued for a dynamic index")
+      end)
+
+      assert {:ok, %Range{id: "thor1pair/dynamic/9", idx: 9, range: %Dynamic{}}} =
+               Range.load(@pair, {:dynamic, 9})
+    end
+
+    test "an index the named kind does not hold returns a placeholder of that kind" do
+      MockNode.expect(fn _ -> {:error, not_found()} end)
+
+      assert {:ok, %Range{id: "thor1pair/5", idx: 5, range: nil}} = Range.load(@pair, 5)
+
+      assert {:ok, %Range{id: "thor1pair/dynamic/5", idx: 5, range: nil}} =
+               Range.load(@pair, {:dynamic, 5})
+    end
+
+    test "asking a contract without dynamic ranges for one is an error, not a miss" do
+      # It reads `{"range": {"dynamic": "5"}}` as a bare index and cannot parse
+      # it. Nothing constructs such an id for that contract, so this surfaces
+      # rather than being folded into a placeholder.
+      MockNode.expect(fn _ -> {:error, parse_error()} end)
+
+      assert {:error, %GRPC.RPCError{status: 2}} = Range.load(@pair, {:dynamic, 5})
+    end
+
+    test "a genuine failure propagates" do
+      MockNode.expect(fn _ -> {:error, vm_error()} end)
+
+      assert {:error, %GRPC.RPCError{status: 2}} = Range.load(@pair, 5)
+    end
+  end
+
+  describe "from_id/1" do
+    test "a dynamic id round-trips to the dynamic query" do
+      MockNode.expect(fn
+        %{"config" => _} -> MockNode.ok(pair_config())
+        %{"range" => %{"dynamic" => "9"}} -> MockNode.ok(dynamic_response())
+      end)
+
+      assert {:ok, %Range{id: "thor1dynid/dynamic/9", idx: 9, range: %Dynamic{}}} =
+               Range.from_id("thor1dynid/dynamic/9")
+    end
+
+    test "a bare id round-trips to the fixed query" do
+      MockNode.expect(fn
+        %{"config" => _} -> MockNode.ok(pair_config())
+        %{"range" => "5"} -> MockNode.ok(fixed_response())
+      end)
+
+      assert {:ok, %Range{id: "thor1fixid/5", idx: 5, range: %Fixed{}}} =
+               Range.from_id("thor1fixid/5")
+    end
+
+    test "any other shape is invalid" do
+      for id <- ["thor1pair", "thor1pair/5/9", "thor1pair/fixed/5", "thor1pair/x"] do
+        assert {:error, _} = Range.from_id(id)
+      end
     end
   end
 
@@ -176,12 +240,34 @@ defmodule Rujira.Fin.RangeTest do
 
   # --- Fixtures ---
 
+  # What a build without dynamic ranges answers for `{"range": {"dynamic": "5"}}`,
+  # which it reads as a bare index: its own `StdError::ParseErr`, carrying the
+  # node's `: query wasm contract failed` suffix. serde_json_wasm keeps it terse.
   defp parse_error do
     %GRPC.RPCError{
       status: 2,
       message:
-        "Error parsing into type rujira_fin::msg::QueryMsg: unknown field `dynamic`, " <>
-          "expected one of `owner`, `cursor`, `limit`: query wasm contract failed"
+        "Error parsing into type rujira_fin::msg::QueryMsg: Invalid type: " <>
+          "query wasm contract failed"
+    }
+  end
+
+  defp pair_config do
+    %{
+      "market_makers" => [],
+      "denoms" => ["gaia-atom", "eth-usdc-0xabc"],
+      "oracles" => nil,
+      "tick" => 1,
+      "fee_taker" => "0.001",
+      "fee_maker" => "0.0005",
+      "fee_address" => "thor1fee"
+    }
+  end
+
+  defp vm_error do
+    %GRPC.RPCError{
+      status: 2,
+      message: "codespace wasm code 29: wasmvm error: Error calling the VM"
     }
   end
 
