@@ -10,8 +10,10 @@ defmodule Rujira.Deployments do
 
       config :rujira_ex,
         # Map of contract-name string -> module implementing the resource.
-        # Rujira's own protocols (e.g. "rujira-fin") are mapped by default;
-        # consumers add their own entries here.
+        # Rujira's own protocols (e.g. "rujira-fin", "rujira-ghost-vault",
+        # "rujira-thorchain-swap") are mapped by default; a consumer entry for
+        # the same contract name takes precedence over the built-in default,
+        # so consumers can override or extend the mapping.
         protocol_modules: %{"rujira-bow" => MyApp.Bow},
 
         # Addresses to exclude from the resolved target list (e.g. legacy
@@ -29,6 +31,12 @@ defmodule Rujira.Deployments do
   alias Thorchain.Types.QueryContractInfosRequest
 
   use Memoize
+
+  @default_protocol_modules %{
+    "rujira-fin" => Rujira.Fin.Pair,
+    "rujira-ghost-vault" => Rujira.Ghost.Vault,
+    "rujira-thorchain-swap" => Rujira.ThorchainSwap.Strategy
+  }
 
   @spec contract_infos() :: {:ok, [ContractInfo.t()]} | {:error, term()}
   defmemo contract_infos do
@@ -102,9 +110,6 @@ defmodule Rujira.Deployments do
     end
   end
 
-  defp module_from(%{contract: "rujira-fin"}), do: {:ok, Rujira.Fin.Pair}
-  defp module_from(%{contract: "rujira-ghost-vault"}), do: {:ok, Rujira.Ghost.Vault}
-
   defp module_from(%{contract: name}) do
     case Map.get(protocol_modules(), name) do
       nil -> {:error, :unknown_protocol}
@@ -112,7 +117,12 @@ defmodule Rujira.Deployments do
     end
   end
 
-  defp protocol_modules, do: Application.get_env(:rujira_ex, :protocol_modules, %{})
+  defp protocol_modules,
+    do:
+      Map.merge(
+        @default_protocol_modules,
+        Application.get_env(:rujira_ex, :protocol_modules, %{})
+      )
 
   defp omit, do: Application.get_env(:rujira_ex, :deployments_omit, [])
 end
