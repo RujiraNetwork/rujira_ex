@@ -1,6 +1,8 @@
 defmodule Rujira.EventsTest do
   use ExUnit.Case, async: true
 
+  alias Rujira.Brune.Events.Event, as: BruneEvent
+  alias Rujira.Brune.Events.NodeBond, as: BruneNodeBond
   alias Rujira.Events
   alias Rujira.Fin.Events.Event, as: FinEvent
   alias Rujira.Fin.Events.RangeCreate
@@ -235,6 +237,19 @@ defmodule Rujira.EventsTest do
 
       assert {:ok, %StakingEvent{address: "thor1abc", data: %StakingAccountBond{amount: 1000}}} =
                Events.parse(%{type: "wasm-rujira-staking/account.bond", attributes: attrs})
+    end
+  end
+
+  describe "parse/1 — Brune routing" do
+    test "routes wasm-rujira-brune/* to Brune envelope" do
+      attrs = %{
+        "_contract_address" => "thor1abc",
+        "node" => "thor1node",
+        "amount" => "100"
+      }
+
+      assert {:ok, %BruneEvent{address: "thor1abc", data: %BruneNodeBond{node: "thor1node"}}} =
+               Events.parse(%{type: "wasm-rujira-brune/node.bond", attributes: attrs})
     end
   end
 

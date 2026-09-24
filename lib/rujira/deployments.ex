@@ -33,6 +33,7 @@ defmodule Rujira.Deployments do
   use Memoize
 
   @default_protocol_modules %{
+    "rujira-brune" => Rujira.Brune.Pool,
     "rujira-fin" => Rujira.Fin.Pair,
     "rujira-ghost-vault" => Rujira.Ghost.Vault,
     "rujira-staking" => Rujira.Staking.Pool,
