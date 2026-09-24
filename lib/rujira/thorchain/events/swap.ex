@@ -61,8 +61,8 @@ defmodule Rujira.Thorchain.Events.Swap do
           "streaming_swap_count" => streaming_swap_count
         } = attrs
       ) do
-    with {:ok, coins} <- Coin.parse(coin),
-         {:ok, emit} <- Coin.parse(emit_asset),
+    with {:ok, coins} <- Coin.from_asset_string(coin),
+         {:ok, emit} <- Coin.from_asset_string(emit_asset),
          {:ok, swap_target} <- Amount.new(swap_target),
          {:ok, swap_slip} <- Math.to_integer(swap_slip),
          {:ok, liquidity_fee} <- Amount.new(liquidity_fee),

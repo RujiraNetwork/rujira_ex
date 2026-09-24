@@ -1,12 +1,13 @@
 defmodule Rujira.AssetsTest do
   use ExUnit.Case, async: true
 
+  alias Cosmos.Bank.V1beta1.Metadata, as: DenomMetadata
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataResponse
   alias Rujira.Assets
   alias Rujira.Assets.Asset
-
-  # Only the pure resolution paths are exercised here. Anything routing through
-  # Rujira.Assets.Metadata performs a gRPC query against a node — that needs
-  # test/support/mock_node.ex and belongs with the node-layer tranche.
+  alias Rujira.Assets.Metadata
+  alias Rujira.Test.MockNode
 
   describe "type/1" do
     test "classifies THOR-prefixed ids as native" do
@@ -117,6 +118,18 @@ defmodule Rujira.AssetsTest do
       assert {:ok, asset} = Assets.from_id("BTC.BTC")
       assert asset == Assets.from_string("BTC.BTC")
     end
+
+    test "resolves well-formed asset ids across delimiters" do
+      assert {:ok, %Asset{id: "GAIA-ATOM"}} = Assets.from_id("GAIA-ATOM")
+      assert {:ok, %Asset{id: "BTC/BTC"}} = Assets.from_id("BTC/BTC")
+      assert {:ok, %Asset{id: "BTC~BTC"}} = Assets.from_id("BTC~BTC")
+      assert {:ok, %Asset{id: "x/ruji"}} = Assets.from_id("x/ruji")
+    end
+
+    test "returns an error instead of raising on a malformed id" do
+      assert {:error, :invalid_asset_id} = Assets.from_id("NOTANASSET")
+      assert {:error, :invalid_asset_id} = Assets.from_id("")
+    end
   end
 
   describe "from_shortcode/1" do
@@ -216,18 +229,52 @@ defmodule Rujira.AssetsTest do
                Assets.from_denom("thor.abc")
     end
 
-    test "resolves layer_1 denoms, upcasing the id" do
-      assert {:ok, %Asset{id: "BTC.BTC", chain: "BTC", ticker: "BTC", type: :layer_1}} =
-               Assets.from_denom("btc.btc")
+    test "resolves secured denoms, upcasing the id" do
+      assert {:ok, %Asset{id: "BTC-BTC", chain: "BTC", ticker: "BTC", type: :secured}} =
+               Assets.from_denom("btc-btc")
     end
 
     test "rewrites the BNB chain to BSC" do
-      assert {:ok, %Asset{chain: "BSC"}} = Assets.from_denom("bnb.bnb")
+      assert {:ok, %Asset{chain: "BSC"}} = Assets.from_denom("bnb-bnb")
+    end
+
+    test "resolves synth and trade denoms" do
+      assert {:ok, %Asset{id: "BTC/BTC", type: :synth, chain: "BTC", symbol: "BTC"}} =
+               Assets.from_denom("btc/btc")
+
+      assert {:ok, %Asset{id: "BTC~BTC", type: :trade, chain: "BTC", symbol: "BTC"}} =
+               Assets.from_denom("btc~btc")
     end
 
     test "splits a contract suffix into symbol and ticker" do
       assert {:ok, %Asset{symbol: "USDC-0X123", ticker: "USDC"}} =
                Assets.from_denom("eth-usdc-0x123")
+    end
+
+    test "resolves the long TRON contract denoms" do
+      assert {:ok, %Asset{id: "TRX-USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T", ticker: "USDT"}} =
+               Assets.from_denom("trx-usdt-tr7nhqjekqxgtci8q8zy4pl8otszgjlj6t")
+    end
+
+    test "rejects a dotted asset id — those are ids, not denoms" do
+      assert {:error, :invalid_denom} = Assets.from_denom("btc.btc")
+      assert {:error, :invalid_denom} = Assets.from_denom("bnb.bnb")
+      assert {:error, :invalid_denom} = Assets.from_denom("BTC.BTC")
+    end
+
+    test "keeps a token-factory denom native rather than reading it as secured" do
+      assert {:ok, %Asset{id: "x/btc-btc", type: :native, chain: "THOR"}} =
+               Assets.from_denom("x/btc-btc")
+    end
+
+    test "rejects a secured denom that is not all lowercase" do
+      assert {:error, :invalid_denom} = Assets.from_denom("BTC-btc")
+      assert {:error, :invalid_denom} = Assets.from_denom("btc-BTC")
+      assert {:error, :invalid_denom} = Assets.from_denom("eth-USDC-0xa0b86991")
+    end
+
+    test "rejects a secured denom with a second suffix" do
+      assert {:error, :invalid_denom} = Assets.from_denom("eth-usdc-0x123-extra")
     end
 
     test "rejects a denom with no delimiter" do
@@ -273,6 +320,59 @@ defmodule Rujira.AssetsTest do
     end
   end
 
+  describe "to_layer1/1" do
+    test "converts a secured asset back to its layer_1 form" do
+      assert {:ok, %Asset{id: "BTC.BTC", type: :layer_1, chain: "BTC", symbol: "BTC"}} =
+               Assets.to_layer1(Assets.from_string("BTC-BTC"))
+    end
+
+    test "keeps a contract suffix in the symbol" do
+      assert {:ok, %Asset{id: "ETH.USDC-0X123", type: :layer_1, ticker: "USDC"}} =
+               Assets.to_layer1(Assets.from_string("ETH-USDC-0X123"))
+    end
+
+    test "converts synth and trade assets" do
+      assert {:ok, %Asset{id: "BTC.BTC", type: :layer_1}} =
+               Assets.to_layer1(Assets.from_string("BTC/BTC"))
+
+      assert {:ok, %Asset{id: "BTC.BTC", type: :layer_1}} =
+               Assets.to_layer1(Assets.from_string("BTC~BTC"))
+    end
+
+    test "returns a layer_1 asset unchanged" do
+      asset = Assets.from_string("BTC.BTC")
+      assert {:ok, ^asset} = Assets.to_layer1(asset)
+    end
+
+    test "returns a THOR asset unchanged" do
+      asset = Assets.from_string("THOR.RUNE")
+      assert {:ok, ^asset} = Assets.to_layer1(asset)
+    end
+
+    test "refuses token-factory denoms, which exist only on THORChain" do
+      assert {:error, :not_supported} = Assets.to_layer1(Assets.from_string("x/ruji"))
+      assert {:error, :not_supported} = Assets.to_layer1(Assets.from_string("x/staking-ruji"))
+    end
+  end
+
+  describe "pool_id/1" do
+    test "is the id of the layer_1 form" do
+      assert {:ok, "BTC.BTC"} = Assets.pool_id(Assets.from_string("BTC-BTC"))
+      assert {:ok, "BTC.BTC"} = Assets.pool_id(Assets.from_string("BTC.BTC"))
+      assert {:ok, "BTC.BTC"} = Assets.pool_id(Assets.from_string("BTC~BTC"))
+      assert {:ok, "THOR.RUNE"} = Assets.pool_id(Assets.from_string("THOR.RUNE"))
+    end
+
+    test "keeps the full symbol, as THORChain names the pool" do
+      assert {:ok, "TRX.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T"} =
+               Assets.pool_id(Assets.from_string("TRX-USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T"))
+    end
+
+    test "propagates the to_layer1/1 error" do
+      assert {:error, :not_supported} = Assets.pool_id(Assets.from_string("x/ruji"))
+    end
+  end
+
   describe "to_native/1" do
     test "maps the special-cased THOR assets onto their denoms" do
       assert {:ok, "rune"} = Assets.to_native(%{id: "THOR.RUNE"})
@@ -298,8 +398,13 @@ defmodule Rujira.AssetsTest do
                Assets.to_native(%{type: "SECURED", chain: "BTC", symbol: "BTC"})
     end
 
-    test "routes a layer_1 asset through to_secured/1" do
-      assert {:ok, "btc-btc"} = Assets.to_native(Assets.from_string("BTC.BTC"))
+    test "refuses a layer_1 asset on another chain, rather than securing it silently" do
+      assert {:error, :no_native_denom} = Assets.to_native(Assets.from_string("BTC.BTC"))
+    end
+
+    test "refuses synth and trade assets" do
+      assert {:error, :no_native_denom} = Assets.to_native(Assets.from_string("BTC/BTC"))
+      assert {:error, :no_native_denom} = Assets.to_native(Assets.from_string("BTC~BTC"))
     end
 
     test "handles a THOR asset whose id carries the prefix before reaching to_secured/1" do
@@ -308,11 +413,11 @@ defmodule Rujira.AssetsTest do
       assert {:ok, "thor.xyz"} = Assets.to_native(Assets.from_string("THOR.XYZ"))
     end
 
-    test "propagates the to_secured/1 error for a THOR-chain asset with no prefix in its id" do
-      # Reaching the %Asset{} fallback needs chain: "THOR" without a "THOR."
-      # or "x/" id, which from_string/1 cannot produce — hence the literal struct.
+    test "refuses a THOR-chain asset whose id does not carry the chain" do
+      # The THOR clauses key on the id, which is the canonical `CHAIN.SYMBOL`
+      # identity. An asset built without it is not recognised as a THOR asset.
       asset = %Asset{id: "RUNE", type: :native, chain: "THOR", symbol: "RUNE", ticker: "RUNE"}
-      assert {:error, :not_supported} = Assets.to_native(asset)
+      assert {:error, :no_native_denom} = Assets.to_native(asset)
     end
 
     test "passes nil through" do
@@ -352,6 +457,81 @@ defmodule Rujira.AssetsTest do
     test "uses the 8-decimal default for a native asset" do
       asset = Assets.from_string("THOR.RUNE")
       assert {:ok, %{symbol: "RUNE", decimals: 8}} = Assets.load_metadata(asset)
+    end
+  end
+
+  describe "Metadata.load_metadata/1" do
+    @denom "x/memoized-metadata-test"
+
+    setup do
+      invalidate = fn -> Memoize.invalidate(Metadata, :do_load_metadata, [@denom]) end
+      invalidate.()
+      on_exit(invalidate)
+      :ok
+    end
+
+    test "queries the node once per denom, and again after the documented invalidation" do
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: @denom} ->
+        Agent.update(calls, &(&1 + 1))
+
+        {:ok,
+         %QueryDenomMetadataResponse{
+           metadata: %DenomMetadata{
+             description: "memoized",
+             display: "MEMO",
+             name: "Memo",
+             symbol: "MEMO",
+             uri: "",
+             uri_hash: ""
+           }
+         }}
+      end)
+
+      assert {:ok, %Metadata{symbol: "MEMO"}} = Metadata.load_metadata(@denom)
+      assert {:ok, %Metadata{symbol: "MEMO"}} = Metadata.load_metadata(@denom)
+      assert Agent.get(calls, & &1) == 1
+
+      Memoize.invalidate(Metadata, :do_load_metadata, [@denom])
+
+      assert {:ok, %Metadata{symbol: "MEMO"}} = Metadata.load_metadata(@denom)
+      assert Agent.get(calls, & &1) == 2
+    end
+
+    test "falls back to the denom itself when the node has no metadata" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{} -> {:error, :not_found} end)
+
+      assert {:ok, %Metadata{symbol: @denom, display: display}} = Metadata.load_metadata(@denom)
+      assert display == String.upcase(@denom)
+    end
+
+    test "a failed query is not memoized, so a later call retries and succeeds" do
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: @denom} ->
+        case Agent.get_and_update(calls, &{&1, &1 + 1}) do
+          0 ->
+            {:error, :not_found}
+
+          _ ->
+            {:ok,
+             %QueryDenomMetadataResponse{
+               metadata: %DenomMetadata{
+                 description: "memoized",
+                 display: "MEMO",
+                 name: "Memo",
+                 symbol: "MEMO",
+                 uri: "",
+                 uri_hash: ""
+               }
+             }}
+        end
+      end)
+
+      assert {:ok, %Metadata{symbol: @denom}} = Metadata.load_metadata(@denom)
+      assert {:ok, %Metadata{symbol: "MEMO"}} = Metadata.load_metadata(@denom)
+      assert Agent.get(calls, & &1) == 2
     end
   end
 end

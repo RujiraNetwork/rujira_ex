@@ -42,7 +42,7 @@ defmodule Rujira.Thorchain.Events.Bond do
         "coin" => coin
       }) do
     with {:ok, amount} <- Amount.new(amount),
-         {:ok, coins} <- Coin.parse(coin) do
+         {:ok, coins} <- Coin.from_asset_string(coin) do
       {:ok,
        %__MODULE__{
          amount: amount,

@@ -7,6 +7,8 @@ defmodule Rujira.Assets.Metadata do
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataResponse
 
+  use Memoize
+
   defstruct decimals: 0,
             description: nil,
             display: nil,
@@ -29,7 +31,39 @@ defmodule Rujira.Assets.Metadata do
           svg_url: String.t()
         }
 
+  @doc """
+  Denom metadata. A denom's metadata is set when the denom is created and does
+  not change afterwards, so a successful node response is memoized (privately,
+  as `do_load_metadata/1`) without expiry. A failed query returns the fallback
+  below but is not memoized, so a later call retries it.
+
+  Invalidate with
+  `Memoize.invalidate(Rujira.Assets.Metadata, :do_load_metadata, [denom])`.
+  """
+  @spec load_metadata(String.t()) :: {:ok, t()}
   def load_metadata(denom) do
+    case do_load_metadata(denom) do
+      {:ok, metadata} ->
+        {:ok, metadata}
+
+      :error ->
+        Memoize.invalidate(__MODULE__, :do_load_metadata, [denom])
+
+        {:ok,
+         %__MODULE__{
+           description: "",
+           display: String.upcase(denom),
+           name: String.upcase(denom),
+           symbol: denom,
+           uri: "",
+           uri_hash: ""
+         }}
+    end
+  end
+
+  # --- Private ---
+
+  defmemop do_load_metadata(denom) do
     q = %QueryDenomMetadataRequest{denom: denom}
 
     case Rujira.Node.query(&Stub.denom_metadata/2, q) do
@@ -45,15 +79,7 @@ defmodule Rujira.Assets.Metadata do
          }}
 
       _ ->
-        {:ok,
-         %__MODULE__{
-           description: "",
-           display: String.upcase(denom),
-           name: String.upcase(denom),
-           symbol: denom,
-           uri: "",
-           uri_hash: ""
-         }}
+        :error
     end
   end
 end

@@ -17,7 +17,13 @@ defmodule Rujira.Coin do
           amount: Amount.t()
         }
 
-  @doc "Returns the native denom string for this coin's asset."
+  @doc """
+  The native bank denom for this coin's asset.
+
+  Propagates `Rujira.Assets.to_native/1`, so a coin of an asset that has no bank
+  denom — a layer-1 asset on another chain, a synth, a trade asset — returns
+  `{:error, :no_native_denom}`.
+  """
   @spec denom(t()) :: {:ok, String.t()} | {:error, term()}
   def denom(%__MODULE__{asset: asset}), do: Assets.to_native(asset)
 
@@ -50,20 +56,7 @@ defmodule Rujira.Coin do
   Supports both `"1000rune"` and `"1000 rune"` formats.
   """
   @spec parse(String.t()) :: {:ok, [t()]} | {:error, :invalid_coin_format}
-  def parse(str) when is_binary(str) do
-    str
-    |> String.split(",", trim: true)
-    |> Enum.reduce_while({:ok, []}, fn part, {:ok, acc} ->
-      case parse_one(part) do
-        {:ok, coin} -> {:cont, {:ok, [coin | acc]}}
-        {:error, _} -> {:halt, {:error, :invalid_coin_format}}
-      end
-    end)
-    |> case do
-      {:ok, coins} -> {:ok, Enum.reverse(coins)}
-      error -> error
-    end
-  end
+  def parse(str) when is_binary(str), do: parse_coins(str, &parse_one/1)
 
   defp parse_one(str) do
     trimmed = String.trim(str)
@@ -85,6 +78,52 @@ defmodule Rujira.Coin do
     case Amount.new(amount_str) do
       {:ok, amount} -> new(denom, amount)
       _ -> {:error, :invalid_amount}
+    end
+  end
+
+  @doc """
+  Parse a comma-separated THORChain asset-amount string into a list of coins.
+
+  Supports `"<amount> <ASSET.ID>"` pairs (e.g. `"100000000 BTC.BTC"`,
+  `"1 THOR.RUNE"`), where the identifier is a THORChain asset id resolved via
+  `Rujira.Assets.from_string/1`, not a bank denom. Use `parse/1` for coin
+  strings that carry denoms instead.
+  """
+  @spec from_asset_string(String.t()) :: {:ok, [t()]} | {:error, :invalid_coin_format}
+  def from_asset_string(str) when is_binary(str), do: parse_coins(str, &parse_asset_one/1)
+
+  defp parse_coins(str, build_fn) do
+    str
+    |> String.split(",", trim: true)
+    |> Enum.reduce_while({:ok, []}, fn part, {:ok, acc} ->
+      case build_fn.(part) do
+        {:ok, coin} -> {:cont, {:ok, [coin | acc]}}
+        {:error, _} -> {:halt, {:error, :invalid_coin_format}}
+      end
+    end)
+    |> case do
+      {:ok, coins} -> {:ok, Enum.reverse(coins)}
+      error -> error
+    end
+  end
+
+  defp parse_asset_one(str) do
+    case String.split(String.trim(str), " ", parts: 2) do
+      [amount_str, id] when id != "" -> build_asset(id, amount_str)
+      _ -> {:error, :invalid_coin_format}
+    end
+  end
+
+  defp build_asset(id, amount_str) do
+    case Amount.new(amount_str) do
+      {:ok, amount} ->
+        case Assets.from_id(id) do
+          {:ok, asset} -> {:ok, new(asset, amount)}
+          {:error, _} -> {:error, :invalid_coin_format}
+        end
+
+      _ ->
+        {:error, :invalid_amount}
     end
   end
 end

@@ -57,8 +57,12 @@ defmodule Rujira.Thorchain.Events.Rewards do
 
   def new(_), do: {:error, :invalid_attrs}
 
-  # Per-pool rewards are emitted with the asset string as the attribute key and
-  # a signed integer value. Keep the attributes whose key resolves to an asset.
+  # Per-pool rewards are emitted with the asset id as the attribute key (e.g.
+  # `"BTC.BTC"`) and a signed integer value. Keep the attributes whose key
+  # looks like an asset id, ignoring the fixed reward fields and metadata
+  # (e.g. `"mode"`).
+  @asset_key_regex ~r/^[A-Z0-9]+[.\-\/~]/
+
   defp pool_rewards(attrs) do
     attrs
     |> Enum.reduce_while({:ok, []}, &pool_reward/2)
@@ -68,10 +72,11 @@ defmodule Rujira.Thorchain.Events.Rewards do
     end
   end
 
-  defp pool_reward({denom, amount}, {:ok, acc}) do
-    case Assets.from_denom(denom) do
-      {:ok, asset} -> accumulate(asset, amount, acc)
-      {:error, _} -> {:cont, {:ok, acc}}
+  defp pool_reward({key, amount}, {:ok, acc}) do
+    if Regex.match?(@asset_key_regex, key) do
+      accumulate(Assets.from_string(key), amount, acc)
+    else
+      {:cont, {:ok, acc}}
     end
   end
 

@@ -48,7 +48,7 @@ defmodule Rujira.Thorchain.Events.Withdraw do
         "emit_asset" => emit_asset,
         "emit_rune" => emit_rune
       }) do
-    with {:ok, coins} <- Coin.parse(coin),
+    with {:ok, coins} <- Coin.from_asset_string(coin),
          {:ok, units} <- Amount.new(units),
          {:ok, basis_points} <- Math.to_integer(basis_points),
          {:ok, asymmetry} <- Math.to_decimal(asymmetry),
