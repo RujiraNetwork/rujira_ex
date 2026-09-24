@@ -7,6 +7,7 @@ defmodule Rujira.Ghost.Vault.Account do
   """
 
   alias Rujira.Amount
+  alias Rujira.Assets
   alias Rujira.Bank
   alias Rujira.Ghost.Vault
   alias Rujira.Ghost.Vault.Status
@@ -42,7 +43,8 @@ defmodule Rujira.Ghost.Vault.Account do
   @spec load(Vault.t(), String.t()) :: {:ok, t()} | {:error, term()}
   def load(%Vault{} = vault, account) do
     with {:ok, vault} <- Status.load(vault),
-         {:ok, shares} <- Bank.balance(account, vault.receipt_denom) do
+         {:ok, asset} <- Assets.from_denom(vault.receipt_denom),
+         {:ok, %{amount: shares}} <- Bank.balance(account, asset) do
       {:ok, new(vault, account, shares)}
     else
       _ -> {:ok, new(vault, account)}
