@@ -10,6 +10,7 @@ defmodule Rujira.Fin do
   alias Rujira.Fin.Order
   alias Rujira.Fin.Pair
   alias Rujira.Fin.Range
+  alias Rujira.Fin.Simulation
 
   # --- Pair ---
 
@@ -46,4 +47,9 @@ defmodule Rujira.Fin do
   defdelegate range_from_id(id), to: Range, as: :from_id
   defdelegate range_tvl(pair), to: Range, as: :tvl
   defdelegate total_range_tvl(), to: Range, as: :total_tvl
+
+  # --- Simulation ---
+
+  defdelegate simulate(pair, offer), to: Simulation
+  defdelegate simulation_from_id(id), to: Simulation, as: :from_id
 end
