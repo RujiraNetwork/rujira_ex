@@ -1,6 +1,8 @@
 defmodule Rujira.Bank.SupplyTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias Cosmos.Bank.V1beta1.QuerySupplyOfRequest
   alias Cosmos.Bank.V1beta1.QuerySupplyOfResponse
   alias Cosmos.Bank.V1beta1.QueryTotalSupplyRequest
@@ -57,16 +59,41 @@ defmodule Rujira.Bank.SupplyTest do
               ]} = Supply.list()
     end
 
-    test "errors the whole call on an unresolvable denom" do
+    test "skips an unresolvable denom and keeps the rest" do
       MockNode.expect(fn %QueryTotalSupplyRequest{} ->
         {:ok,
          %QueryTotalSupplyResponse{
-           supply: [%ChainCoin{denom: "not a denom", amount: "1000"}],
+           supply: [
+             %ChainCoin{denom: "rune", amount: "1000"},
+             %ChainCoin{denom: "ibc/ABC", amount: "7"},
+             %ChainCoin{denom: "x/ruji", amount: "500"}
+           ],
            pagination: %PageResponse{next_key: ""}
          }}
       end)
 
-      assert {:error, :invalid_denom} = Supply.list()
+      log =
+        capture_log(fn ->
+          assert {:ok,
+                  [
+                    %Coin{asset: @rune, amount: 1000},
+                    %Coin{asset: @ruji, amount: 500}
+                  ]} = Supply.list()
+        end)
+
+      assert log =~ ~s(skipping unrecognised denom "ibc/ABC")
+    end
+
+    test "still errors the whole call on an unparseable amount" do
+      MockNode.expect(fn %QueryTotalSupplyRequest{} ->
+        {:ok,
+         %QueryTotalSupplyResponse{
+           supply: [%ChainCoin{denom: "rune", amount: "not a number"}],
+           pagination: %PageResponse{next_key: ""}
+         }}
+      end)
+
+      assert {:error, :invalid_amount} = Supply.list()
     end
 
     test "resolves a secured asset denom" do

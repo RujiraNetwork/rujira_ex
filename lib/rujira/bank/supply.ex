@@ -9,6 +9,7 @@ defmodule Rujira.Bank.Supply do
   alias Rujira.Assets
   alias Rujira.Assets.Asset
   alias Rujira.Coin
+  alias Rujira.Logger
 
   # --- Queries ---
 
@@ -49,5 +50,15 @@ defmodule Rujira.Bank.Supply do
   defp total_supply_request(key),
     do: %QueryTotalSupplyRequest{pagination: %PageRequest{key: key}}
 
-  defp coins_to_coins(coins), do: Rujira.Enum.reduce_while_ok(coins, &Coin.new/1)
+  defp coins_to_coins(coins), do: Rujira.Enum.reduce_while_ok(coins, &to_coin/1)
+
+  # One unrecognised denom must not fail the whole list: log and skip it.
+  defp to_coin(coin), do: skip_invalid_denom(Coin.new(coin), coin)
+
+  defp skip_invalid_denom({:error, :invalid_denom}, %{denom: denom}) do
+    Logger.warning(__MODULE__, "skipping unrecognised denom #{inspect(denom)}")
+    :skip
+  end
+
+  defp skip_invalid_denom(result, _coin), do: result
 end
