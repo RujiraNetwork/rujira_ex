@@ -255,8 +255,8 @@ defmodule Rujira.EventsTest do
 
   describe "parse/1 — unmatched" do
     test "returns default event for not-yet-implemented protocols" do
-      assert {:ok, %Rujira.Events.Event{type: "wasm-rujira-bow/swap", attributes: %{}}} =
-               Events.parse(%{type: "wasm-rujira-bow/swap", attributes: %{}})
+      assert {:ok, %Rujira.Events.Event{type: "wasm-rujira-merge/deposit", attributes: %{}}} =
+               Events.parse(%{type: "wasm-rujira-merge/deposit", attributes: %{}})
     end
 
     test "returns default event for unknown events" do

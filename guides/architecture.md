@@ -4,7 +4,7 @@
 
 Rujira is a domain library for querying and parsing blockchain protocol data. It provides:
 
-- **Protocol modules** — query APIs for each DeFi protocol (FIN, Bow, etc.)
+- **Protocol modules** — query APIs for each DeFi protocol (FIN, Ghost, etc.)
 - **Event parsing** — transforms raw chain events into typed structs
 - **Asset resolution** — maps chain denominations to canonical asset types
 - **Contract queries** — CosmWasm smart contract interaction via gRPC
@@ -152,14 +152,14 @@ end
 
 ## Adding a New Protocol
 
-Follow this exact structure. Example: adding `Bow` protocol.
+Follow this exact structure. Example: adding `Merge` protocol.
 
 ### 1. Create the envelope struct
 
-`lib/rujira/bow/events/event.ex`:
+`lib/rujira/merge/events/event.ex`:
 
 ```elixir
-defmodule Rujira.Bow.Events.Event do
+defmodule Rujira.Merge.Events.Event do
   defstruct address: nil, data: nil
 
   @type t :: %__MODULE__{address: String.t() | nil, data: struct()}
@@ -174,19 +174,18 @@ end
 
 ### 2. Create sub-event structs
 
-`lib/rujira/bow/events/swap.ex`:
+`lib/rujira/merge/events/deposit.ex`:
 
 ```elixir
-defmodule Rujira.Bow.Events.Swap do
-  defstruct pool: nil, offer: nil, return: nil
+defmodule Rujira.Merge.Events.Deposit do
+  defstruct owner: nil, amount: nil
 
-  @type t :: %__MODULE__{pool: String.t(), offer: Amount.t() | nil, return: Amount.t() | nil}
+  @type t :: %__MODULE__{owner: String.t(), amount: non_neg_integer()}
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
-  def new(%{"pool" => pool} = attrs) do
-    with {:ok, offer} <- Amount.new(Map.get(attrs, "offer")),
-         {:ok, return_amt} <- Amount.new(Map.get(attrs, "return")) do
-      {:ok, %__MODULE__{pool: pool, offer: offer, return: return_amt}}
+  def new(%{"owner" => owner, "amount" => amount} = attrs) do
+    with {:ok, amount_int} <- Math.to_integer(amount) do
+      {:ok, %__MODULE__{owner: owner, amount: amount_int}}
     end
   end
 
@@ -203,30 +202,30 @@ Rules:
 
 ### 3. Create the protocol parser
 
-`lib/rujira/bow/events.ex`:
+`lib/rujira/merge/events.ex`:
 
 ```elixir
-defmodule Rujira.Bow.Events do
+defmodule Rujira.Merge.Events do
   alias Rujira.Events.Event
-  alias Rujira.Bow.Events.Event, as: BowEvent
-  alias Rujira.Bow.Events.Swap
+  alias Rujira.Merge.Events.Event, as: MergeEvent
+  alias Rujira.Merge.Events.Deposit
 
-  @spec parse(Event.t()) :: {:ok, BowEvent.t()} | {:error, term()}
+  @spec parse(Event.t()) :: {:ok, MergeEvent.t()} | {:error, term()}
 
   def parse(%Event{
-        type: "wasm-rujira-bow/" <> action,
+        type: "wasm-rujira-merge/" <> action,
         attributes: %{"_contract_address" => address} = attrs
       } = event) do
     case new(action, attrs) do
-      {:ok, data} -> {:ok, BowEvent.new(address, data)}
+      {:ok, data} -> {:ok, MergeEvent.new(address, data)}
       {:error, _} = err -> err
-      :pass -> {:ok, BowEvent.new(address, event)}
+      :pass -> {:ok, MergeEvent.new(address, event)}
     end
   end
 
-  def parse(%Event{} = event), do: {:ok, BowEvent.new(nil, event)}
+  def parse(%Event{} = event), do: {:ok, MergeEvent.new(nil, event)}
 
-  defp new("swap", attrs), do: Swap.new(attrs)
+  defp new("deposit", attrs), do: Deposit.new(attrs)
   defp new(_, _), do: :pass
 end
 ```
@@ -236,20 +235,20 @@ end
 In `lib/rujira/events.ex`, add above the catch-all:
 
 ```elixir
-defp route(%Event{type: "wasm-rujira-bow/" <> _} = event),
-  do: Rujira.Bow.Events.parse(event)
+defp route(%Event{type: "wasm-rujira-merge/" <> _} = event),
+  do: Rujira.Merge.Events.parse(event)
 ```
 
 ### 5. Create the resource module
 
-`lib/rujira/bow/pool.ex` — struct + `new/1` + `get/list/load` queries (see Resource module template above).
+`lib/rujira/merge/pool.ex` — struct + `new/1` + `get/list/load` queries (see Resource module template above).
 
 ### 6. Create the facade
 
-`lib/rujira/bow.ex` — pure `defdelegate` to Pool (see Facade module template above).
+`lib/rujira/merge.ex` — pure `defdelegate` to Pool (see Facade module template above).
 
 ### 7. Add tests
 
-- `test/rujira/bow/events_test.exs` — test each sub-event via `Protocol.Events.parse/1`
+- `test/rujira/merge/events_test.exs` — test each sub-event via `Protocol.Events.parse/1`
 - `test/rujira/events_test.exs` — add routing tests
-- Assert envelope shape: `{:ok, %BowEvent{address: "...", data: %Swap{...}}}`
+- Assert envelope shape: `{:ok, %MergeEvent{address: "...", data: %Deposit{...}}}`

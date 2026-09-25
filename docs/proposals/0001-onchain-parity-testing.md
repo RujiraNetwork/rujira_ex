@@ -12,7 +12,7 @@
 > descriptions of the current tree.
 
 A plan for keeping `rujira_ex` (event parsers + resource modules) honest against
-the actual deployed Fin / Bow / Ghost / … CosmWasm contracts at
+the actual deployed Fin / Ghost / … CosmWasm contracts at
 [gitlab.com/thorchain/rujira](https://gitlab.com/thorchain/rujira).
 
 ## TL;DR

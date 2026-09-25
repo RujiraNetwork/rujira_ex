@@ -14,7 +14,7 @@ defmodule Rujira.Deployments do
         # "rujira-thorchain-swap") are mapped by default; a consumer entry for
         # the same contract name takes precedence over the built-in default,
         # so consumers can override or extend the mapping.
-        protocol_modules: %{"rujira-bow" => MyApp.Bow},
+        protocol_modules: %{"rujira-merge" => MyApp.Merge},
 
         # Addresses to exclude from the resolved target list (e.g. legacy
         # or unmaintained deployments).

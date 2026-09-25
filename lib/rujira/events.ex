@@ -107,7 +107,6 @@ defmodule Rujira.Events do
        do: Rujira.Thorchain.Events.parse(event)
 
   # --- Not yet implemented ---
-  # defp route(%Event{type: "wasm-rujira-bow/" <> _} = event), do: Rujira.Bow.Events.parse(event)
   # defp route(%Event{type: "wasm-rujira-ghost-credit/" <> _} = event), do: Rujira.Ghost.Credit.Events.parse(event)
   # defp route(%Event{type: "wasm-rujira-merge/" <> _} = event), do: Rujira.Merge.Events.parse(event)
   # defp route(%Event{type: "wasm-rujira-ventures-factory/" <> _} = event), do: Rujira.Keiko.Events.parse(event)

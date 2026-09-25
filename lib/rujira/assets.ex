@@ -3,7 +3,7 @@ defmodule Rujira.Assets do
   Asset resolution for Rujira.
 
   Merges base-layer asset handling (chain/symbol/denom parsing) with
-  app-layer token support (x/ruji, x/staking-*, x/bow-xyk-*, etc.).
+  app-layer token support (x/ruji, x/staking-*, etc.).
   """
 
   alias Rujira.Assets.Asset
@@ -240,10 +240,6 @@ defmodule Rujira.Assets do
        }}
     end
   end
-
-  # TODO: implement when Bow protocol is added to core
-  # def from_denom("x/bow-xyk-" <> _id = _denom) do
-  # end
 
   def from_denom("x/nami-index-" <> _ = denom) do
     with {:ok, metadata} <- load_metadata(%Asset{id: denom}) do
