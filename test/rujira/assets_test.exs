@@ -107,6 +107,27 @@ defmodule Rujira.AssetsTest do
                ticker: "USDC"
              } = Assets.from_string("ETH.USDC-0X123")
     end
+
+    test "normalises lowercase and mixed-case ids to the uppercase asset" do
+      assert Assets.from_string("eth.eth") == Assets.from_string("ETH.ETH")
+      assert Assets.from_string("Eth.Usdc-0xAbC") == Assets.from_string("ETH.USDC-0XABC")
+      assert Assets.from_string("btc-btc") == Assets.from_string("BTC-BTC")
+      assert Assets.from_string("btc~btc") == Assets.from_string("BTC~BTC")
+      assert Assets.from_string("btc/btc") == Assets.from_string("BTC/BTC")
+    end
+
+    test "derives type, decimals and conversions from a lowercase id" do
+      eth = Assets.from_string("eth.eth")
+      assert %Asset{id: "ETH.ETH", type: :layer_1, chain: "ETH"} = eth
+      assert Assets.decimals(eth) == 18
+      assert {:ok, "ETH.ETH"} = Assets.pool_id(eth)
+      assert {:ok, "rune"} = Assets.to_native(Assets.from_string("thor.rune"))
+    end
+
+    test "keeps the case of x/ ids" do
+      assert %Asset{id: "x/ruji", chain: "THOR"} = Assets.from_string("x/ruji")
+      assert %Asset{id: "x/staking-ruji"} = Assets.from_string("x/staking-ruji")
+    end
   end
 
   describe "from_id/1" do
@@ -126,9 +147,45 @@ defmodule Rujira.AssetsTest do
       assert {:ok, %Asset{id: "x/ruji"}} = Assets.from_id("x/ruji")
     end
 
+    test "accepts real THORChain ids" do
+      for id <- [
+            "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
+            "THOR.RUNE",
+            "BTC~BTC",
+            "BTC/BTC",
+            "BTC-BTC",
+            "GAIA.ATOM"
+          ] do
+        assert {:ok, %Asset{id: ^id}} = Assets.from_id(id)
+      end
+    end
+
+    test "normalises case like from_string/1" do
+      assert {:ok, asset} = Assets.from_id("eth.usdc-0xabc")
+      assert asset == Assets.from_string("ETH.USDC-0XABC")
+      assert {:ok, %Asset{id: "THOR.RUNE"}} = Assets.from_id("Thor.Rune")
+    end
+
+    test "keeps the case of x/ ids" do
+      assert {:ok, %Asset{id: "x/staking-ruji"}} = Assets.from_id("x/staking-ruji")
+    end
+
     test "returns an error instead of raising on a malformed id" do
-      assert {:error, :invalid_asset_id} = Assets.from_id("NOTANASSET")
-      assert {:error, :invalid_asset_id} = Assets.from_id("")
+      for id <- [
+            "",
+            "NOTANASSET",
+            "BTC",
+            ".BTC",
+            "BTC.",
+            "BTC..BTC",
+            "BTC.BTC.BTC",
+            "B1C.BTC",
+            "BTC.BT$C",
+            "ETH.USDC-0X1-0X2",
+            "x/"
+          ] do
+        assert {:error, :invalid_asset_id} = Assets.from_id(id)
+      end
     end
   end
 
@@ -219,6 +276,17 @@ defmodule Rujira.AssetsTest do
                Assets.from_denom("x/staking-rune")
     end
 
+    test "falls back to a token-factory asset for an unrecognised staked denom" do
+      assert {:ok,
+              %Asset{
+                id: "x/staking-uruji",
+                type: :native,
+                chain: "THOR",
+                symbol: "STAKING-URUJI",
+                ticker: "STAKING-URUJI"
+              }} = Assets.from_denom("x/staking-uruji")
+    end
+
     test "upcases generic x/ denoms" do
       assert {:ok, %Asset{id: "x/foo", symbol: "FOO", ticker: "FOO", chain: "THOR"}} =
                Assets.from_denom("x/foo")
@@ -234,8 +302,18 @@ defmodule Rujira.AssetsTest do
                Assets.from_denom("btc-btc")
     end
 
-    test "rewrites the BNB chain to BSC" do
-      assert {:ok, %Asset{chain: "BSC"}} = Assets.from_denom("bnb-bnb")
+    test "round-trips BNB through its BSC secured denom" do
+      assert {:ok, %Asset{id: "BSC-BNB", chain: "BSC", type: :secured} = secured} =
+               Assets.from_denom("bsc-bnb")
+
+      assert {:ok, "bsc-bnb"} = Assets.to_native(secured)
+      assert {:ok, "BSC.BNB"} = Assets.pool_id(secured)
+      assert {:ok, ^secured} = Assets.to_secured(Assets.from_shortcode("BNB"))
+    end
+
+    test "never rewrites a denom's chain, so every denom round-trips" do
+      assert {:ok, %Asset{chain: "BNB"} = asset} = Assets.from_denom("bnb-bnb")
+      assert {:ok, "bnb-bnb"} = Assets.to_native(asset)
     end
 
     test "resolves synth and trade denoms" do
@@ -317,6 +395,23 @@ defmodule Rujira.AssetsTest do
     test "converts a simple layer_1 asset" do
       assert {:ok, %Asset{id: "BTC-BTC", type: :secured}} =
                Assets.to_secured(Assets.from_string("BTC.BTC"))
+    end
+
+    test "returns a secured asset unchanged" do
+      asset = Assets.from_string("BTC-BTC")
+      assert {:ok, ^asset} = Assets.to_secured(asset)
+    end
+
+    test "refuses trade assets" do
+      assert {:error, :not_supported} = Assets.to_secured(Assets.from_string("BTC~BTC"))
+    end
+
+    test "refuses synth assets" do
+      assert {:error, :not_supported} = Assets.to_secured(Assets.from_string("BTC/BTC"))
+    end
+
+    test "refuses token-factory denoms" do
+      assert {:error, :not_supported} = Assets.to_secured(Assets.from_string("x/ruji"))
     end
   end
 

@@ -107,12 +107,16 @@ does not exist for that asset is an error, never a silent substitution:
 | Conversion | Returns | When the form does not exist |
 |------------|---------|------------------------------|
 | `to_native/1` | the bank denom (`rune`, `x/ruji`, `btc-btc`) | `{:error, :no_native_denom}` — layer-1 on another chain, synth, trade |
-| `to_secured/1` | the secured `Asset` (`BTC-BTC`) | `{:error, :not_supported}` — THOR-chain assets |
+| `to_secured/1` | the secured `Asset` (`BTC-BTC`) of a layer-1 asset; a secured asset unchanged | `{:error, :not_supported}` — THOR-chain assets, token-factory (`x/`) denoms, synth, trade |
 | `to_layer1/1` | the layer-1 `Asset` (`BTC.BTC`) | `{:error, :not_supported}` — token-factory (`x/`) denoms |
 | `pool_id/1` | the THORChain pool id string | propagates `to_layer1/1` |
 
 `from_denom/1` is the inverse of `to_native/1` and takes bank denoms only. An asset id
-such as `BTC.BTC` is not a denom — resolve those with `from_string/1` / `from_id/1`.
+such as `BTC.BTC` is not a denom — resolve those with `from_id/1`, which validates the
+id and returns `{:error, :invalid_asset_id}` on a malformed one, or `from_string/1`,
+which trusts its input and returns a bare `Asset`. Both are case-insensitive and
+normalise chain and symbol to uppercase (`eth.eth` → `ETH.ETH`); `x/…` token-factory
+ids are case-sensitive and kept as given.
 
 ## Struct Defaults
 
@@ -173,6 +177,7 @@ Use consistent error atoms across the codebase:
 | `:invalid_decimal` | `Math.to_decimal/1` fails |
 | `:invalid_id` | ID format doesn't match expected pattern |
 | `:invalid_denom` | Denom not recognized by `Assets.from_denom/1` |
+| `:invalid_asset_id` | Asset id rejected by `Assets.from_id/1` |
 | `:no_native_denom` | `Assets.to_native/1` on an asset that is not held as a bank denom |
 | `:invalid_coin_format` | `Coin.parse/1` cannot tokenize the input |
 | `:invalid_event` | `Events.parse/1` given a non-event shape |

@@ -15,6 +15,10 @@ defmodule Rujira.Assets do
   # chain, then a lowercase alphanumeric symbol with at most one `-<id>` suffix.
   @denom_regex ~r|^([a-z]+)([-/~])([a-z0-9]+(?:-[a-z0-9]+)?)$|
 
+  # A layer-1 (`.`), secured (`-`), synth (`/`) or trade (`~`) asset id: the same
+  # shape as a denom, but case-insensitive and also accepting `.`.
+  @asset_id_regex ~r|^[a-z]+[.\-/~][a-z0-9]+(?:-[a-z0-9]+)?$|i
+
   # --- Metadata ---
 
   @spec load_metadata(Asset.t()) :: {:ok, map()} | {:error, term()}
@@ -30,31 +34,33 @@ defmodule Rujira.Assets do
 
   # --- from_string ---
 
+  @doc """
+  Builds an `Asset` from a THORChain asset id (`CHAIN.SYMBOL`, `CHAIN-SYMBOL`,
+  `CHAIN/SYMBOL`, `CHAIN~SYMBOL`, or an `x/…` id).
+
+  Chain and symbol are case-insensitive and normalised to uppercase, as THORChain
+  names them, so `eth.eth` and `ETH.ETH` build the same asset. `x/…` ids are
+  case-sensitive token-factory denoms and are kept as given.
+
+  Trusts its input and raises on an id with no delimiter. Use `from_id/1` to
+  validate an id from an untrusted source.
+  """
   @spec from_string(String.t()) :: Asset.t()
-  def from_string(id) do
-    %Asset{
-      id: id,
-      type: type(id),
-      chain: chain(id),
-      symbol: symbol(id),
-      ticker: ticker(id)
-    }
-  end
+  def from_string("x/" <> _ = id), do: build_asset(id)
+  def from_string(id), do: build_asset(String.upcase(id))
 
   @doc """
-  Resolves a THORChain asset id (`CHAIN.SYMBOL`, `CHAIN-SYMBOL`, `CHAIN/SYMBOL`,
-  `CHAIN~SYMBOL`, or an `x/…` id) into an `Asset`, without raising on a
-  malformed id.
+  Validates and resolves a THORChain asset id into an `Asset` — the
+  non-raising counterpart of `from_string/1`.
+
+  An id is an alphabetic chain, one delimiter (`.` layer-1, `-` secured, `/`
+  synth, `~` trade) and an alphanumeric symbol with at most one `-<id>` suffix,
+  in any case; or a non-empty `x/…` token-factory id. Anything else returns
+  `{:error, :invalid_asset_id}`.
   """
   @spec from_id(String.t()) :: {:ok, Asset.t()} | {:error, :invalid_asset_id}
-  def from_id("x/" <> _ = id), do: {:ok, from_string(id)}
-
-  def from_id(id) do
-    case String.split(id, @delimiters, parts: 2) do
-      [chain, symbol] when chain != "" and symbol != "" -> {:ok, from_string(id)}
-      _ -> {:error, :invalid_asset_id}
-    end
-  end
+  def from_id("x/" <> rest = id) when rest != "", do: {:ok, from_string(id)}
+  def from_id(id), do: validate_id(String.match?(id, @asset_id_regex), id)
 
   # --- from_shortcode ---
 
@@ -170,16 +176,22 @@ defmodule Rujira.Assets do
   # --- to_secured ---
 
   @doc """
-  The secured `Asset` for a layer-1, synth or trade asset — the form THORChain
-  credits deposits from other chains under. THOR-chain assets have no secured
-  form.
+  The secured `Asset` for a layer-1 asset on another chain — the form THORChain
+  credits deposits from other chains under (`BTC.BTC` becomes `BTC-BTC`).
+
+  A secured asset is returned unchanged. Only layer-1 assets can be secured:
+  THOR-chain assets, token-factory (`x/`) denoms, synths and trade assets return
+  `{:error, :not_supported}`.
   """
   @spec to_secured(Asset.t()) :: {:ok, Asset.t()} | {:error, :not_supported}
   def to_secured(%Asset{chain: "THOR"}), do: {:error, :not_supported}
+  def to_secured(%Asset{type: :secured} = a), do: {:ok, a}
 
-  def to_secured(%Asset{id: id} = a) do
-    {:ok, %{a | type: :secured, id: String.replace(id, ~r/[\.\-\/]/, "-", global: false)}}
+  def to_secured(%Asset{type: :layer_1, id: id} = a) do
+    {:ok, %{a | type: :secured, id: String.replace(id, ".", "-", global: false)}}
   end
+
+  def to_secured(%Asset{}), do: {:error, :not_supported}
 
   # --- to_layer1 ---
 
@@ -221,6 +233,10 @@ defmodule Rujira.Assets do
   suffix. That validation is what keeps `x/btc-btc` a token-factory denom rather
   than a secured asset.
 
+  A staking receipt `x/staking-<bond denom>` takes its symbol from the bond denom
+  (`sRUNE`); when the bond denom is not recognised it resolves as a plain
+  token-factory denom rather than failing.
+
   Asset ids such as `BTC.BTC` are not denoms; use `from_string/1` for those.
   """
   @spec from_denom(String.t()) :: {:ok, Asset.t()} | {:error, :invalid_denom}
@@ -228,18 +244,7 @@ defmodule Rujira.Assets do
     {:ok, %Asset{id: "THOR.RUJI", type: :native, chain: "THOR", symbol: "RUJI", ticker: "RUJI"}}
   end
 
-  def from_denom("x/staking-" <> id = denom) do
-    with {:ok, staked} <- from_denom(id) do
-      {:ok,
-       %Asset{
-         id: denom,
-         type: :native,
-         chain: "THOR",
-         symbol: "s" <> staked.symbol,
-         ticker: "s" <> staked.ticker
-       }}
-    end
-  end
+  def from_denom("x/staking-" <> id = denom), do: build_staking(from_denom(id), denom)
 
   def from_denom("x/nami-index-" <> _ = denom) do
     with {:ok, metadata} <- load_metadata(%Asset{id: denom}) do
@@ -267,16 +272,7 @@ defmodule Rujira.Assets do
     end
   end
 
-  def from_denom("x/" <> id = denom) do
-    {:ok,
-     %Asset{
-       id: denom,
-       type: :native,
-       chain: "THOR",
-       symbol: String.upcase(id),
-       ticker: String.upcase(id)
-     }}
-  end
+  def from_denom("x/" <> _ = denom), do: {:ok, token_factory(denom)}
 
   def from_denom("rune") do
     {:ok, %Asset{id: "THOR.RUNE", type: :native, chain: "THOR", symbol: "RUNE", ticker: "RUNE"}}
@@ -318,6 +314,19 @@ defmodule Rujira.Assets do
 
   # --- Private ---
 
+  defp build_asset(id) do
+    %Asset{
+      id: id,
+      type: type(id),
+      chain: chain(id),
+      symbol: symbol(id),
+      ticker: ticker(id)
+    }
+  end
+
+  defp validate_id(true, id), do: {:ok, from_string(id)}
+  defp validate_id(false, _id), do: {:error, :invalid_asset_id}
+
   defp build_denom(nil, _denom), do: {:error, :invalid_denom}
 
   defp build_denom([_, chain, _delimiter, symbol], denom) do
@@ -328,14 +337,34 @@ defmodule Rujira.Assets do
      %Asset{
        id: id,
        type: type(id),
-       chain: rename_chain(String.upcase(chain)),
+       chain: String.upcase(chain),
        symbol: String.upcase(symbol),
        ticker: String.upcase(ticker)
      }}
   end
 
-  # Binance Beacon Chain assets are still emitted as `bnb-*`; THORChain now
-  # settles them on BSC.
-  defp rename_chain("BNB"), do: "BSC"
-  defp rename_chain(chain), do: chain
+  defp build_staking({:ok, staked}, denom) do
+    {:ok,
+     %Asset{
+       id: denom,
+       type: :native,
+       chain: "THOR",
+       symbol: "s" <> staked.symbol,
+       ticker: "s" <> staked.ticker
+     }}
+  end
+
+  # The staking contract mints `x/staking-{bond_denom}` for any bond denom, so an
+  # unrecognised bond denom falls back to a plain token-factory asset.
+  defp build_staking({:error, _}, denom), do: {:ok, token_factory(denom)}
+
+  defp token_factory("x/" <> id = denom) do
+    %Asset{
+      id: denom,
+      type: :native,
+      chain: "THOR",
+      symbol: String.upcase(id),
+      ticker: String.upcase(id)
+    }
+  end
 end
