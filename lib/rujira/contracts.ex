@@ -237,7 +237,7 @@ defmodule Rujira.Contracts do
   end
 
   @spec query_state_smart(String.t(), map()) ::
-          {:ok, map()} | {:error, Node.rpc_error()}
+          {:ok, map() | nil} | {:error, Node.rpc_error()}
   def query_state_smart(address, query) do
     with {:ok, %{data: data}} <-
            Node.query(&Stub.smart_contract_state/2, %QuerySmartContractStateRequest{
@@ -249,7 +249,7 @@ defmodule Rujira.Contracts do
   end
 
   @spec query_state_smart(String.t(), map(), keyword()) ::
-          {:ok, map()} | {:error, Node.rpc_error()}
+          {:ok, map() | nil} | {:error, Node.rpc_error()}
   def query_state_smart(address, query, opts) do
     with {:ok, %{data: data}} <-
            Node.query(

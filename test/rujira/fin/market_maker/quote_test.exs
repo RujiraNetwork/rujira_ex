@@ -34,6 +34,11 @@ defmodule Rujira.Fin.MarketMaker.QuoteTest do
     test "errors on missing fields" do
       assert {:error, :invalid_attrs} = Quote.new(%{}, %{})
     end
+
+    test "returns not_found for a null response (nothing to quote)", %{btc: btc, rune: rune} do
+      assert {:error, :not_found} =
+               Quote.new(%{address: "thor1mm", offer: btc, ask: rune}, nil)
+    end
   end
 
   describe "query/4" do
@@ -53,6 +58,12 @@ defmodule Rujira.Fin.MarketMaker.QuoteTest do
 
       assert Decimal.equal?(price, Decimal.new("1.5"))
       assert size.amount == 1_000_000
+    end
+
+    test "returns not_found when the market maker responds null", %{btc: btc, rune: rune} do
+      MockNode.expect(fn %{"quote" => _} -> MockNode.ok(nil) end)
+
+      assert {:error, :not_found} = Quote.query("thor1mm", btc, rune)
     end
 
     test "serializes a decimal min_price on the wire", %{btc: btc, rune: rune} do

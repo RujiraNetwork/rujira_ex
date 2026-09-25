@@ -33,7 +33,7 @@ defmodule Rujira.Fin.MarketMaker.Quote do
 
   # --- Construction ---
 
-  @spec new(map(), map()) :: {:ok, t()} | {:error, term()}
+  @spec new(map(), map() | nil) :: {:ok, t()} | {:error, term()}
   def new(
         %{address: address, offer: %Asset{} = offer, ask: %Asset{} = ask},
         %{"price" => price, "size" => size}
@@ -51,6 +51,9 @@ defmodule Rujira.Fin.MarketMaker.Quote do
     end
   end
 
+  # The contract returns `Option<QuoteResponse>`: `null` means nothing to quote.
+  def new(_, nil), do: {:error, :not_found}
+
   def new(_, _), do: {:error, :invalid_attrs}
 
   # --- Queries ---
@@ -58,6 +61,9 @@ defmodule Rujira.Fin.MarketMaker.Quote do
   @doc """
   Queries a market maker at `address` for a quote swapping `offer` into
   `ask`, optionally bounded by `min_price`.
+
+  A market maker with nothing to quote (the contract responds `null`) returns
+  `{:error, :not_found}`.
 
   Memoized (privately, as `do_query/4`) on the typed
   `(address, offer, ask, min_price)` tuple. `min_price` is normalised via
