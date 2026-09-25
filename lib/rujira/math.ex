@@ -78,6 +78,17 @@ defmodule Rujira.Math do
   end
 
   @doc """
+  Multiply two numbers and round up to integer
+  """
+  @spec mul_ceil(number() | Decimal.t(), number() | Decimal.t()) :: integer()
+  def mul_ceil(a, b) do
+    Decimal.new(a)
+    |> Decimal.mult(Decimal.new(b))
+    |> Decimal.round(0, :ceiling)
+    |> Decimal.to_integer()
+  end
+
+  @doc """
   Divide two numbers and round down to integer
   """
   @spec div_floor(number() | Decimal.t(), number() | Decimal.t()) :: integer()

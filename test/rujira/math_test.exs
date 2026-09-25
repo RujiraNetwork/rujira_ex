@@ -115,6 +115,21 @@ defmodule Rujira.MathTest do
     end
   end
 
+  describe "mul_ceil/2" do
+    test "multiplies and ceils" do
+      assert Math.mul_ceil(3, 4) == 12
+      assert Math.mul_ceil(Decimal.new("2.5"), 3) == 8
+    end
+
+    test "ceils towards positive infinity" do
+      assert Math.mul_ceil(Decimal.new("-2.5"), 1) == -2
+    end
+
+    test "handles zero" do
+      assert Math.mul_ceil(0, 100) == 0
+    end
+  end
+
   describe "div_floor/2" do
     test "divides and floors" do
       assert Math.div_floor(10, 3) == 3

@@ -8,7 +8,7 @@ defmodule Rujira.Fin.OrderTest do
     test "parses order with fixed price from pair context" do
       pair = %{
         address: "thor1pair",
-        fee_taker: "0.0015",
+        fee_maker: "0.0015",
         token_quote: "eth-usdc-0xabc",
         token_base: "gaia-atom"
       }
@@ -38,10 +38,56 @@ defmodule Rujira.Fin.OrderTest do
       assert order.filled == 50_000_000
     end
 
+    test "charges filled amount the maker fee, rounded up" do
+      pair = %{
+        address: "thor1pair",
+        fee_maker: "0.0015",
+        token_quote: "eth-usdc-0xabc",
+        token_base: "gaia-atom"
+      }
+
+      attrs = %{
+        "owner" => "thor1owner",
+        "side" => "base",
+        "price" => %{"fixed" => "1000000"},
+        "rate" => "1.5",
+        "updated_at" => "1700000000000000000",
+        "offer" => "100000001",
+        "remaining" => "50000000",
+        "filled" => "50000001"
+      }
+
+      # 50_000_001 * 0.0015 = 75_000.0015 -> ceil 75_001 (floor would be 75_000)
+      assert {:ok, %Order{filled_fee: 75_001}} = Order.new(pair, attrs)
+    end
+
+    test "ignores the taker fee for filled orders" do
+      pair = %{
+        address: "thor1pair",
+        fee_taker: "0.5",
+        fee_maker: "0.001",
+        token_quote: "eth-usdc-0xabc",
+        token_base: "gaia-atom"
+      }
+
+      attrs = %{
+        "owner" => "thor1owner",
+        "side" => "base",
+        "price" => %{"fixed" => "1000000"},
+        "rate" => "1.5",
+        "updated_at" => "1700000000000000000",
+        "offer" => "100000000",
+        "remaining" => "50000000",
+        "filled" => "50000000"
+      }
+
+      assert {:ok, %Order{filled_fee: 50_000}} = Order.new(pair, attrs)
+    end
+
     test "parses order with oracle price" do
       pair = %{
         address: "thor1pair",
-        fee_taker: "0.0015",
+        fee_maker: "0.0015",
         token_quote: "eth-usdc-0xabc",
         token_base: "gaia-atom"
       }

@@ -72,7 +72,7 @@ defmodule Rujira.Fin.Order do
   def new(
         %{
           address: address,
-          fee_taker: fee_taker,
+          fee_maker: fee_maker,
           token_quote: token_quote,
           token_base: token_base
         },
@@ -94,7 +94,7 @@ defmodule Rujira.Fin.Order do
          {:ok, offer} <- Amount.new(offer),
          {:ok, remaining} <- Amount.new(remaining),
          {:ok, filled} <- Amount.new(filled),
-         {:ok, fee_taker} <- Math.to_decimal(fee_taker),
+         {:ok, fee_maker} <- Math.to_decimal(fee_maker),
          {:ok, asset_quote} <- Assets.from_denom(token_quote),
          {:ok, asset_base} <- Assets.from_denom(token_base) do
       side = String.to_existing_atom(side)
@@ -114,7 +114,7 @@ defmodule Rujira.Fin.Order do
          remaining_value: value(remaining, rate, side),
          filled: filled,
          filled_value: value(filled, Decimal.div(Decimal.new(1), rate), side),
-         filled_fee: Math.mul_floor(filled, fee_taker),
+         filled_fee: Math.mul_ceil(filled, fee_maker),
          type: type(price),
          deviation: deviation(price),
          value_usd: value_usd(side, asset_base, asset_quote, remaining, filled)
