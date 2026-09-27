@@ -186,6 +186,22 @@ Use consistent error atoms across the codebase:
 | `:not_supported` | Operation valid in shape but disallowed (e.g. `Assets.to_secured/1` on a THOR-chain asset) |
 | `:unknown_protocol` | `Deployments` saw an on-chain contract with no protocol mapping |
 | `:no_price` | `Prices.get/1` could not resolve an oracle or FIN mid-price |
+| `:invalid_height` | `Rujira.Node.query/3` given a `:height` opt that isn't an integer in `1..9_223_372_036_854_775_807` |
+| `:height_not_supported` | `Rujira.Node.query/3` given `:height` with an arity-2 `fun` (can't carry metadata) |
+| `{:height_mismatch, height, returned}` | The reply's `returned` height doesn't match the requested `height` - `Rujira.Node.query/3` reads it from the headers (`nil` when they were dropped) |
+| `{:height_unavailable, height}` | A node error from `Rujira.Node.query/3` means the requested `height` cannot be served (pruned, in the future, etc.) |
+
+## Query options
+
+`Rujira.Node.query/3` forwards `opts` unchanged to the configured impl, except
+for the reserved `:height` key, which it pops before calling the impl.
+
+Without `:height`, behaviour is unchanged. With a valid `:height`, `fun` must
+be arity 3: `query/3` merges in `metadata: %{"x-cosmos-block-height" =>
+height}` (keeping existing metadata keys) and `return_headers: true`, then
+verifies the impl's reply actually carries that height before returning it -
+a reply without a matching height is never returned as data, only as
+`{:error, {:height_mismatch, height, returned}}`.
 
 ## Logger
 

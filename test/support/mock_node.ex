@@ -17,7 +17,12 @@ defmodule Rujira.Test.MockNode do
   struct itself.
 
   The script lives in the process dictionary, so it is per-test and safe under
-  `async: true`.
+  `async: true`. A query issued from a `Task` started by the test - a fan-out
+  such as `Rujira.Fin.Range.total_tvl/1` - finds the script through
+  `$callers`, so those legs are scriptable too.
+
+  Every query also sends `{:mock_node, request, opts}` to the calling process,
+  so a test can assert on the opts a height-aware caller passed down.
   """
   @behaviour Rujira.Node
 
@@ -39,12 +44,41 @@ defmodule Rujira.Test.MockNode do
   @impl true
   def query(fun, request, opts \\ [])
 
-  def query(_fun, %QuerySmartContractStateRequest{query_data: query_data}, _opts) do
-    respond(Process.get(@key), JSON.decode!(query_data))
+  def query(_fun, %QuerySmartContractStateRequest{query_data: query_data} = request, opts) do
+    send(self(), {:mock_node, request, opts})
+    respond(script(), JSON.decode!(query_data), opts)
   end
 
-  def query(_fun, request, _opts), do: respond(Process.get(@key), request)
+  def query(_fun, request, opts) do
+    send(self(), {:mock_node, request, opts})
+    respond(script(), request, opts)
+  end
 
-  defp respond(nil, _decoded), do: {:error, :not_configured}
-  defp respond(script, decoded), do: script.(decoded)
+  defp script, do: Process.get(@key) || Enum.find_value(callers(), &caller_script/1)
+
+  defp callers, do: Process.get(:"$callers", [])
+
+  defp caller_script(pid) do
+    case Process.info(pid, :dictionary) do
+      {:dictionary, dictionary} -> Keyword.get(dictionary, @key)
+      nil -> nil
+    end
+  end
+
+  defp respond(nil, _decoded, _opts), do: {:error, :not_configured}
+
+  defp respond(script, decoded, opts) do
+    case script.(decoded) do
+      {:ok, reply} = result ->
+        if opts[:return_headers] do
+          height = get_in(opts, [:metadata, "x-cosmos-block-height"])
+          {:ok, reply, %{headers: %{"x-cosmos-block-height" => height}, trailers: %{}}}
+        else
+          result
+        end
+
+      result ->
+        result
+    end
+  end
 end
