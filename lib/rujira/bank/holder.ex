@@ -11,8 +11,6 @@ defmodule Rujira.Bank.Holder do
 
   use Memoize
 
-  @holders_limit 100
-
   # --- Struct ---
 
   defstruct address: nil, balance: nil
@@ -33,36 +31,35 @@ defmodule Rujira.Bank.Holder do
   # --- Queries ---
 
   @doc """
-  Memoized list of the top holders of an asset, sorted by balance descending.
+  Memoized list of every holder of an asset, in node order.
 
-  Invalidate with `Memoize.invalidate(Rujira.Bank.Holder, :holders, [asset, limit])`.
+  Invalidate with `Memoize.invalidate(Rujira.Bank.Holder, :holders, [asset])`.
   """
-  @spec holders(Asset.t(), pos_integer()) :: {:ok, [t()]} | {:error, term()}
-  defmemo holders(asset, limit \\ @holders_limit), expires_in: :timer.hours(1) do
-    fetch_holders(asset, limit, [])
+  @spec holders(Asset.t()) :: {:ok, [t()]} | {:error, term()}
+  defmemo holders(asset), expires_in: :timer.hours(1) do
+    fetch_holders(asset, [])
   end
 
   @doc """
-  As `holders/2`, read at `opts[:height]` when one is given - a height read is
-  never cached. Without a `:height` this is `holders/2`, so the other opts are
+  As `holders/1`, read at `opts[:height]` when one is given - a height read is
+  never cached. Without a `:height` this is `holders/1`, so the other opts are
   not applied.
   """
-  @spec holders(Asset.t(), pos_integer(), Node.opts()) :: {:ok, [t()]} | {:error, term()}
-  def holders(asset, limit, opts) do
+  @spec holders(Asset.t(), Node.opts()) :: {:ok, [t()]} | {:error, term()}
+  def holders(asset, opts) do
     Node.at_height(
       opts,
-      fn -> fetch_holders(asset, limit, opts) end,
-      fn -> holders(asset, limit) end
+      fn -> fetch_holders(asset, opts) end,
+      fn -> holders(asset) end
     )
   end
 
   # --- Private ---
 
-  defp fetch_holders(asset, limit, opts) do
+  defp fetch_holders(asset, opts) do
     with {:ok, denom} <- Assets.to_native(asset),
-         {:ok, owners} <- denom_owners(denom, nil, opts),
-         {:ok, holders} <- Rujira.Enum.reduce_while_ok(owners, &new/1) do
-      {:ok, holders |> Enum.sort_by(& &1.balance.amount, :desc) |> Enum.take(limit)}
+         {:ok, owners} <- denom_owners(denom, nil, opts) do
+      Rujira.Enum.reduce_while_ok(owners, &new/1)
     end
   end
 

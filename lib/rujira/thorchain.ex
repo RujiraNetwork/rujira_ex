@@ -46,7 +46,9 @@ defmodule Rujira.Thorchain do
   # --- Inbound / outbound ---
 
   defdelegate inbound_addresses(opts \\ []), to: InboundAddress, as: :list
+  defdelegate inbound_address_from_id(id, opts \\ []), to: InboundAddress, as: :from_id
   defdelegate outbound_fees(opts \\ []), to: OutboundFee, as: :list
+  defdelegate outbound_fee_from_id(id, opts \\ []), to: OutboundFee, as: :from_id
 
   # --- Address ---
 

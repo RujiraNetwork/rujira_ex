@@ -4,6 +4,7 @@ defmodule Rujira.Staking.PoolTest do
   alias Rujira.Assets.Asset
   alias Rujira.Staking.Pool
   alias Rujira.Staking.Pool.RevenueConverter
+  alias Rujira.Test.MockNode
 
   defp config(extra \\ %{}) do
     Map.merge(
@@ -27,7 +28,7 @@ defmodule Rujira.Staking.PoolTest do
                 bond_asset: %Asset{id: "THOR.RUJI"},
                 revenue_asset: %Asset{id: "BTC-BTC"},
                 receipt_asset: %Asset{id: "x/staking-x/ruji"},
-                fee: fee,
+                fee: nil,
                 fee_address: nil,
                 revenue_converter: %RevenueConverter{
                   contract: "thor1converter",
@@ -36,8 +37,6 @@ defmodule Rujira.Staking.PoolTest do
                 },
                 status: :not_loaded
               }} = Pool.new(config())
-
-      assert Decimal.equal?(fee, Decimal.new(0))
     end
 
     test "parses pool config with a fee" do
@@ -58,6 +57,16 @@ defmodule Rujira.Staking.PoolTest do
 
     test "errors on an unresolvable bond denom" do
       assert {:error, :invalid_denom} = Pool.new(config(%{"bond_denom" => "badbond"}))
+    end
+  end
+
+  describe "from_id/2" do
+    test "a well-formed id with no contract behind it is not_found" do
+      MockNode.expect(fn %{"config" => %{}} ->
+        {:error, %GRPC.RPCError{status: 2, message: "codespace wasm code 22: no such contract"}}
+      end)
+
+      assert {:error, :not_found} = Pool.from_id("thor1missing")
     end
   end
 end

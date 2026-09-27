@@ -57,8 +57,8 @@ defmodule Rujira.Deployments do
     Node.at_height(opts, fn -> fetch_contract_infos(opts) end, &contract_infos/0)
   end
 
-  @spec get_target(module()) :: Target.t() | nil
-  defmemo(get_target(module), do: fetch_get_target(module, []))
+  @spec get_target(module()) :: {:ok, Target.t()} | {:error, :not_found | term()}
+  defmemo(get_target(module), do: fetch_get_target_result(module, []))
 
   @doc "As `get_target/1`, resolved at `opts[:height]` when given."
   @spec get_target(module(), Node.opts()) :: {:ok, Target.t()} | {:error, :not_found | term()}
@@ -66,7 +66,7 @@ defmodule Rujira.Deployments do
     Node.at_height(
       opts,
       fn -> fetch_get_target_result(module, opts) end,
-      fn -> ok_or_not_found(get_target(module)) end
+      fn -> get_target(module) end
     )
   end
 
@@ -93,8 +93,8 @@ defmodule Rujira.Deployments do
   end
 
   @doc "List all targets for a given module."
-  @spec list_targets(module()) :: [Target.t()]
-  defmemo(list_targets(module), do: fetch_list_targets(module, []))
+  @spec list_targets(module()) :: {:ok, [Target.t()]} | {:error, term()}
+  defmemo(list_targets(module), do: fetch_list_targets_result(module, []))
 
   @doc "As `list_targets/1`, resolved at `opts[:height]` when given."
   @spec list_targets(module(), Node.opts()) :: {:ok, [Target.t()]} | {:error, term()}
@@ -102,7 +102,7 @@ defmodule Rujira.Deployments do
     Node.at_height(
       opts,
       fn -> fetch_list_targets_result(module, opts) end,
-      fn -> {:ok, list_targets(module)} end
+      fn -> list_targets(module) end
     )
   end
 
@@ -123,13 +123,6 @@ defmodule Rujira.Deployments do
     with {:ok, %{infos: infos}} <-
            Node.query(&Stub.contract_infos/3, %QueryContractInfosRequest{}, opts) do
       {:ok, Enum.reject(infos, &(&1.address in omit()))}
-    end
-  end
-
-  defp fetch_get_target(module, opts) do
-    case list_all_targets(opts) do
-      {:ok, targets} -> Enum.find(targets, &(&1.module === module))
-      _ -> nil
     end
   end
 
@@ -156,13 +149,6 @@ defmodule Rujira.Deployments do
   defp fetch_list_all_targets(opts) do
     with {:ok, infos} <- contract_infos(opts) do
       Rujira.Enum.reduce_while_ok(infos, [], &target/1)
-    end
-  end
-
-  defp fetch_list_targets(module, opts) do
-    case list_all_targets(opts) do
-      {:ok, targets} -> Enum.filter(targets, &(&1.module === module))
-      _ -> []
     end
   end
 

@@ -39,8 +39,8 @@ defmodule Rujira.Assets.Metadata do
   @doc """
   Denom metadata. A denom's metadata is set when the denom is created and does
   not change afterwards, so a successful node response is memoized (privately,
-  as `do_load_metadata/1`) without expiry. A failed query returns the fallback
-  below but is not memoized, so a later call retries it.
+  as `do_load_metadata/1`) without expiry. A failed query returns the node's
+  error unchanged and is not memoized, so a later call retries it.
 
   Invalidate with
   `Memoize.invalidate(Rujira.Assets.Metadata, :do_load_metadata, [denom])`.
@@ -51,7 +51,7 @@ defmodule Rujira.Assets.Metadata do
   ignored. The one consequence: an admin metadata change shows the current
   symbol even in a historical read.
   """
-  @spec load_metadata(String.t(), Node.opts()) :: {:ok, t()}
+  @spec load_metadata(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def load_metadata(denom, _opts \\ []) do
     cached_metadata(denom)
   end
@@ -65,22 +65,10 @@ defmodule Rujira.Assets.Metadata do
       {:ok, metadata} ->
         {:ok, metadata}
 
-      :error ->
+      {:error, reason} ->
         Memoize.invalidate(__MODULE__, :do_load_metadata, [denom])
-        fallback(denom)
+        {:error, reason}
     end
-  end
-
-  defp fallback(denom) do
-    {:ok,
-     %__MODULE__{
-       description: "",
-       display: String.upcase(denom),
-       name: String.upcase(denom),
-       symbol: denom,
-       uri: "",
-       uri_hash: ""
-     }}
   end
 
   defp fetch_metadata(denom) do
@@ -98,8 +86,8 @@ defmodule Rujira.Assets.Metadata do
            uri_hash: metadata.uri_hash
          }}
 
-      _ ->
-        :error
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end

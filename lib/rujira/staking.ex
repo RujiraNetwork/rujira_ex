@@ -6,8 +6,10 @@ defmodule Rujira.Staking do
   and queries. Invalidate cache on the resource module, not here.
 
   Every query takes a trailing `opts`, forwarded to `Rujira.Node.query/3`, so a
-  caller can read a whole composite at one `height:` - `load_account/3` reads
-  the pool status, the contract account and the bank balance at the same one.
+  caller can read a whole composite at one `height:`.
+
+  `account_revenue_share/2` and `account_liquid_size/2` reach no node: they are
+  pure over a pool whose status is loaded - see `Rujira.Staking.Pool.Account`.
   """
 
   alias Rujira.Staking.Pool
@@ -25,4 +27,6 @@ defmodule Rujira.Staking do
 
   defdelegate load_account(pool, owner, opts \\ []), to: Account, as: :load
   defdelegate account_from_id(id, opts \\ []), to: Account, as: :from_id
+  defdelegate account_revenue_share(account, pool), to: Account, as: :revenue_share
+  defdelegate account_liquid_size(shares, pool), to: Account, as: :liquid_size
 end

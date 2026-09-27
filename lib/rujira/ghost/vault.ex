@@ -67,6 +67,10 @@ defmodule Rujira.Ghost.Vault do
   @spec get(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def get(address, opts \\ []), do: Contracts.get({__MODULE__, address}, opts)
 
+  @doc "A vault's id is its address, so this is `get/2`."
+  @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def from_id(id, opts \\ []), do: get(id, opts)
+
   @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def list(opts \\ []) do
     with {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do

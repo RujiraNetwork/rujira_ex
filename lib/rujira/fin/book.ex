@@ -7,7 +7,6 @@ defmodule Rujira.Fin.Book do
 
   alias Rujira.Contracts
   alias Rujira.Fin.Pair
-  alias Rujira.Logger
   alias Rujira.Math
   alias Rujira.Node
 
@@ -72,15 +71,15 @@ defmodule Rujira.Fin.Book do
   defstruct id: nil,
             bids: [],
             asks: [],
-            center: Decimal.new(0),
-            spread: Decimal.new(0)
+            center: nil,
+            spread: nil
 
   @type t :: %__MODULE__{
           id: String.t(),
           bids: list(Price.t()),
           asks: list(Price.t()),
-          center: Decimal.t(),
-          spread: Decimal.t()
+          center: Decimal.t() | nil,
+          spread: Decimal.t() | nil
         }
 
   # --- Construction ---
@@ -95,39 +94,37 @@ defmodule Rujira.Fin.Book do
 
   # --- Queries ---
 
-  @spec load(Pair.t(), integer(), Node.opts()) :: {:ok, Pair.t()} | {:error, term()}
-  def load(pair, limit \\ 75, opts \\ [])
+  @doc """
+  Reads a pair's book and attaches it under `book:`.
 
-  def load(pair, limit, opts) do
+  `limit` caps how many levels each side keeps; `nil` keeps every level the
+  contract returned. A book that cannot be read is an error, never an empty book.
+  """
+  @spec load(Pair.t(), non_neg_integer() | nil, Node.opts()) ::
+          {:ok, Pair.t()} | {:error, term()}
+  def load(pair, limit \\ nil, opts \\ []) do
     with {:ok, res} <- query(pair.address, opts),
          {:ok, book} <- new(pair.address, res) do
       {:ok, %{pair | book: take(book, limit)}}
-    else
-      {:error, err} ->
-        unless_height_error(err, fn ->
-          Logger.error(__MODULE__, "load #{pair.address} #{inspect(err)}")
-          {:ok, %{pair | book: %__MODULE__{id: pair.address}}}
-        end)
     end
   end
 
+  @doc """
+  Reads the book of the pair an `id` names, by that address alone.
+
+  The pair's own config is not read, since a book is built from the book query.
+  """
   @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def from_id(id, opts \\ []) do
-    with {:ok, res} <- Pair.get(id, opts),
-         {:ok, %{book: book}} <- load(res, @max_limit, opts) do
-      {:ok, book}
-    end
-  end
-
-  @spec price(String.t(), Node.opts()) :: {:ok, map()} | {:error, term()}
-  def price(id, opts \\ []) do
-    with {:ok, book} <- from_id(id, opts) do
-      {:ok, %{price: book.center, change: 0}}
+    with {:ok, res} <- query(id, opts) do
+      new(id, res)
     end
   end
 
   # --- Calculations ---
 
+  # A mid-price needs a level on both sides. With one side empty there is no
+  # centre and no spread, so both stay `nil` - an absent value, not a zero.
   @spec populate(t()) :: t()
   defp populate(%__MODULE__{asks: [ask | _], bids: [bid | _]} = book) do
     center =
@@ -166,7 +163,9 @@ defmodule Rujira.Fin.Book do
 
   # --- Private ---
 
-  @spec take(t(), non_neg_integer()) :: t()
+  @spec take(t(), non_neg_integer() | nil) :: t()
+  defp take(book, nil), do: book
+
   defp take(%__MODULE__{bids: bids, asks: asks} = book, limit) do
     %{book | bids: Enum.take(bids, limit), asks: Enum.take(asks, limit)}
   end
@@ -190,15 +189,6 @@ defmodule Rujira.Fin.Book do
   def query(contract, opts) do
     Node.at_height(opts, fn -> fetch(contract, opts) end, fn -> query(contract) end)
   end
-
-  # A height read that could not be served is an error, never a default: the
-  # caller asked for the state at one height and must be told that height was
-  # not read. Every other error keeps today's behaviour.
-  defp unless_height_error({:height_unavailable, _} = err, _fallback), do: {:error, err}
-  defp unless_height_error({:height_mismatch, _, _} = err, _fallback), do: {:error, err}
-  defp unless_height_error(:invalid_height, _fallback), do: {:error, :invalid_height}
-  defp unless_height_error(:height_not_supported, _fallback), do: {:error, :height_not_supported}
-  defp unless_height_error(_err, fallback), do: fallback.()
 
   defp fetch(contract, opts) do
     Contracts.query_state_smart_with_retry(contract, %{book: %{limit: @max_limit}}, opts)

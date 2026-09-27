@@ -66,5 +66,28 @@ defmodule Rujira.Thorchain.OutboundFeeTest do
       assert_received {:mock_node, %QueryOutboundFeesRequest{}, opts}
       assert Keyword.get(opts, :metadata) == @metadata
     end
+
+    test "from_id/2 forwards the height to the list it reads" do
+      assert {:ok, %OutboundFee{id: "BTC.BTC"}} =
+               OutboundFee.from_id("BTC.BTC", height: @height)
+
+      assert_received {:mock_node, %QueryOutboundFeesRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "the Rujira.Thorchain facade exposes outbound_fee_from_id/2" do
+      assert {:ok, %OutboundFee{id: "BTC.BTC"}} =
+               Rujira.Thorchain.outbound_fee_from_id("BTC.BTC", height: @height)
+    end
+  end
+
+  describe "from_id/2" do
+    test "returns :not_found for an asset with no outbound fee" do
+      MockNode.expect(fn %QueryOutboundFeesRequest{} ->
+        {:ok, %QueryOutboundFeesResponse{outbound_fees: [response()]}}
+      end)
+
+      assert {:error, :not_found} = OutboundFee.from_id("ETH.ETH")
+    end
   end
 end

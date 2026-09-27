@@ -44,6 +44,35 @@ defmodule Rujira.ThorchainSwap.StrategyTest do
     end
   end
 
+  describe "from_id/2" do
+    test "round-trips on the strategy's id" do
+      config = %{
+        "address" => "thor1strategy",
+        "max_stream_length" => 10,
+        "stream_step_ratio" => "0.1",
+        "spread_bps" => 50,
+        "max_borrow_ratio" => "0.8",
+        "min_borrow_amount" => "100000000",
+        "reserve_fee" => "0.02",
+        "fee" => ["0.001", "thor1fee"]
+      }
+
+      MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(config) end)
+      assert {:ok, %Strategy{id: "thor1strategy"} = strategy} = Strategy.get("thor1strategy")
+
+      MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(config) end)
+      assert {:ok, ^strategy} = Strategy.from_id(strategy.id)
+    end
+
+    test "a well-formed id with no contract behind it is not_found" do
+      MockNode.expect(fn %{"config" => %{}} ->
+        {:error, %GRPC.RPCError{status: 2, message: "codespace wasm code 22: no such contract"}}
+      end)
+
+      assert {:error, :not_found} = Strategy.from_id("thor1missing")
+    end
+  end
+
   describe "load/1" do
     setup do
       Memoize.invalidate(Strategy)

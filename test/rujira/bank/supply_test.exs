@@ -1,8 +1,6 @@
 defmodule Rujira.Bank.SupplyTest do
   use ExUnit.Case, async: true
 
-  import ExUnit.CaptureLog
-
   alias Cosmos.Bank.V1beta1.QuerySupplyOfRequest
   alias Cosmos.Bank.V1beta1.QuerySupplyOfResponse
   alias Cosmos.Bank.V1beta1.QueryTotalSupplyRequest
@@ -32,6 +30,14 @@ defmodule Rujira.Bank.SupplyTest do
     test "errors when the asset has no native denom" do
       assert {:error, :no_native_denom} = Supply.get(@non_native)
     end
+
+    test "a malformed response with no amount field errors" do
+      MockNode.expect(fn %QuerySupplyOfRequest{denom: "rune"} ->
+        {:ok, %QuerySupplyOfResponse{amount: nil}}
+      end)
+
+      assert {:error, :invalid_response} = Supply.get(@rune)
+    end
   end
 
   describe "list/0" do
@@ -59,7 +65,7 @@ defmodule Rujira.Bank.SupplyTest do
               ]} = Supply.list()
     end
 
-    test "skips an unresolvable denom and keeps the rest" do
+    test "an unresolvable denom fails the whole call" do
       MockNode.expect(fn %QueryTotalSupplyRequest{} ->
         {:ok,
          %QueryTotalSupplyResponse{
@@ -72,16 +78,7 @@ defmodule Rujira.Bank.SupplyTest do
          }}
       end)
 
-      log =
-        capture_log(fn ->
-          assert {:ok,
-                  [
-                    %Coin{asset: @rune, amount: 1000},
-                    %Coin{asset: @ruji, amount: 500}
-                  ]} = Supply.list()
-        end)
-
-      assert log =~ ~s(skipping unrecognised denom "ibc/ABC")
+      assert {:error, :invalid_denom} = Supply.list()
     end
 
     test "still errors the whole call on an unparseable amount" do

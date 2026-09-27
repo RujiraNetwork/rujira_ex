@@ -28,7 +28,8 @@ defmodule Rujira.Brune.LoggedEventTest do
     test "normalises the stored event and parses it like a live one" do
       assert {:ok,
               %LoggedEvent{
-                id: 42,
+                id: "thor1pool/42",
+                seq: 42,
                 height: 12_345,
                 time: %DateTime{},
                 event: %BruneEvent{
@@ -49,7 +50,7 @@ defmodule Rujira.Brune.LoggedEventTest do
         MockNode.ok(%{"events" => [raw_event(), raw_event(%{"id" => 41})]})
       end)
 
-      assert {:ok, [%LoggedEvent{id: 42}, %LoggedEvent{id: 41}]} =
+      assert {:ok, [%LoggedEvent{seq: 42}, %LoggedEvent{seq: 41}]} =
                LoggedEvent.list("thor1pool")
     end
 

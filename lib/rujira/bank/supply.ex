@@ -9,7 +9,6 @@ defmodule Rujira.Bank.Supply do
   alias Rujira.Assets
   alias Rujira.Assets.Asset
   alias Rujira.Coin
-  alias Rujira.Logger
   alias Rujira.Node
 
   # --- Queries ---
@@ -18,9 +17,10 @@ defmodule Rujira.Bank.Supply do
   @spec get(Asset.t(), Node.opts()) :: {:ok, Coin.t()} | {:error, term()}
   def get(%Asset{} = asset, opts \\ []) do
     with {:ok, denom} <- Assets.to_native(asset),
-         {:ok, %{amount: coin}} <-
+         {:ok, response} <-
            Node.query(&Stub.supply_of/3, %QuerySupplyOfRequest{denom: denom}, opts),
-         {:ok, amount} <- Amount.new(coin_amount(coin)) do
+         {:ok, chain_amount} <- supply_amount(response),
+         {:ok, amount} <- Amount.new(chain_amount) do
       {:ok, Coin.new(asset, amount)}
     end
   end
@@ -31,8 +31,11 @@ defmodule Rujira.Bank.Supply do
 
   # --- Private ---
 
-  defp coin_amount(%{amount: amount}), do: amount
-  defp coin_amount(_), do: 0
+  # The node always populates `amount` for a valid `denom` - a genuinely
+  # unminted asset still comes back as a `Coin` with amount `"0"`. A `nil`
+  # amount is a malformed response, not a real chain value.
+  defp supply_amount(%{amount: %{amount: amount}}), do: {:ok, amount}
+  defp supply_amount(_), do: {:error, :invalid_response}
 
   defp total_supply("", _opts), do: {:ok, []}
 
@@ -50,15 +53,5 @@ defmodule Rujira.Bank.Supply do
   defp total_supply_request(key),
     do: %QueryTotalSupplyRequest{pagination: %PageRequest{key: key}}
 
-  defp coins_to_coins(coins), do: Rujira.Enum.reduce_while_ok(coins, &to_coin/1)
-
-  # One unrecognised denom must not fail the whole list: log and skip it.
-  defp to_coin(coin), do: skip_invalid_denom(Coin.new(coin), coin)
-
-  defp skip_invalid_denom({:error, :invalid_denom}, %{denom: denom}) do
-    Logger.warning(__MODULE__, "skipping unrecognised denom #{inspect(denom)}")
-    :skip
-  end
-
-  defp skip_invalid_denom(result, _coin), do: result
+  defp coins_to_coins(coins), do: Rujira.Enum.reduce_while_ok(coins, &Coin.new/1)
 end

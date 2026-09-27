@@ -87,6 +87,16 @@ defmodule Rujira.Thorchain.InboundAddress do
   @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def list(opts), do: Node.at_height(opts, fn -> fetch(opts) end, &list/0)
 
+  @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def from_id(chain, opts \\ []) do
+    with {:ok, addresses} <- list(opts) do
+      case Enum.find(addresses, &(&1.chain == chain)) do
+        nil -> {:error, :not_found}
+        address -> {:ok, address}
+      end
+    end
+  end
+
   # --- Private ---
 
   defp fetch(opts) do

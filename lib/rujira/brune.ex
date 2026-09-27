@@ -21,6 +21,7 @@ defmodule Rujira.Brune do
   defdelegate get_pool(address, opts \\ []), to: Pool, as: :get
   defdelegate list_pools(opts \\ []), to: Pool, as: :list
   defdelegate load_pool(pool, opts \\ []), to: State, as: :load
+  defdelegate pool_from_id(id, opts \\ []), to: Pool, as: :from_id
 
   # --- Events ---
 

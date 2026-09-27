@@ -18,7 +18,7 @@ defmodule Rujira.Test.MockNode do
 
   The script lives in the process dictionary, so it is per-test and safe under
   `async: true`. A query issued from a `Task` started by the test - a fan-out
-  such as `Rujira.Fin.Range.total_tvl/1` - finds the script through
+  such as `Rujira.Fin.Order.list_all_pairs/2` - finds the script through
   `$callers`, so those legs are scriptable too.
 
   Every query also sends `{:mock_node, request, opts}` to the calling process,

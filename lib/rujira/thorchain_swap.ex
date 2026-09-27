@@ -18,6 +18,7 @@ defmodule Rujira.ThorchainSwap do
   defdelegate get_strategy(address, opts \\ []), to: Strategy, as: :get
   defdelegate list_strategies(opts \\ []), to: Strategy, as: :list
   defdelegate load_strategy(strategy, opts \\ []), to: Strategy, as: :load
+  defdelegate strategy_from_id(id, opts \\ []), to: Strategy, as: :from_id
 
   # --- Quote ---
 

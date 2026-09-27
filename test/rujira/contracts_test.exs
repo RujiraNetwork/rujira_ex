@@ -61,6 +61,19 @@ defmodule Rujira.ContractsTest do
       assert_received {:mock_node, %QuerySmartContractStateRequest{}, opts}
       assert Keyword.get(opts, :metadata) == @metadata
     end
+
+    test "an address with no contract behind it is not_found" do
+      MockNode.expect(fn %{"config" => %{}} ->
+        {:error,
+         %GRPC.RPCError{
+           status: 2,
+           message:
+             "codespace wasm code 22: no such contract: thor1missing: query wasm contract failed"
+         }}
+      end)
+
+      assert {:error, :not_found} = Contracts.get({Protocol, "thor1missing"}, height: @height)
+    end
   end
 
   describe "build_address/4" do
@@ -99,6 +112,76 @@ defmodule Rujira.ContractsTest do
       assert_received {:mock_node, %QueryRawContractStateRequest{}, opts}
       assert Keyword.get(opts, :metadata) == @metadata
     end
+
+    test "an address that holds no contract is not_found, never a nil version" do
+      MockNode.expect(fn %QueryRawContractStateRequest{} ->
+        {:error,
+         %GRPC.RPCError{
+           status: 2,
+           message: "codespace wasm code 22: no such contract: thor1contract"
+         }}
+      end)
+
+      assert {:error, :not_found} = Contracts.version("thor1contract", height: @height)
+    end
+
+    test "a contract with no cw2 entry is not_found" do
+      MockNode.expect(fn %QueryRawContractStateRequest{} ->
+        {:ok, %QueryRawContractStateResponse{data: ""}}
+      end)
+
+      assert {:error, :not_found} = Contracts.version("thor1contract", height: @height)
+    end
+  end
+
+  describe "not_found?/1" do
+    test "FIN's own NotFound - a missing order or range" do
+      assert Contracts.not_found?(wasm_error("NotFound"))
+    end
+
+    test "a cosmwasm StdError::NotFound - the staking account of a never-bonded address" do
+      assert Contracts.not_found?(
+               wasm_error(
+                 "type: rujira_rs::account_pool::AccountPoolAccount; key: [61, 74, 68] not found"
+               )
+             )
+    end
+
+    test "a StdError::NotFound rendered without the storage-key detail" do
+      assert Contracts.not_found?(
+               wasm_error("rujira_rs::account_pool::AccountPoolAccount not found")
+             )
+    end
+
+    test "any other contract error is not a not-found" do
+      refute Contracts.not_found?(wasm_error("Unauthorized"))
+      refute Contracts.not_found?(wasm_error("Invalid: bad idx"))
+      refute Contracts.not_found?(wasm_error("Generic error: Parsing u128: invalid digit"))
+      refute Contracts.not_found?(wasm_error("NotFoundish"))
+    end
+
+    test "a missing contract is not a missing item" do
+      refute Contracts.not_found?(%GRPC.RPCError{
+               status: 2,
+               message: "codespace wasm code 22: no such contract: thor1contract"
+             })
+    end
+
+    test "another gRPC status, or an error that is not a wasm query, is false" do
+      refute Contracts.not_found?(%GRPC.RPCError{
+               status: 3,
+               message: "NotFound: query wasm contract failed"
+             })
+
+      refute Contracts.not_found?(%GRPC.RPCError{status: 2, message: "NotFound"})
+      refute Contracts.not_found?(%GRPC.RPCError{status: 2, message: nil})
+    end
+
+    test "a non-RPCError term is false" do
+      refute Contracts.not_found?({:error, :closed})
+      refute Contracts.not_found?(:not_found)
+      refute Contracts.not_found?(nil)
+    end
   end
 
   describe "query_state_smart/3" do
@@ -114,5 +197,9 @@ defmodule Rujira.ContractsTest do
       assert_received {:mock_node, %QuerySmartContractStateRequest{}, opts}
       assert Keyword.get(opts, :metadata) == @metadata
     end
+  end
+
+  defp wasm_error(contract_error) do
+    %GRPC.RPCError{status: 2, message: "#{contract_error}: query wasm contract failed"}
   end
 end

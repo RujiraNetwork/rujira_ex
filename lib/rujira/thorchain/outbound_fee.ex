@@ -75,6 +75,16 @@ defmodule Rujira.Thorchain.OutboundFee do
   @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def list(opts), do: Node.at_height(opts, fn -> fetch(opts) end, &list/0)
 
+  @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def from_id(asset, opts \\ []) do
+    with {:ok, fees} <- list(opts) do
+      case Enum.find(fees, &(&1.asset == asset)) do
+        nil -> {:error, :not_found}
+        fee -> {:ok, fee}
+      end
+    end
+  end
+
   # --- Private ---
 
   defp fetch(opts) do

@@ -5,7 +5,7 @@ defmodule Rujira.Prices do
   Ships with two built-in implementations:
 
     * `Rujira.Prices.Default` — oracle → FIN book mid-price fallback
-    * `Rujira.Prices.Noop` — returns 0 (useful for tests)
+    * `Rujira.Prices.Noop` — returns a zero price (useful for tests)
 
   Consumers can override via application env:
 
@@ -26,12 +26,9 @@ defmodule Rujira.Prices do
 
   Both are *optional* callbacks — an implementation written before they existed
   still satisfies the behaviour. Asked for a `:height` such an implementation
-  cannot serve:
-
-    * `get/2` returns `{:error, :height_not_supported}`.
-    * `value_usd/4` has no error channel — it returns an integer — so it
-      returns `0`. A price from the present is not a price at that height, and
-      returning one would misvalue the position silently.
+  cannot serve, both return `{:error, :height_not_supported}`: a price from the
+  present is not a price at that height, and returning one would misvalue the
+  position silently.
 
   Without a `:height`, both fall through to the arity the implementation does
   export, so the other opts are not applied.
@@ -41,8 +38,9 @@ defmodule Rujira.Prices do
 
   @callback get(String.t()) :: {:ok, Decimal.t()} | {:error, term()}
   @callback get(String.t(), Node.opts()) :: {:ok, Decimal.t()} | {:error, term()}
-  @callback value_usd(String.t(), integer(), integer()) :: integer()
-  @callback value_usd(String.t(), integer(), integer(), Node.opts()) :: integer()
+  @callback value_usd(String.t(), integer(), integer()) :: {:ok, integer()} | {:error, term()}
+  @callback value_usd(String.t(), integer(), integer(), Node.opts()) ::
+              {:ok, integer()} | {:error, term()}
 
   @optional_callbacks get: 2, value_usd: 4
 
@@ -75,18 +73,23 @@ defmodule Rujira.Prices do
   @doc """
   Values `amount` of `ticker` in USD, priced at `opts[:height]` when one is given.
 
-  `0` when a `:height` is given and the configured implementation does not
-  export `value_usd/4` — see the moduledoc.
+  `{:error, :height_not_supported}` when a `:height` is given and the configured
+  implementation does not export `value_usd/4`.
   """
-  @spec value_usd(String.t(), integer(), integer()) :: integer()
-  @spec value_usd(String.t(), integer(), integer(), Node.opts()) :: integer()
+  @spec value_usd(String.t(), integer(), integer()) :: {:ok, integer()} | {:error, term()}
+  @spec value_usd(String.t(), integer(), integer(), Node.opts()) ::
+          {:ok, integer()} | {:error, term()}
   def value_usd(ticker, amount, decimals \\ 8, opts \\ []) do
     impl = impl()
 
     if exports?(impl, :value_usd, 4) do
       impl.value_usd(ticker, amount, decimals, opts)
     else
-      Node.at_height(opts, fn -> 0 end, fn -> impl.value_usd(ticker, amount, decimals) end)
+      Node.at_height(
+        opts,
+        fn -> {:error, :height_not_supported} end,
+        fn -> impl.value_usd(ticker, amount, decimals) end
+      )
     end
   end
 

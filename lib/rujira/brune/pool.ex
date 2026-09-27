@@ -148,6 +148,9 @@ defmodule Rujira.Brune.Pool do
     end
   end
 
+  @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def from_id(address, opts \\ []), do: get(address, opts)
+
   # --- Private ---
 
   defp quarantine(%{"height" => height}) do

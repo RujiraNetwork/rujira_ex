@@ -168,13 +168,11 @@ defmodule Rujira.Fin.RangeTest do
                Range.load(@pair, {:dynamic, 9})
     end
 
-    test "an index the named kind does not hold returns a placeholder of that kind" do
+    test "an index the named kind does not hold is :not_found, not a placeholder" do
       MockNode.expect(fn _ -> {:error, not_found()} end)
 
-      assert {:ok, %Range{id: "thor1pair/5", idx: 5, range: nil}} = Range.load(@pair, 5)
-
-      assert {:ok, %Range{id: "thor1pair/dynamic/5", idx: 5, range: nil}} =
-               Range.load(@pair, {:dynamic, 5})
+      assert {:error, :not_found} = Range.load(@pair, 5)
+      assert {:error, :not_found} = Range.load(@pair, {:dynamic, 5})
     end
 
     test "asking a contract without dynamic ranges for one is an error, not a miss" do
@@ -194,9 +192,15 @@ defmodule Rujira.Fin.RangeTest do
   end
 
   describe "from_id/1" do
-    test "a dynamic id round-trips to the dynamic query" do
+    setup do
+      Memoize.invalidate(Rujira.Fin.Range)
+      on_exit(fn -> Memoize.invalidate(Rujira.Fin.Range) end)
+      :ok
+    end
+
+    test "a dynamic id round-trips to the dynamic query, reading the pair's config for nothing" do
       MockNode.expect(fn
-        %{"config" => _} -> MockNode.ok(pair_config())
+        %{"config" => _} -> flunk("the pair's config was read to resolve a range id")
         %{"range" => %{"dynamic" => "9"}} -> MockNode.ok(dynamic_response())
       end)
 
@@ -206,12 +210,18 @@ defmodule Rujira.Fin.RangeTest do
 
     test "a bare id round-trips to the fixed query" do
       MockNode.expect(fn
-        %{"config" => _} -> MockNode.ok(pair_config())
+        %{"config" => _} -> flunk("the pair's config was read to resolve a range id")
         %{"range" => "5"} -> MockNode.ok(fixed_response())
       end)
 
       assert {:ok, %Range{id: "thor1fixid/5", idx: 5, range: %Fixed{}}} =
                Range.from_id("thor1fixid/5")
+    end
+
+    test "an id the contract does not hold is :not_found" do
+      MockNode.expect(fn _ -> {:error, not_found()} end)
+
+      assert {:error, :not_found} = Range.from_id("thor1missing/5")
     end
 
     test "any other shape is invalid" do
@@ -249,18 +259,6 @@ defmodule Rujira.Fin.RangeTest do
       message:
         "Error parsing into type rujira_fin::msg::QueryMsg: Invalid type: " <>
           "query wasm contract failed"
-    }
-  end
-
-  defp pair_config do
-    %{
-      "market_makers" => [],
-      "denoms" => ["gaia-atom", "eth-usdc-0xabc"],
-      "oracles" => nil,
-      "tick" => 1,
-      "fee_taker" => "0.001",
-      "fee_maker" => "0.0005",
-      "fee_address" => "thor1fee"
     }
   end
 

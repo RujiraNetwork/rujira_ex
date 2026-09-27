@@ -44,7 +44,7 @@ defmodule Rujira.Staking.Pool do
             revenue_asset: nil,
             receipt_asset: nil,
             revenue_converter: nil,
-            fee: Decimal.new(0),
+            fee: nil,
             fee_address: nil,
             status: :not_loaded
 
@@ -55,7 +55,7 @@ defmodule Rujira.Staking.Pool do
           revenue_asset: Asset.t() | nil,
           receipt_asset: Asset.t() | nil,
           revenue_converter: RevenueConverter.t() | nil,
-          fee: Decimal.t(),
+          fee: Decimal.t() | nil,
           fee_address: String.t() | nil,
           status: :not_loaded | Status.t()
         }
@@ -110,7 +110,7 @@ defmodule Rujira.Staking.Pool do
 
   # --- Private ---
 
-  defp fee(nil), do: {:ok, {Decimal.new(0), nil}}
+  defp fee(nil), do: {:ok, {nil, nil}}
 
   defp fee([fee, fee_address]) do
     with {:ok, fee} <- Math.to_decimal(fee) do

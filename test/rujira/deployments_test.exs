@@ -74,6 +74,56 @@ defmodule Rujira.DeploymentsTest do
     end
   end
 
+  describe "get_target/1 and list_targets/1" do
+    test "get_target/1 returns {:error, :not_found} for an unmatched module" do
+      Deployments.invalidate()
+
+      MockNode.expect(fn %QueryContractInfosRequest{} ->
+        {:ok, %{infos: []}}
+      end)
+
+      assert {:error, :not_found} = Deployments.get_target(Pair)
+    end
+
+    test "get_target/1 returns {:ok, target} for a matched module" do
+      Deployments.invalidate()
+
+      MockNode.expect(fn %QueryContractInfosRequest{} ->
+        {:ok,
+         %{infos: [%ContractInfo{address: "thor1fin", contract: "rujira-fin", version: "1"}]}}
+      end)
+
+      assert {:ok, %{address: "thor1fin", module: Pair}} = Deployments.get_target(Pair)
+    end
+
+    test "get_target/1 propagates an underlying query error rather than :not_found" do
+      Deployments.invalidate()
+
+      MockNode.expect(fn %QueryContractInfosRequest{} -> {:error, :boom} end)
+
+      assert {:error, :boom} = Deployments.get_target(Pair)
+    end
+
+    test "list_targets/1 returns {:ok, []} when legitimately none match" do
+      Deployments.invalidate()
+
+      MockNode.expect(fn %QueryContractInfosRequest{} ->
+        {:ok,
+         %{infos: [%ContractInfo{address: "thor1fin", contract: "rujira-fin", version: "1"}]}}
+      end)
+
+      assert {:ok, []} = Deployments.list_targets(Strategy)
+    end
+
+    test "list_targets/1 propagates an underlying query error rather than []" do
+      Deployments.invalidate()
+
+      MockNode.expect(fn %QueryContractInfosRequest{} -> {:error, :boom} end)
+
+      assert {:error, :boom} = Deployments.list_targets(Strategy)
+    end
+  end
+
   describe "height reads" do
     @height 12_345
     @metadata %{"x-cosmos-block-height" => "12345"}

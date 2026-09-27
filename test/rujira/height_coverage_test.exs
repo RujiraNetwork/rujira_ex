@@ -14,7 +14,6 @@ defmodule Rujira.HeightCoverageTest do
   use ExUnit.Case, async: true
 
   alias Cosmos.Bank.V1beta1.QueryAllBalancesRequest
-  alias Cosmos.Bank.V1beta1.QueryBalanceRequest
   alias Cosmos.Base.Query.V1beta1.PageRequest
   alias Rujira.Assets
   alias Rujira.Brune
@@ -34,10 +33,16 @@ defmodule Rujira.HeightCoverageTest do
     Fin => %{
       ticker_id!:
         "reads only denom metadata, which is identity resolved at latest - see conventions",
-      book_depth: "pure - sums an already-loaded book's price levels"
+      book_depth: "pure - sums an already-loaded book's price levels",
+      order_filled_fee: "pure - the pair's maker fee over an already-read order"
     },
-    Ghost => %{},
-    Staking => %{},
+    Ghost => %{
+      vault_account_value: "pure - values already-loaded shares at the deposit-pool ratio"
+    },
+    Staking => %{
+      account_revenue_share: "pure - mirrors distribute() over an already-loaded pool status",
+      account_liquid_size: "pure - values receipt tokens at an already-loaded pool status"
+    },
     Brune => %{},
     ThorchainSwap => %{},
     Thorchain => %{
@@ -72,27 +77,6 @@ defmodule Rujira.HeightCoverageTest do
       assert [_, _] = assert_all_calls_at_height()
     end
 
-    test "Ghost.load_vault_account reads the vault status and the bank balance at the height" do
-      MockNode.expect(fn
-        %{"status" => _} -> MockNode.ok(ghost_status())
-        %QueryBalanceRequest{} -> {:ok, %{balance: %{denom: "x/ghost-vault/rune", amount: "0"}}}
-      end)
-
-      assert {:ok, %{shares: 0}} = Ghost.load_vault_account(vault(), "thor1acc", height: @height)
-      assert [_, _] = assert_all_calls_at_height()
-    end
-
-    test "Staking.load_account reads the status, the account and the bank balance at the height" do
-      MockNode.expect(fn
-        %{"status" => _} -> MockNode.ok(staking_status())
-        %{"account" => _} -> MockNode.ok(%{"bonded" => "0", "pending_revenue" => "0"})
-        %QueryBalanceRequest{} -> {:ok, %{balance: %{denom: "x/staking-rune", amount: "0"}}}
-      end)
-
-      assert {:ok, %{bonded: 0}} = Staking.load_account(pool(), "thor1acc", height: @height)
-      assert [_, _, _] = assert_all_calls_at_height()
-    end
-
     test "Brune reads a pool's config and its state at the height" do
       MockNode.expect(fn
         %{"config" => _} -> MockNode.ok(brune_config())
@@ -116,7 +100,7 @@ defmodule Rujira.HeightCoverageTest do
       assert [_, _] = assert_all_calls_at_height()
     end
 
-    test "Thorchain.liquidity_provider reads the position - and prices it - at the height" do
+    test "Thorchain.liquidity_provider reads the position at the height" do
       assert {:error, _} = Thorchain.liquidity_provider("BTC.BTC", "thor1abc", height: @height)
       assert [_] = assert_all_calls_at_height()
     end
@@ -149,11 +133,9 @@ defmodule Rujira.HeightCoverageTest do
       {:denom_for_ticker, &Fin.denom_for_ticker("RUNE", &1)},
       {:get_pair_from_denoms, &Fin.get_pair_from_denoms("rune", "x/ruji", &1)},
       {:pair_from_id, &Fin.pair_from_id("thor1pair", &1)},
-      {:get_pair_tvl, &Fin.get_pair_tvl("thor1pair", &1)},
-      {:load_pair, &Fin.load_pair(pair, 75, &1)},
+      {:load_pair, &Fin.load_pair(pair, nil, &1)},
       {:book_from_id, &Fin.book_from_id("thor1pair", &1)},
-      {:book_price, &Fin.book_price("thor1pair", &1)},
-      {:list_orders, &Fin.list_orders(pair, "thor1owner", 30, &1)},
+      {:list_orders, &Fin.list_orders(pair, "thor1owner", nil, &1)},
       {:list_pair_orders, &Fin.list_pair_orders(pair, &1)},
       {:load_order, &Fin.load_order(pair, :base, price, "thor1owner", &1)},
       {:list_all_orders, &Fin.list_all_orders("thor1owner", &1)},
@@ -162,8 +144,6 @@ defmodule Rujira.HeightCoverageTest do
       {:load_range, &Fin.load_range(pair, 1, &1)},
       {:list_all_ranges, &Fin.list_all_ranges(nil, nil, &1)},
       {:range_from_id, &Fin.range_from_id("thor1pair/1", &1)},
-      {:range_tvl, &Fin.range_tvl(pair, &1)},
-      {:total_range_tvl, &Fin.total_range_tvl/1},
       {:simulate, &Fin.simulate(pair, Coin.new(rune(), 100), &1)},
       {:simulation_from_id, &Fin.simulation_from_id("thor1pair:rune:100", &1)}
     ]
@@ -203,6 +183,7 @@ defmodule Rujira.HeightCoverageTest do
       {:get_pool, &Brune.get_pool("thor1brune", &1)},
       {:list_pools, &Brune.list_pools/1},
       {:load_pool, &Brune.load_pool(brune_pool(), &1)},
+      {:pool_from_id, &Brune.pool_from_id("thor1brune", &1)},
       {:list_events, &Brune.list_events("thor1brune", nil, 100, &1)},
       {:quote, &Brune.quote("thor1brune", rune(), ruji(), nil, &1)}
     ]
@@ -213,6 +194,7 @@ defmodule Rujira.HeightCoverageTest do
       {:get_strategy, &ThorchainSwap.get_strategy("thor1strategy", &1)},
       {:list_strategies, &ThorchainSwap.list_strategies/1},
       {:load_strategy, &ThorchainSwap.load_strategy(strategy(), &1)},
+      {:strategy_from_id, &ThorchainSwap.strategy_from_id("thor1strategy", &1)},
       {:quote, &ThorchainSwap.quote("thor1strategy", rune(), ruji(), nil, &1)}
     ]
   end
@@ -229,7 +211,9 @@ defmodule Rujira.HeightCoverageTest do
       {:mimir_from_id, &Thorchain.mimir_from_id("HALTTHORCHAIN", &1)},
       {:halted_pools, &Thorchain.halted_pools/1},
       {:inbound_addresses, &Thorchain.inbound_addresses/1},
-      {:outbound_fees, &Thorchain.outbound_fees/1}
+      {:inbound_address_from_id, &Thorchain.inbound_address_from_id("BTC", &1)},
+      {:outbound_fees, &Thorchain.outbound_fees/1},
+      {:outbound_fee_from_id, &Thorchain.outbound_fee_from_id("BTC.BTC", &1)}
     ]
   end
 
@@ -240,7 +224,7 @@ defmodule Rujira.HeightCoverageTest do
       {:spendable_balances, &Rujira.Bank.spendable_balances("thor1acc", &1)},
       {:supply, &Rujira.Bank.supply(rune(), &1)},
       {:total_supply, &Rujira.Bank.total_supply/1},
-      {:holders, &Rujira.Bank.holders(rune(), 10, &1)}
+      {:holders, &Rujira.Bank.holders(rune(), &1)}
     ]
   end
 
@@ -359,27 +343,6 @@ defmodule Rujira.HeightCoverageTest do
   defp brune_pool, do: %Brune.Pool{id: "thor1brune", address: "thor1brune"}
 
   defp strategy, do: %ThorchainSwap.Strategy{id: "thor1strategy", address: "thor1strategy"}
-
-  defp ghost_status do
-    %{
-      "last_updated" => "0",
-      "utilization_ratio" => "0",
-      "debt_rate" => "0",
-      "lend_rate" => "0",
-      "debt_pool" => %{"size" => "0", "shares" => "0", "ratio" => "0"},
-      "deposit_pool" => %{"size" => "0", "shares" => "0", "ratio" => "0"}
-    }
-  end
-
-  defp staking_status do
-    %{
-      "account_bond" => "0",
-      "assigned_revenue" => "0",
-      "liquid_bond_shares" => "0",
-      "liquid_bond_size" => "0",
-      "undistributed_revenue" => "0"
-    }
-  end
 
   defp brune_config do
     %{

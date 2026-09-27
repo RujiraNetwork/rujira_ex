@@ -62,10 +62,6 @@ defmodule Rujira.Brune.StateTest do
       assert Decimal.equal?(weight, Decimal.new("1.5"))
     end
 
-    test "maps an unrecognised status to :unknown" do
-      assert {:ok, %Node{status: :unknown}} = Node.new(node_attrs(%{"status" => "bogus"}))
-    end
-
     test "errors on missing fields" do
       assert {:error, :invalid_attrs} = Node.new(%{})
     end

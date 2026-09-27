@@ -8,6 +8,11 @@ defmodule Rujira.Brune.LoggedEvent do
   `"_contract_address"` merged into the attributes) and routed through
   `Rujira.Brune.Events.parse/1`.
 
+  There is no `from_id/2`: the contract's `events { start_after, limit }`
+  ranges over ids `> start_after` and walks the log **descending from its
+  current tip**, so no query can reach an arbitrary older `seq` - only
+  `list/4`, paging back from the tip, can locate one.
+
   Struct, construction, and queries. Use `Rujira.Brune` as the public API.
   """
 
@@ -22,10 +27,11 @@ defmodule Rujira.Brune.LoggedEvent do
 
   # --- Struct ---
 
-  defstruct id: 0, height: 0, time: nil, event: nil
+  defstruct id: nil, seq: 0, height: 0, time: nil, event: nil
 
   @type t :: %__MODULE__{
-          id: non_neg_integer(),
+          id: String.t() | nil,
+          seq: non_neg_integer(),
           height: non_neg_integer(),
           time: DateTime.t() | nil,
           event: BruneEvent.t()
@@ -36,19 +42,20 @@ defmodule Rujira.Brune.LoggedEvent do
   @spec new(map(), String.t()) :: {:ok, t()} | {:error, term()}
   def new(
         %{
-          "id" => id,
+          "id" => seq,
           "height" => height,
           "time" => time,
           "event" => %{"type" => type, "attributes" => attributes}
         },
         address
       ) do
-    with {:ok, id} <- Math.to_integer(id),
+    with {:ok, seq} <- Math.to_integer(seq),
          {:ok, height} <- Math.to_integer(height),
          {:ok, time} <- Math.to_integer(time),
          {:ok, time} <- DateTime.from_unix(time, :nanosecond),
          {:ok, event} <- Events.parse(Event.new("wasm-" <> type, attributes(attributes, address))) do
-      {:ok, %__MODULE__{id: id, height: height, time: time, event: event}}
+      {:ok,
+       %__MODULE__{id: "#{address}/#{seq}", seq: seq, height: height, time: time, event: event}}
     end
   end
 

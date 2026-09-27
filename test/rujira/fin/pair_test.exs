@@ -182,6 +182,21 @@ defmodule Rujira.Fin.PairTest do
       assert base.ticker == "USDC"
     end
 
+    test "an oracle shape it does not know is an error, not a pair with no oracle" do
+      config = %{
+        "address" => "thor1pair",
+        "market_makers" => [],
+        "denoms" => ["gaia-atom", "eth-usdc-0xabc"],
+        "oracles" => [%{"unexpected" => "shape"}],
+        "tick" => 6,
+        "fee_taker" => "0.0015",
+        "fee_maker" => "0.00075",
+        "fee_address" => "thor1fee"
+      }
+
+      assert {:error, :invalid_attrs} = Pair.new(config)
+    end
+
     test "handles nil oracles" do
       config = %{
         "address" => "thor1pair",

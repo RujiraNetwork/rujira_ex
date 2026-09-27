@@ -78,4 +78,24 @@ defmodule Rujira.Brune.PoolTest do
       assert {:ok, %Pool{address: "thor1pool"}} = Pool.get("thor1pool")
     end
   end
+
+  describe "from_id/2" do
+    test "round-trips on the pool's id" do
+      MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(config()) end)
+
+      assert {:ok, %Pool{id: "thor1pool"} = pool} = Pool.get("thor1pool")
+
+      MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(config()) end)
+
+      assert {:ok, ^pool} = Pool.from_id(pool.id)
+    end
+
+    test "a well-formed id with no contract behind it is not_found" do
+      MockNode.expect(fn %{"config" => %{}} ->
+        {:error, %GRPC.RPCError{status: 2, message: "codespace wasm code 22: no such contract"}}
+      end)
+
+      assert {:error, :not_found} = Pool.from_id("thor1missing")
+    end
+  end
 end

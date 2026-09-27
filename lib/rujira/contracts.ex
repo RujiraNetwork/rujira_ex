@@ -31,6 +31,9 @@ defmodule Rujira.Contracts do
 
   use Memoize
 
+  # The node's suffix on every contract error raised while answering a wasm query.
+  @wasm_query_failed ": query wasm contract failed"
+
   defstruct id: nil, address: nil, info: nil
 
   @type t :: %__MODULE__{id: String.t(), address: String.t(), info: ContractInfo.t() | nil}
@@ -51,13 +54,25 @@ defmodule Rujira.Contracts do
     Node.at_height(opts, fn -> fetch_code_info(code_id, opts) end, fn -> code_info(code_id) end)
   end
 
+  @doc """
+  Reads the `contract_info` entry a `cw2`-instrumented contract writes at
+  instantiation.
+
+  An address that holds no contract - the node answers `codespace wasm code 22:
+  no such contract` - is `{:error, :not_found}`, as is a contract that never
+  wrote the entry, which the node answers with empty raw state.
+  """
   @spec version(String.t()) ::
-          {:ok, %{contract: String.t(), version: String.t()} | nil} | {:error, term()}
+          {:ok, %{contract: String.t(), version: String.t()}}
+          | {:error, :not_found}
+          | {:error, term()}
   defmemo(version(address), do: fetch_version(address, []))
 
   @doc "As `version/1`, read at `opts[:height]` when given."
   @spec version(String.t(), Node.opts()) ::
-          {:ok, %{contract: String.t(), version: String.t()} | nil} | {:error, term()}
+          {:ok, %{contract: String.t(), version: String.t()}}
+          | {:error, :not_found}
+          | {:error, term()}
   def version(address, opts) do
     Node.at_height(opts, fn -> fetch_version(address, opts) end, fn -> version(address) end)
   end
@@ -155,8 +170,14 @@ defmodule Rujira.Contracts do
     end)
   end
 
+  @doc """
+  Loads `module`'s config from the contract at `address` and constructs it.
+
+  An `address` that holds no contract, or a contract the node otherwise
+  reports as missing, is `{:error, :not_found}`.
+  """
   @spec get({module(), String.t() | __MODULE__.t()} | struct()) ::
-          {:ok, struct()} | {:error, any()}
+          {:ok, struct()} | {:error, :not_found} | {:error, any()}
 
   defmemo(get({module, %__MODULE__{address: address}}), do: get({module, address}))
 
@@ -166,7 +187,7 @@ defmodule Rujira.Contracts do
 
   @doc "As `get/1`, read at `opts[:height]` when given."
   @spec get({module(), String.t() | t()} | struct(), Node.opts()) ::
-          {:ok, struct()} | {:error, any()}
+          {:ok, struct()} | {:error, :not_found} | {:error, any()}
   def get({module, %__MODULE__{address: address}}, opts), do: get({module, address}, opts)
 
   def get({module, address}, opts) do
@@ -211,6 +232,42 @@ defmodule Rujira.Contracts do
       fn -> list(module, code_ids) end
     )
   end
+
+  @doc """
+  True when a wasm query error means the queried item does not exist.
+
+  The node wraps a contract error as gRPC status 2 with the message
+  `"<contract error>: query wasm contract failed"`, so the accepted forms are
+  the renderings of the two "not found" errors a queried Rujira contract can
+  raise:
+
+    * `"NotFound"` - FIN's own `ContractError::NotFound {}`
+      (`contracts/rujira-fin/src/error.rs:70`), raised when an order is missing
+      (`contracts/rujira-fin/src/order_pool/order.rs:34`) and when a range is
+      (`contracts/rujira-fin/src/ranges/query.rs:11`, reached for a fixed and a
+      dynamic range alike).
+
+    * `"<kind> not found"` - `cosmwasm_std::StdError::NotFound`, whose `kind`
+      `cw-storage-plus` builds as `"type: <rust type>; key: [<hex bytes>]"`, so
+      the whole message reads `"type: rujira_rs::account_pool::AccountPoolAccount;
+      key: [..] not found"`. This is what the staking account query returns for
+      an address that has never bonded - the bare `ACCOUNTS.load/2` at
+      `contracts/rujira-staking/src/state.rs:203`, surfaced unchanged because
+      that query returns `StdResult`
+      (`contracts/rujira-staking/src/contract.rs:234`).
+
+  Everything else is false: any other contract error, any other gRPC status, and
+  any term that is not a `GRPC.RPCError` - a transport failure included.
+  """
+  @spec not_found?(term()) :: boolean()
+  def not_found?(%GRPC.RPCError{status: 2, message: message}) when is_binary(message) do
+    case String.split(message, @wasm_query_failed, parts: 2) do
+      [contract_error, ""] -> not_found_error?(contract_error)
+      _ -> false
+    end
+  end
+
+  def not_found?(_), do: false
 
   @spec query_state_raw(String.t(), binary(), Node.opts()) ::
           {:ok, term()} | {:error, :not_found} | {:error, Node.rpc_error()}
@@ -369,6 +426,9 @@ defmodule Rujira.Contracts do
 
   # --- Private ---
 
+  defp not_found_error?("NotFound"), do: true
+  defp not_found_error?(message), do: String.ends_with?(message, " not found")
+
   defp fetch_code_info(code_id, opts) do
     with {:ok, %{code_info: code_info}} <-
            Node.query(&Stub.code/3, %QueryCodeRequest{code_id: code_id}, opts) do
@@ -382,7 +442,7 @@ defmodule Rujira.Contracts do
         {:ok, %{contract: contract, version: version}}
 
       {:error, %{message: "codespace wasm code 22: no such contract:" <> _}} ->
-        {:ok, nil}
+        {:error, :not_found}
 
       other ->
         other
@@ -458,10 +518,19 @@ defmodule Rujira.Contracts do
 
   defp fetch_get(module, address, opts) do
     case query_state_smart(address, %{config: %{}}, opts) do
-      {:ok, config} -> construct(module, address, config)
-      err -> err
+      {:ok, config} ->
+        construct(module, address, config)
+
+      {:error, err} ->
+        if no_contract?(err) or not_found?(err), do: {:error, :not_found}, else: {:error, err}
     end
   end
+
+  defp no_contract?(%GRPC.RPCError{status: 2, message: message}) when is_binary(message) do
+    String.contains?(message, "no such contract")
+  end
+
+  defp no_contract?(_), do: false
 
   defp fetch_list(module, code_ids, opts) do
     with {:ok, contracts} <- by_codes(code_ids, opts) do

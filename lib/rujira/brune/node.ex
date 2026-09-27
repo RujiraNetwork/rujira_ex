@@ -16,11 +16,11 @@ defmodule Rujira.Brune.Node do
             weight: Decimal.new(0),
             capacity: 0,
             is_leaving: false,
-            status: :unknown,
+            status: nil,
             node: %{}
 
   @type status ::
-          :unknown | :whitelisted | :standby | :ready | :active | :disabled
+          :whitelisted | :standby | :ready | :active | :disabled
 
   @type t :: %__MODULE__{
           addr: String.t() | nil,
@@ -29,7 +29,7 @@ defmodule Rujira.Brune.Node do
           weight: Decimal.t(),
           capacity: Amount.t(),
           is_leaving: boolean(),
-          status: status(),
+          status: status() | nil,
           node: map()
         }
 
@@ -49,7 +49,8 @@ defmodule Rujira.Brune.Node do
     with {:ok, fee} <- Math.to_decimal(fee),
          {:ok, bond} <- Amount.new(bond),
          {:ok, weight} <- Math.to_decimal(weight),
-         {:ok, capacity} <- Amount.new(capacity) do
+         {:ok, capacity} <- Amount.new(capacity),
+         {:ok, status} <- status(status) do
       {:ok,
        %__MODULE__{
          addr: addr,
@@ -58,7 +59,7 @@ defmodule Rujira.Brune.Node do
          weight: weight,
          capacity: capacity,
          is_leaving: is_leaving,
-         status: status(status),
+         status: status,
          node: node
        }}
     end
@@ -68,10 +69,10 @@ defmodule Rujira.Brune.Node do
 
   # --- Private ---
 
-  defp status("whitelisted"), do: :whitelisted
-  defp status("standby"), do: :standby
-  defp status("ready"), do: :ready
-  defp status("active"), do: :active
-  defp status("disabled"), do: :disabled
-  defp status(_), do: :unknown
+  defp status("whitelisted"), do: {:ok, :whitelisted}
+  defp status("standby"), do: {:ok, :standby}
+  defp status("ready"), do: {:ok, :ready}
+  defp status("active"), do: {:ok, :active}
+  defp status("disabled"), do: {:ok, :disabled}
+  defp status(_), do: {:error, :invalid_status}
 end

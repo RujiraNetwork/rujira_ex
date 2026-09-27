@@ -1,9 +1,6 @@
 defmodule Rujira.Staking.Pool.AccountTest do
   use ExUnit.Case, async: true
 
-  alias Cosmos.Bank.V1beta1.QueryBalanceRequest
-  alias Cosmos.Bank.V1beta1.QueryBalanceResponse
-  alias Cosmos.Base.V1beta1.Coin
   alias Rujira.Assets.Asset
   alias Rujira.Staking.Pool
   alias Rujira.Staking.Pool.Account
@@ -24,6 +21,10 @@ defmodule Rujira.Staking.Pool.AccountTest do
     }
   end
 
+  defp pool do
+    %Pool{address: "thor1pool", receipt_asset: %Asset{id: "x/staking-rune"}}
+  end
+
   setup do
     Memoize.invalidate(Account)
     on_exit(fn -> Memoize.invalidate(Account) end)
@@ -31,16 +32,10 @@ defmodule Rujira.Staking.Pool.AccountTest do
   end
 
   describe "load/2" do
-    test "computes pending revenue share and liquid size with a fee" do
-      MockNode.expect(fn
-        %{"account" => %{"addr" => "thor1owner"}} ->
-          MockNode.ok(%{"addr" => "thor1owner", "bonded" => "200", "pending_revenue" => "5"})
-
-        %QueryBalanceRequest{address: "thor1owner", denom: "x/staking-rune"} ->
-          {:ok, %QueryBalanceResponse{balance: %Coin{denom: "x/staking-rune", amount: "100"}}}
+    test "is the contract's account and nothing else - no status, no bank balance" do
+      MockNode.expect(fn %{"account" => %{"addr" => "thor1owner"}} ->
+        MockNode.ok(%{"addr" => "thor1owner", "bonded" => "200", "pending_revenue" => "5"})
       end)
-
-      pool = loaded_pool(Decimal.new("0.1"))
 
       assert {:ok,
               %Account{
@@ -48,63 +43,87 @@ defmodule Rujira.Staking.Pool.AccountTest do
                 pool: "thor1pool",
                 owner: "thor1owner",
                 bonded: 200,
-                pending_revenue: 13,
-                liquid_shares: 100,
-                liquid_size: 110
-              }} = Account.load(pool, "thor1owner")
+                pending_revenue: 5
+              }} = Account.load(pool(), "thor1owner")
     end
 
-    test "loads the pool status first when not_loaded" do
-      MockNode.expect(fn
-        %{"status" => %{}} ->
-          MockNode.ok(%{
-            "account_bond" => "0",
-            "assigned_revenue" => "0",
-            "liquid_bond_shares" => "0",
-            "liquid_bond_size" => "0",
-            "undistributed_revenue" => "0"
-          })
-
-        %{"account" => %{"addr" => "thor1owner"}} ->
-          MockNode.ok(%{"addr" => "thor1owner", "bonded" => "0", "pending_revenue" => "0"})
-
-        %QueryBalanceRequest{} ->
-          {:ok, %QueryBalanceResponse{balance: nil}}
+    test "reads the account of a pool whose status is loaded without re-reading it" do
+      MockNode.expect(fn %{"account" => %{"addr" => "thor1owner"}} ->
+        MockNode.ok(%{"addr" => "thor1owner", "bonded" => "200", "pending_revenue" => "5"})
       end)
 
-      assert {:ok, %Account{bonded: 0, pending_revenue: 0, liquid_shares: 0, liquid_size: 0}} =
-               Account.load(
-                 %Pool{address: "thor1pool", receipt_asset: %Asset{id: "x/staking-rune"}},
-                 "thor1owner"
-               )
-    end
-
-    test "falls back to a zero account on NotFound" do
-      MockNode.expect(fn
-        %{"account" => %{"addr" => "thor1owner"}} ->
-          {:error, %GRPC.RPCError{status: 2, message: "NotFound: query wasm contract failed"}}
-
-        %QueryBalanceRequest{} ->
-          {:ok, %QueryBalanceResponse{balance: nil}}
-      end)
-
-      assert {:ok, %Account{bonded: 0, pending_revenue: 0}} =
+      assert {:ok, %Account{bonded: 200, pending_revenue: 5}} =
                Account.load(loaded_pool(), "thor1owner")
     end
 
-    test "propagates other errors" do
-      MockNode.expect(fn
-        %{"account" => %{"addr" => "thor1owner"}} ->
-          {:error, %GRPC.RPCError{status: 3, message: "boom"}}
+    test "an owner the contract holds no account for is not found" do
+      MockNode.expect(fn %{"account" => %{"addr" => "thor1owner"}} ->
+        {:error,
+         %GRPC.RPCError{
+           status: 2,
+           message:
+             "type: rujira_rs::account_pool::AccountPoolAccount; key: [00] not found: " <>
+               "query wasm contract failed"
+         }}
       end)
 
-      assert {:error, %GRPC.RPCError{status: 3}} = Account.load(loaded_pool(), "thor1owner")
+      assert {:error, :not_found} = Account.load(pool(), "thor1owner")
+    end
+
+    test "propagates other errors" do
+      MockNode.expect(fn %{"account" => %{"addr" => "thor1owner"}} ->
+        {:error, %GRPC.RPCError{status: 3, message: "boom"}}
+      end)
+
+      assert {:error, %GRPC.RPCError{status: 3}} = Account.load(pool(), "thor1owner")
     end
   end
 
   describe "from_id/1" do
     test "errors on a malformed id" do
       assert {:error, :invalid_id} = Account.from_id("thor1pool")
+    end
+  end
+
+  describe "revenue_share/2" do
+    test "mirrors the contract's distribute(), net of the pool fee" do
+      account = Account.new(loaded_pool(), "thor1owner", 200, 5)
+
+      assert {:ok, 8} = Account.revenue_share(account, loaded_pool(Decimal.new("0.1")))
+    end
+
+    test "is zero for an account that has nothing bonded" do
+      account = Account.new(loaded_pool(), "thor1owner", 0, 0)
+
+      assert {:ok, 0} = Account.revenue_share(account, loaded_pool())
+    end
+
+    test "needs the pool's status" do
+      account = Account.new(pool(), "thor1owner", 200, 5)
+
+      assert {:error, :not_loaded} = Account.revenue_share(account, pool())
+    end
+
+    test "treats a nil pool fee as no fee deduction" do
+      account = Account.new(loaded_pool(), "thor1owner", 200, 5)
+
+      assert {:ok, 9} = Account.revenue_share(account, loaded_pool(nil))
+    end
+  end
+
+  describe "liquid_size/2" do
+    test "values receipt tokens at the pool's liquid bond ratio" do
+      assert {:ok, 110} = Account.liquid_size(100, loaded_pool())
+    end
+
+    test "is zero while the pool has issued no liquid shares" do
+      pool = %Pool{loaded_pool() | status: %Status{liquid_bond_shares: 0, liquid_bond_size: 0}}
+
+      assert {:ok, 0} = Account.liquid_size(100, pool)
+    end
+
+    test "needs the pool's status" do
+      assert {:error, :not_loaded} = Account.liquid_size(100, pool())
     end
   end
 end

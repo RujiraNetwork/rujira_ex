@@ -594,11 +594,10 @@ defmodule Rujira.AssetsTest do
       assert Agent.get(calls, & &1) == 2
     end
 
-    test "falls back to the denom itself when the node has no metadata" do
+    test "returns the node's error unchanged when the query fails" do
       MockNode.expect(fn %QueryDenomMetadataRequest{} -> {:error, :not_found} end)
 
-      assert {:ok, %Metadata{symbol: @denom, display: display}} = Metadata.load_metadata(@denom)
-      assert display == String.upcase(@denom)
+      assert {:error, :not_found} = Metadata.load_metadata(@denom)
     end
 
     test "a failed query is not memoized, so a later call retries and succeeds" do
@@ -624,7 +623,7 @@ defmodule Rujira.AssetsTest do
         end
       end)
 
-      assert {:ok, %Metadata{symbol: @denom}} = Metadata.load_metadata(@denom)
+      assert {:error, :not_found} = Metadata.load_metadata(@denom)
       assert {:ok, %Metadata{symbol: "MEMO"}} = Metadata.load_metadata(@denom)
       assert Agent.get(calls, & &1) == 2
     end

@@ -10,25 +10,26 @@ defmodule Rujira.Bank.Balance do
   alias Rujira.Assets
   alias Rujira.Assets.Asset
   alias Rujira.Coin
-  alias Rujira.Logger
   alias Rujira.Node
 
   # --- Queries ---
 
   @doc """
-  Fetches an account's balance of a single asset. Amount is 0 when the account
-  holds none. Read at `opts[:height]` when one is given.
+  Fetches an account's balance of a single asset. Amount is 0 when the chain
+  reports a real zero balance (a `Coin` with amount `"0"`). Read at
+  `opts[:height]` when one is given.
   """
   @spec get(String.t(), Asset.t(), Node.opts()) :: {:ok, Coin.t()} | {:error, term()}
   def get(address, %Asset{} = asset, opts \\ []) do
     with {:ok, denom} <- Assets.to_native(asset),
-         {:ok, %{balance: balance}} <-
+         {:ok, response} <-
            Node.query(
              &Stub.balance/3,
              %QueryBalanceRequest{address: address, denom: denom},
              opts
            ),
-         {:ok, amount} <- Amount.new(coin_amount(balance)) do
+         {:ok, chain_amount} <- balance_amount(response),
+         {:ok, amount} <- Amount.new(chain_amount) do
       {:ok, Coin.new(asset, amount)}
     end
   end
@@ -46,8 +47,11 @@ defmodule Rujira.Bank.Balance do
 
   # --- Private ---
 
-  defp coin_amount(%{amount: amount}), do: amount
-  defp coin_amount(_), do: 0
+  # The node always populates `balance` for a valid `denom` - a real zero
+  # balance still comes back as a `Coin` with amount `"0"`. A `nil` balance is
+  # a malformed response, not a real chain value.
+  defp balance_amount(%{balance: %{amount: amount}}), do: {:ok, amount}
+  defp balance_amount(_), do: {:error, :invalid_response}
 
   defp all_balances(_address, "", _opts), do: {:ok, []}
 
@@ -86,15 +90,5 @@ defmodule Rujira.Bank.Balance do
   defp spendable_balances_request(address, key),
     do: %QuerySpendableBalancesRequest{address: address, pagination: %PageRequest{key: key}}
 
-  defp coins_to_coins(coins), do: Rujira.Enum.reduce_while_ok(coins, &to_coin/1)
-
-  # One unrecognised denom must not fail the whole list: log and skip it.
-  defp to_coin(coin), do: skip_invalid_denom(Coin.new(coin), coin)
-
-  defp skip_invalid_denom({:error, :invalid_denom}, %{denom: denom}) do
-    Logger.warning(__MODULE__, "skipping unrecognised denom #{inspect(denom)}")
-    :skip
-  end
-
-  defp skip_invalid_denom(result, _coin), do: result
+  defp coins_to_coins(coins), do: Rujira.Enum.reduce_while_ok(coins, &Coin.new/1)
 end

@@ -26,14 +26,14 @@ defmodule Rujira.Bank.HolderTest do
     end
   end
 
-  describe "holders/2" do
+  describe "holders/1" do
     setup do
       Memoize.invalidate(Holder)
       on_exit(fn -> Memoize.invalidate(Holder) end)
       :ok
     end
 
-    test "sorts owners by balance descending and applies the limit" do
+    test "returns owners in node order, unsorted and unlimited" do
       MockNode.expect(fn %QueryDenomOwnersRequest{denom: "rune"} ->
         {:ok,
          %QueryDenomOwnersResponse{
@@ -51,9 +51,10 @@ defmodule Rujira.Bank.HolderTest do
 
       assert {:ok,
               [
+                %Holder{address: "thor1small", balance: %Coin{asset: @rune, amount: 100}},
                 %Holder{address: "thor1big", balance: %Coin{asset: @rune, amount: 9000}},
                 %Holder{address: "thor1mid", balance: %Coin{asset: @rune, amount: 500}}
-              ]} = Holder.holders(@rune, 2)
+              ]} = Holder.holders(@rune)
     end
 
     test "paginates through all denom owners" do
@@ -79,8 +80,8 @@ defmodule Rujira.Bank.HolderTest do
 
       assert {:ok,
               [
-                %Holder{address: "thor1b", balance: %Coin{asset: @rune, amount: 200}},
-                %Holder{address: "thor1a", balance: %Coin{asset: @rune, amount: 100}}
+                %Holder{address: "thor1a", balance: %Coin{asset: @rune, amount: 100}},
+                %Holder{address: "thor1b", balance: %Coin{asset: @rune, amount: 200}}
               ]} = Holder.holders(@rune)
     end
 
@@ -119,16 +120,16 @@ defmodule Rujira.Bank.HolderTest do
       :ok
     end
 
-    test "holders/3 carries the block-height metadata" do
-      assert {:ok, [%Holder{address: "thor1a"}]} = Holder.holders(@rune, 2, height: @height)
+    test "holders/2 carries the block-height metadata" do
+      assert {:ok, [%Holder{address: "thor1a"}]} = Holder.holders(@rune, height: @height)
 
       assert_received {:mock_node, %QueryDenomOwnersRequest{}, opts}
       assert Keyword.get(opts, :metadata) == @metadata
     end
 
     test "a height read is never cached, so two calls reach the node twice" do
-      assert {:ok, _} = Holder.holders(@rune, 2, height: @height)
-      assert {:ok, _} = Holder.holders(@rune, 2, height: @height)
+      assert {:ok, _} = Holder.holders(@rune, height: @height)
+      assert {:ok, _} = Holder.holders(@rune, height: @height)
 
       assert_received {:mock_node, %QueryDenomOwnersRequest{}, _}
       assert_received {:mock_node, %QueryDenomOwnersRequest{}, _}
@@ -136,7 +137,7 @@ defmodule Rujira.Bank.HolderTest do
 
     test "the Rujira.Bank facade exposes the opts arity" do
       assert {:ok, [%Holder{address: "thor1a"}]} =
-               Rujira.Bank.holders(@rune, 2, height: @height)
+               Rujira.Bank.holders(@rune, height: @height)
 
       assert_received {:mock_node, %QueryDenomOwnersRequest{}, opts}
       assert Keyword.get(opts, :metadata) == @metadata

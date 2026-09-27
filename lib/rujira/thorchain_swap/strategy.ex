@@ -103,6 +103,9 @@ defmodule Rujira.ThorchainSwap.Strategy do
     end
   end
 
+  @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def from_id(address, opts \\ []), do: get(address, opts)
+
   @doc """
   Loads the strategy's live `markets` and `vaults` into its fields.
 

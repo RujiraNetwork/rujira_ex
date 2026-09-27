@@ -9,7 +9,6 @@ defmodule Rujira.Fin.Pair do
   alias Rujira.Contracts
   alias Rujira.Deployments
   alias Rujira.Fin.Book
-  alias Rujira.Logger
   alias Rujira.Math
   alias Rujira.Node
   alias Rujira.Thorchain.Oracle
@@ -236,42 +235,19 @@ defmodule Rujira.Fin.Pair do
     "#{Assets.label(base)}_#{Assets.label(target)}"
   end
 
-  @spec tvl(String.t(), Node.opts()) :: {:ok, non_neg_integer()} | {:error, term()}
-  def tvl(address, opts \\ []) do
-    case get(address, opts) do
-      {:ok, %__MODULE__{market_makers: mms} = pair} ->
-        with {:ok, mm_tvl} <- sum_mm_tvl(mms, opts),
-             {:ok, r_tvl} <- Rujira.Fin.Range.tvl(pair, opts) do
-          {:ok, mm_tvl + r_tvl}
-        end
-
-      {:error, err} ->
-        unless_height_error(err, fn -> {:ok, 0} end)
-    end
-  end
-
   # --- Private ---
 
+  # A pair that cannot be read is not silently left out of the list: the list is
+  # the set of configured pairs, so a pair missing from it would read as a pair
+  # that does not exist.
   defp fetch_list(opts) do
     with {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
-      Rujira.Enum.reduce_while_ok(targets, [], &fetch_target(&1, opts))
+      Rujira.Enum.reduce_while_ok(targets, &fetch_target(&1, opts))
     end
   end
 
-  # One pair that cannot be read must not fail the whole list - except when the
-  # height itself could not be served, which no skip can stand in for.
-  defp fetch_target(%{module: module, address: address}, opts) do
-    case Contracts.get({module, address}, opts) do
-      {:ok, v} ->
-        {:ok, v}
-
-      {:error, err} ->
-        unless_height_error(err, fn ->
-          Logger.error(__MODULE__, "#{address} error #{inspect(err)}")
-          :skip
-        end)
-    end
-  end
+  defp fetch_target(%{module: module, address: address}, opts),
+    do: Contracts.get({module, address}, opts)
 
   defp fetch_denom_for_ticker(ticker, opts) do
     with {:ok, pairs} <- list(opts) do
@@ -303,52 +279,10 @@ defmodule Rujira.Fin.Pair do
     {:ok, %Oracle{id: ticker, ticker: ticker, asset: nil}}
   end
 
+  # An absent oracle is `nil`; a shape this does not know is an error rather than
+  # a pair that reads as having no oracle.
   defp oracle_from_config(nil), do: {:ok, nil}
-  defp oracle_from_config(_), do: {:ok, nil}
-
-  # A market maker's TVL is a bare number, so it has no error channel of its
-  # own: a height that could not be served surfaces as an error on either the
-  # `Deployments.from_address/2` lookup or the market maker's own state query,
-  # both made at that same height. Any other failure keeps contributing 0, as
-  # before.
-  defp mm_tvl(mm, opts) do
-    with {:ok, %Deployments.Target{module: module}} <- Deployments.from_address(mm, opts),
-         {:ok, pool} <- mm_call(module, :pool_from_id, [mm], opts),
-         tvl when is_integer(tvl) <- mm_call(module, :tvl, [pool], opts) do
-      {:ok, tvl}
-    else
-      {:error, err} -> unless_height_error(err, fn -> {:ok, 0} end)
-      _ -> {:ok, 0}
-    end
-  end
-
-  defp sum_mm_tvl(mms, opts) do
-    Enum.reduce_while(mms, {:ok, 0}, fn mm, {:ok, acc} ->
-      case mm_tvl(mm, opts) do
-        {:ok, tvl} -> {:cont, {:ok, acc + tvl}}
-        {:error, _} = err -> {:halt, err}
-      end
-    end)
-  end
-
-  # A market maker's module lives in the consumer, not here, so it may not have
-  # taken `opts` yet. Call the opts arity when it exports one. The bare arity
-  # reads the latest state, which is not the state at a requested height, so for
-  # a height read an unconverted market maker is `{:error, :height_not_supported}`
-  # — only a live read falls back to it, contributing its present TVL.
-  defp mm_call(module, fun, args, opts) do
-    Code.ensure_loaded(module)
-
-    if function_exported?(module, fun, length(args) + 1) do
-      apply(module, fun, args ++ [opts])
-    else
-      Node.at_height(
-        opts,
-        fn -> {:error, :height_not_supported} end,
-        fn -> apply(module, fun, args) end
-      )
-    end
-  end
+  defp oracle_from_config(_), do: {:error, :invalid_attrs}
 
   defp lookup(assets, opts) do
     with [b, q] <- String.split(assets, "/"),
@@ -368,17 +302,8 @@ defmodule Rujira.Fin.Pair do
       {:ok, pair}
     else
       nil -> {:error, :not_found}
-      {:error, err} -> unless_height_error(err, fn -> {:error, :invalid_id} end)
+      {:error, _} = err -> err
       _ -> {:error, :invalid_id}
     end
   end
-
-  # A height read that could not be served is an error, never a default: the
-  # caller asked for the state at one height and must be told that height was
-  # not read. Every other error keeps today's behaviour.
-  defp unless_height_error({:height_unavailable, _} = err, _fallback), do: {:error, err}
-  defp unless_height_error({:height_mismatch, _, _} = err, _fallback), do: {:error, err}
-  defp unless_height_error(:invalid_height, _fallback), do: {:error, :invalid_height}
-  defp unless_height_error(:height_not_supported, _fallback), do: {:error, :height_not_supported}
-  defp unless_height_error(_err, fallback), do: fallback.()
 end

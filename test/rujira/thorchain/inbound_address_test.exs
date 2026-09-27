@@ -73,5 +73,27 @@ defmodule Rujira.Thorchain.InboundAddressTest do
       assert_received {:mock_node, %QueryInboundAddressesRequest{}, opts}
       assert Keyword.get(opts, :metadata) == @metadata
     end
+
+    test "from_id/2 forwards the height to the list it reads" do
+      assert {:ok, %InboundAddress{id: "BTC"}} = InboundAddress.from_id("BTC", height: @height)
+
+      assert_received {:mock_node, %QueryInboundAddressesRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "the Rujira.Thorchain facade exposes inbound_address_from_id/2" do
+      assert {:ok, %InboundAddress{id: "BTC"}} =
+               Rujira.Thorchain.inbound_address_from_id("BTC", height: @height)
+    end
+  end
+
+  describe "from_id/2" do
+    test "returns :not_found for a chain with no inbound address" do
+      MockNode.expect(fn %QueryInboundAddressesRequest{} ->
+        {:ok, %QueryInboundAddressesResponse{inbound_addresses: [response()]}}
+      end)
+
+      assert {:error, :not_found} = InboundAddress.from_id("ETH")
+    end
   end
 end

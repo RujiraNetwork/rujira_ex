@@ -9,6 +9,9 @@ defmodule Rujira.Ghost do
   caller can read a whole composite at one `height:`. A memoized query's opts
   arity reads the node uncached when given a `:height` - see the resource
   module.
+
+  `vault_account_value/2` reaches no node: it is pure over a vault whose status
+  is loaded - see `Rujira.Ghost.Vault.Account`.
   """
 
   alias Rujira.Ghost.Vault
@@ -21,7 +24,7 @@ defmodule Rujira.Ghost do
 
   defdelegate list_vaults(opts \\ []), to: Vault, as: :list
   defdelegate get_vault(address, opts \\ []), to: Vault, as: :get
-  defdelegate vault_from_id(id, opts \\ []), to: Vault, as: :get
+  defdelegate vault_from_id(id, opts \\ []), to: Vault, as: :from_id
   defdelegate load_vault(vault, opts \\ []), to: Status, as: :load
 
   # --- Borrower ---
@@ -37,4 +40,5 @@ defmodule Rujira.Ghost do
 
   defdelegate load_vault_account(vault, account, opts \\ []), to: Account, as: :load
   defdelegate vault_account_from_id(id, opts \\ []), to: Account, as: :from_id
+  defdelegate vault_account_value(account, vault), to: Account, as: :value
 end

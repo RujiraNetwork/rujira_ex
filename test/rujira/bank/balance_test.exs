@@ -1,8 +1,6 @@
 defmodule Rujira.Bank.BalanceTest do
   use ExUnit.Case, async: true
 
-  import ExUnit.CaptureLog
-
   alias Cosmos.Bank.V1beta1.QueryAllBalancesRequest
   alias Cosmos.Bank.V1beta1.QueryAllBalancesResponse
   alias Cosmos.Bank.V1beta1.QueryBalanceRequest
@@ -31,12 +29,20 @@ defmodule Rujira.Bank.BalanceTest do
       assert {:ok, %Coin{asset: @rune, amount: 1000}} = Balance.get("thor1abc", @rune)
     end
 
-    test "a missing balance resolves to amount 0" do
+    test "a real zero balance resolves to amount 0" do
+      MockNode.expect(fn %QueryBalanceRequest{address: "thor1abc", denom: "btc-btc"} ->
+        {:ok, %QueryBalanceResponse{balance: %ChainCoin{denom: "btc-btc", amount: "0"}}}
+      end)
+
+      assert {:ok, %Coin{asset: @btc, amount: 0}} = Balance.get("thor1abc", @btc)
+    end
+
+    test "a malformed response with no balance field errors" do
       MockNode.expect(fn %QueryBalanceRequest{address: "thor1abc", denom: "btc-btc"} ->
         {:ok, %QueryBalanceResponse{balance: nil}}
       end)
 
-      assert {:ok, %Coin{asset: @btc, amount: 0}} = Balance.get("thor1abc", @btc)
+      assert {:error, :invalid_response} = Balance.get("thor1abc", @btc)
     end
 
     test "errors when the asset has no native denom" do
@@ -69,7 +75,7 @@ defmodule Rujira.Bank.BalanceTest do
               ]} = Balance.list("thor1abc")
     end
 
-    test "skips an unresolvable denom and keeps the rest" do
+    test "an unresolvable denom fails the whole call" do
       MockNode.expect(fn %QueryAllBalancesRequest{} ->
         {:ok,
          %QueryAllBalancesResponse{
@@ -82,16 +88,7 @@ defmodule Rujira.Bank.BalanceTest do
          }}
       end)
 
-      log =
-        capture_log(fn ->
-          assert {:ok,
-                  [
-                    %Coin{asset: @rune, amount: 1000},
-                    %Coin{asset: @ruji, amount: 500}
-                  ]} = Balance.list("thor1abc")
-        end)
-
-      assert log =~ ~s(skipping unrecognised denom "ibc/ABC")
+      assert {:error, :invalid_denom} = Balance.list("thor1abc")
     end
 
     test "still errors the whole call on an unparseable amount" do

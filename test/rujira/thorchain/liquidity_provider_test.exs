@@ -37,6 +37,29 @@ defmodule Rujira.Thorchain.LiquidityProviderTest do
 
       assert lp.asset.ticker == "BTC"
     end
+
+    test "carries no value_usd - pricing the position is the caller's" do
+      res = %QueryLiquidityProviderResponse{
+        asset: "BTC.BTC",
+        rune_address: "thor1abc",
+        asset_address: "",
+        last_add_height: 100,
+        last_withdraw_height: 0,
+        units: "1000",
+        pending_rune: "0",
+        pending_asset: "0",
+        rune_deposit_value: "0",
+        asset_deposit_value: "0",
+        rune_redeem_value: "0",
+        asset_redeem_value: "0",
+        luvi_deposit_value: "0",
+        luvi_redeem_value: "0",
+        luvi_growth_pct: "0"
+      }
+
+      assert {:ok, %LiquidityProvider{} = lp} = LiquidityProvider.new(res)
+      refute Map.has_key?(Map.from_struct(lp), :value_usd)
+    end
   end
 
   describe "height reads" do
