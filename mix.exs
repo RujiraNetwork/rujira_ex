@@ -1,7 +1,7 @@
 defmodule RujiraEx.MixProject do
   use Mix.Project
 
-  @version "0.5.0"
+  @version "0.6.0"
   @source_url "https://github.com/RujiraNetwork/rujira_ex"
 
   def project do
@@ -56,6 +56,7 @@ defmodule RujiraEx.MixProject do
       source_ref: "v#{@version}",
       extras: [
         "README.md",
+        "CHANGELOG.md",
         "CONTRIBUTING.md",
         "guides/conventions.md",
         "guides/architecture.md",

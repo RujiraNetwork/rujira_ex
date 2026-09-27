@@ -1,5 +1,55 @@
 # Coding Conventions
 
+## Typed chain access
+
+Released in 0.6.0 as a breaking release-wide principle:
+
+A struct's fields are exactly the chain data for the entity the caller asked
+for — decoded, cast, normalised from that one read — or computed only from
+that same read. Nothing is enriched from a second source. A second read's
+math (a fee share, a redeemable value, a filled fee) is never a struct field;
+it is an explicit pure function taking the structs the caller already holds
+(e.g. `Order.filled_fee/2`, `Staking.Pool.Account.revenue_share/2`,
+`Staking.Pool.Account.liquid_size/2`, `Ghost.Vault.Account.value/2`).
+
+Pricing a position is one instance of this: nothing computes a `value_usd`
+field internally — a caller who wants a USD value calls `Rujira.Prices`
+itself, passing the amounts and ticker off the struct it already holds.
+
+No silent defaults. An error is returned unchanged as `{:error, reason}` —
+never replaced by `0`, `[]`, `nil`, a placeholder struct, or a default value,
+and never re-labelled into a different error. A contract's "not found" is
+`{:error, :not_found}` — check with `Rujira.Contracts.not_found?/1` rather
+than matching the raw node error. Paging that terminates on an empty page is
+not a silent default and stays as-is.
+
+An absent chain value (a field the chain never set) is `nil`, not a
+placeholder.
+
+One entity family per read: a query returns data for the one entity kind the
+caller asked about, not a composite of that entity plus another that happens
+to be reachable from it.
+
+## Entity ids
+
+Every entity struct exposes an `id` field and a public `from_id(id, opts \\
+[])` that resolves it at any `height:` and round-trips:
+`from_id(x.id)` returns `x` (up to the read being live vs. historical).
+
+- A well-formed id that names no entity on chain is `{:error, :not_found}`.
+- A malformed id is `{:error, :invalid_id}`.
+
+Exceptions:
+
+- `Rujira.Brune.LoggedEvent` has no `from_id/2` — the contract's
+  `events { start_after, limit }` only walks the log **descending from its
+  current tip**, so no query can jump straight to an arbitrary older `seq`.
+  Only `list/4`, paging back from the tip, can locate one.
+- Embedded value structs with no on-chain address of their own, such as
+  `Rujira.Thorchain.Oracle`, have no `from_id/2`.
+- `Rujira.Assets.Asset` is resolved by `Rujira.Assets.from_id/1`, not a
+  `from_id/2` on the struct itself — asset ids are not read at a height.
+
 ## Aliases
 
 Always use explicit, fully qualified aliases. Never use the `{}` grouping syntax. Alphabetical order within each group.
@@ -185,13 +235,16 @@ Use consistent error atoms across the codebase:
 | `:no_native_denom` | `Assets.to_native/1` on an asset that is not held as a bank denom |
 | `:invalid_coin_format` | `Coin.parse/1` cannot tokenize the input |
 | `:invalid_event` | `Events.parse/1` given a non-event shape |
-| `:invalid_attrs` | Sub-event `new/1` got a map missing required keys |
-| `:not_found` | Resource lookup returns nothing |
+| `:invalid_attrs` | Sub-event `new/1`, or a resource `new/1`/`new/2`, got a map missing required keys |
+| `:invalid_status` | `Brune.Node.new/1` got a node status string it doesn't recognise |
+| `:invalid_response` | `Bank.Balance.get/3` or `Bank.Supply.get/2` got a node reply with no `balance`/`amount` — a malformed response, not a real chain value |
+| `:not_found` | Resource lookup returns nothing — see "Entity ids" |
+| `:not_loaded` | A calculation over a struct's `status: :not_loaded` association (e.g. `Staking.Pool.Account.revenue_share/2`, `Ghost.Vault.Account.value/2`) — load the association first |
 | `:not_supported` | Operation valid in shape but disallowed (e.g. `Assets.to_secured/1` on a THOR-chain asset) |
 | `:unknown_protocol` | `Deployments` saw an on-chain contract with no protocol mapping |
 | `:no_price` | `Prices.get/1` could not resolve an oracle or FIN mid-price |
 | `:invalid_height` | `Rujira.Node.query/3` given a `:height` opt - or `Rujira.Thorchain.block/2` a height - that isn't an integer in `1..9_223_372_036_854_775_807` |
-| `:height_not_supported` | `Rujira.Node.query/3` given `:height` with an arity-2 `fun` (can't carry metadata) |
+| `:height_not_supported` | `Rujira.Node.query/3` given `:height` with an arity-2 `fun` (can't carry metadata); also `Prices.get/4`/`value_usd/4` given `:height` against an implementation with no opts arity |
 | `{:height_mismatch, height, returned}` | The reply's `returned` height doesn't match the requested `height` - `Rujira.Node.query/3` reads it from the headers (`nil` when they were dropped), `Rujira.Thorchain.block/2` from the block header |
 | `{:height_unavailable, height}` | A node error from `Rujira.Node.query/3` or `Rujira.Thorchain.block/2` means the requested `height` cannot be served (pruned, in the future, etc.) |
 
@@ -242,13 +295,13 @@ applied — a cached value cannot honour it. Pass `height:` to bypass the cache.
 
 ### Prices
 
-A position read at a height must be valued at that height, so anything that
-computes a `value_usd` threads its `opts` into `Rujira.Prices`. `get/2` and
-`value_usd/4` are *optional* callbacks, so an implementation predating them
-still satisfies the behaviour. Asked for a `:height` such an implementation
-cannot serve, `get/2` returns `{:error, :height_not_supported}`; `value_usd/4`
-has no error channel — it returns an integer — so it returns `0` rather than
-today's price, which would misvalue the position silently.
+Pricing a position is the caller's job, not the struct's — see "Typed chain
+access". A caller that prices a position read at a height threads that same
+`opts` into `Rujira.Prices`. `get/2` and `value_usd/4` are *optional*
+callbacks, so an implementation predating them still satisfies the behaviour.
+Asked for a `:height` such an implementation cannot serve, both return
+`{:error, :height_not_supported}` — a price from the present is not a price at
+that height, and returning one would misvalue the position silently.
 
 ### Coverage
 
