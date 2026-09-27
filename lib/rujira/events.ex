@@ -29,8 +29,11 @@ defmodule Rujira.Events do
   @doc """
   Casts a raw `BlockEvent` protobuf struct into the standard
   `%{type: String.t(), attributes: map()}` format.
+
+  A `BlockEvent` whose pairs don't start with `%{key: "type"}` casts to
+  `%{type: nil, attributes: <all pairs as a map>}` instead of raising.
   """
-  @spec cast(BlockEvent.t()) :: %{type: String.t(), attributes: map()}
+  @spec cast(BlockEvent.t()) :: %{type: String.t() | nil, attributes: map()}
   def cast(%BlockEvent{
         event_kv_pair: [
           %{key: "type", value: type}
@@ -43,6 +46,15 @@ defmodule Rujira.Events do
       end)
 
     %{type: type, attributes: attrs}
+  end
+
+  def cast(%BlockEvent{event_kv_pair: pairs}) do
+    attrs =
+      Enum.reduce(pairs, %{}, fn %{key: key, value: value}, acc ->
+        Map.put(acc, key, value)
+      end)
+
+    %{type: nil, attributes: attrs}
   end
 
   @doc """

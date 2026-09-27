@@ -4,11 +4,11 @@ defmodule Rujira.Events.Event do
   defstruct type: nil, attributes: nil
 
   @type t :: %__MODULE__{
-          type: String.t(),
+          type: String.t() | nil,
           attributes: map()
         }
 
-  @spec new(String.t(), map()) :: t()
+  @spec new(String.t() | nil, map()) :: t()
   def new(type, attributes) do
     %__MODULE__{type: type, attributes: attributes}
   end

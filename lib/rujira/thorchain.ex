@@ -11,12 +11,17 @@ defmodule Rujira.Thorchain do
   """
 
   alias Rujira.Thorchain.Address
+  alias Rujira.Thorchain.Block
   alias Rujira.Thorchain.InboundAddress
   alias Rujira.Thorchain.LiquidityProvider
   alias Rujira.Thorchain.Mimir
   alias Rujira.Thorchain.Network
   alias Rujira.Thorchain.OutboundFee
   alias Rujira.Thorchain.Pool
+
+  # --- Block ---
+
+  defdelegate block(height \\ :latest, opts \\ []), to: Block, as: :get
 
   # --- Network ---
 

@@ -178,6 +178,7 @@ Use consistent error atoms across the codebase:
 | `:invalid_amount` | `Amount.new/1` fails |
 | `:invalid_integer` | `Math.to_integer/1` fails |
 | `:invalid_decimal` | `Math.to_decimal/1` fails |
+| `:invalid_time` | An RFC3339 timestamp from the chain cannot be parsed |
 | `:invalid_id` | ID format doesn't match expected pattern |
 | `:invalid_denom` | Denom not recognized by `Assets.from_denom/1` |
 | `:invalid_asset_id` | Asset id rejected by `Assets.from_id/1` |
@@ -189,10 +190,10 @@ Use consistent error atoms across the codebase:
 | `:not_supported` | Operation valid in shape but disallowed (e.g. `Assets.to_secured/1` on a THOR-chain asset) |
 | `:unknown_protocol` | `Deployments` saw an on-chain contract with no protocol mapping |
 | `:no_price` | `Prices.get/1` could not resolve an oracle or FIN mid-price |
-| `:invalid_height` | `Rujira.Node.query/3` given a `:height` opt that isn't an integer in `1..9_223_372_036_854_775_807` |
+| `:invalid_height` | `Rujira.Node.query/3` given a `:height` opt - or `Rujira.Thorchain.block/2` a height - that isn't an integer in `1..9_223_372_036_854_775_807` |
 | `:height_not_supported` | `Rujira.Node.query/3` given `:height` with an arity-2 `fun` (can't carry metadata) |
-| `{:height_mismatch, height, returned}` | The reply's `returned` height doesn't match the requested `height` - `Rujira.Node.query/3` reads it from the headers (`nil` when they were dropped) |
-| `{:height_unavailable, height}` | A node error from `Rujira.Node.query/3` means the requested `height` cannot be served (pruned, in the future, etc.) |
+| `{:height_mismatch, height, returned}` | The reply's `returned` height doesn't match the requested `height` - `Rujira.Node.query/3` reads it from the headers (`nil` when they were dropped), `Rujira.Thorchain.block/2` from the block header |
+| `{:height_unavailable, height}` | A node error from `Rujira.Node.query/3` or `Rujira.Thorchain.block/2` means the requested `height` cannot be served (pruned, in the future, etc.) |
 
 ## Query options
 

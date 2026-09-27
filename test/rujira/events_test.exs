@@ -282,6 +282,24 @@ defmodule Rujira.EventsTest do
       assert %{type: "swap", attributes: %{"pool" => "BTC.BTC", "id" => "123"}} =
                Events.cast(block_event)
     end
+
+    test "casts a BlockEvent without a leading type pair to a nil-typed map" do
+      block_event = %Thorchain.Types.BlockEvent{
+        event_kv_pair: [
+          %{key: "pool", value: "BTC.BTC"},
+          %{key: "id", value: "123"}
+        ]
+      }
+
+      assert %{type: nil, attributes: %{"pool" => "BTC.BTC", "id" => "123"}} =
+               Events.cast(block_event)
+    end
+
+    test "casts a BlockEvent with no pairs at all to a nil-typed map" do
+      block_event = %Thorchain.Types.BlockEvent{event_kv_pair: []}
+
+      assert %{type: nil, attributes: %{}} = Events.cast(block_event)
+    end
   end
 
   describe "parse/1 — raw BlockEvent proto" do
@@ -298,6 +316,19 @@ defmodule Rujira.EventsTest do
                Events.parse(block_event)
 
       assert Decimal.equal?(price, Decimal.new("3800"))
+    end
+
+    test "a raw BlockEvent without a leading type pair parses to the generic Event" do
+      block_event = %Thorchain.Types.BlockEvent{
+        event_kv_pair: [
+          %{key: "pool", value: "BTC.BTC"},
+          %{key: "id", value: "123"}
+        ]
+      }
+
+      assert {:ok,
+              %Rujira.Events.Event{type: nil, attributes: %{"pool" => "BTC.BTC", "id" => "123"}}} =
+               Events.parse(block_event)
     end
   end
 end

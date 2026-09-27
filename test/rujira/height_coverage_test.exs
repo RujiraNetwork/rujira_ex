@@ -6,7 +6,8 @@ defmodule Rujira.HeightCoverageTest do
   not to the one it happens to reach first is the bug this catches.
 
   A function that does not carry the height in metadata - because it never
-  reaches the node - is listed in `@excluded` with why. The two lists together must name
+  reaches the node, or because it takes the height as an argument rather than as
+  an opt - is listed in `@excluded` with why. The two lists together must name
   every public function of the facade, so a new one fails here until it is
   classified.
   """
@@ -40,7 +41,8 @@ defmodule Rujira.HeightCoverageTest do
     Brune => %{},
     ThorchainSwap => %{},
     Thorchain => %{
-      module_address: "pure - hashes a module name into an address, no node read"
+      module_address: "pure - hashes a module name into an address, no node read",
+      block: "takes its height as an argument - it travels in the request, not in metadata"
     },
     Rujira.Bank => %{}
   }
