@@ -26,6 +26,14 @@ defmodule Rujira.PricesTest do
     message: "fail to get price for symbol 'ATOM': Price not found: ATOM"
   }
 
+  # The same answer via the ABCI query path: `gRPCErrorToSDKError`
+  # (`baseapp/abci.go:1168`) reclassifies the plain error as `ErrInvalidRequest`
+  # and appends ": invalid request".
+  @no_oracle_price_abci %GRPC.RPCError{
+    status: 3,
+    message: "fail to get price for symbol 'RUJI': Price not found: RUJI: invalid request"
+  }
+
   @unavailable %GRPC.RPCError{status: 14, message: "connection refused"}
 
   defmodule LegacyPrices do
@@ -143,6 +151,50 @@ defmodule Rujira.PricesTest do
       end)
 
       assert {:error, :no_price} = Prices.get("ATOM")
+    end
+
+    test "the recorded ABCI-path not-found reply also falls back to FIN" do
+      MockNode.expect(fn
+        %QueryOraclePriceRequest{symbol: "RUJI"} -> {:error, @no_oracle_price_abci}
+        %QueryContractInfosRequest{} -> {:ok, %{infos: []}}
+      end)
+
+      assert {:error, :no_price} = Prices.get("RUJI")
+    end
+
+    test "a not-found message for a different ticker is returned as itself" do
+      wrong_ticker = %GRPC.RPCError{
+        status: 2,
+        message: "fail to get price for symbol 'BTC': Price not found: BTC"
+      }
+
+      MockNode.expect(fn %QueryOraclePriceRequest{symbol: "ATOM"} -> {:error, wrong_ticker} end)
+
+      assert {:error, ^wrong_ticker} = Prices.get("ATOM")
+      refute_received {:mock_node, %QueryContractInfosRequest{}, _opts}
+    end
+
+    test "a not-found message for a ticker sharing this one's prefix is returned as itself" do
+      prefix_ticker = %GRPC.RPCError{
+        status: 2,
+        message: "fail to get price for symbol 'ATOMX': Price not found: ATOMX"
+      }
+
+      MockNode.expect(fn %QueryOraclePriceRequest{symbol: "ATOM"} -> {:error, prefix_ticker} end)
+
+      assert {:error, ^prefix_ticker} = Prices.get("ATOM")
+      refute_received {:mock_node, %QueryContractInfosRequest{}, _opts}
+    end
+
+    test "a status-3 error with another message is returned as itself" do
+      other_abci_error = %GRPC.RPCError{status: 3, message: "invalid request: bad symbol"}
+
+      MockNode.expect(fn %QueryOraclePriceRequest{symbol: "ATOM"} ->
+        {:error, other_abci_error}
+      end)
+
+      assert {:error, ^other_abci_error} = Prices.get("ATOM")
+      refute_received {:mock_node, %QueryContractInfosRequest{}, _opts}
     end
 
     test "a book quoting only one side has no mid-price, so no FIN price" do

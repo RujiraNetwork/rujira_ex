@@ -22,12 +22,17 @@ defmodule Rujira.Prices.Default do
   alias Thorchain.Types.Query.Stub, as: Q
   alias Thorchain.Types.QueryOraclePriceRequest
 
-  # `queryOraclePrice` (thornode `x/thorchain/querier.go`) answers a symbol it
-  # holds no price for with the error of `Keeper.GetPrice`
-  # (`x/thorchain/keeper/v1/keeper_oracle.go`), rendered as
+  # `queryOraclePrice` (thornode `x/thorchain/querier.go:4389`) answers a symbol
+  # it holds no price for with the error of `Keeper.GetPrice`
+  # (`x/thorchain/keeper/v1/keeper_oracle.go:38`), rendered as
   # `"fail to get price for symbol '<symbol>': Price not found: <symbol>"`. It
-  # is an unregistered error, so the node wraps it as gRPC status 2.
-  @price_not_found "Price not found:"
+  # is a plain Go error, so Cosmos SDK v0.53.0 gives it a code by serving path:
+  # the node's own gRPC server passes it through unchanged -> gRPC status 2
+  # (Unknown); the ABCI query path (`baseapp/abci.go:1168`
+  # `gRPCErrorToSDKError`) reclassifies it as `ErrInvalidRequest` and appends
+  # ": invalid request" -> gRPC status 3 (InvalidArgument). The status code
+  # identifies the path, not the error, so both are treated the same here.
+  @price_not_found ~r/Price not found: (?<symbol>.+?)(:|$)/
 
   @impl true
   def get(ticker), do: get(ticker, [])
@@ -111,26 +116,29 @@ defmodule Rujira.Prices.Default do
   defp fetch_oracle_price(ticker, opts) do
     (&Q.oracle_price/3)
     |> Node.query(%QueryOraclePriceRequest{symbol: ticker}, opts)
-    |> oracle_result()
+    |> oracle_result(ticker)
   end
 
   # An unset price message, or a price the chain renders as absent, is the same
   # answer as the not-found error: this symbol has no oracle price.
-  defp oracle_result({:ok, %{price: nil}}), do: {:error, :no_price}
+  defp oracle_result({:ok, %{price: nil}}, _ticker), do: {:error, :no_price}
 
-  defp oracle_result({:ok, %{price: %{price: price}}}) do
+  defp oracle_result({:ok, %{price: %{price: price}}}, _ticker) do
     case Rujira.Math.to_decimal(price) do
       {:ok, nil} -> {:error, :no_price}
       result -> result
     end
   end
 
-  defp oracle_result({:error, %GRPC.RPCError{status: 2, message: message}} = err)
-       when is_binary(message) do
-    if String.contains?(message, @price_not_found), do: {:error, :no_price}, else: err
+  defp oracle_result({:error, %GRPC.RPCError{status: status, message: message}} = err, ticker)
+       when status in [2, 3] and is_binary(message) do
+    case Regex.named_captures(@price_not_found, message) do
+      %{"symbol" => ^ticker} -> {:error, :no_price}
+      _ -> err
+    end
   end
 
-  defp oracle_result({:error, _} = err), do: err
+  defp oracle_result({:error, _} = err, _ticker), do: err
 
   # `:not_found` anywhere down this chain means FIN has no market for the asset,
   # which is `:no_price`. Every other error - a transport failure, an unservable
