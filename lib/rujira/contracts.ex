@@ -222,7 +222,14 @@ defmodule Rujira.Contracts do
     fetch_list(module, code_ids, [])
   end
 
-  @doc "As `list/2`, read at `opts[:height]` when given."
+  @doc """
+  As `list/2`, read at `opts[:height]` when given.
+
+  Each contract is read concurrently; `opts[:fan_out]` sets the per-contract
+  timeout and how many run at once - see `Rujira.Enum`. Without a `:height`
+  this is the memoized `list/2`, so a per-call `:fan_out` only applies to an
+  uncached read.
+  """
   @spec list(module(), list(integer()), Node.opts()) ::
           {:ok, list(struct())} | {:error, Node.rpc_error()}
   def list(module, code_ids, opts) when is_list(code_ids) do
@@ -534,7 +541,7 @@ defmodule Rujira.Contracts do
 
   defp fetch_list(module, code_ids, opts) do
     with {:ok, contracts} <- by_codes(code_ids, opts) do
-      Rujira.Enum.reduce_async_while_ok(contracts, &get({module, &1}, opts), timeout: 30_000)
+      Rujira.Enum.reduce_async_while_ok(contracts, &get({module, &1}, opts), opts, __MODULE__)
     end
   end
 

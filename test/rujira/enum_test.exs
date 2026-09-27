@@ -74,7 +74,7 @@ defmodule Rujira.EnumTest do
     end
   end
 
-  describe "reduce_async_while_ok/3" do
+  describe "reduce_async_while_ok/4" do
     test "collects ok values, preserving input order" do
       assert {:ok, [2, 4, 6]} =
                Rujira.Enum.reduce_async_while_ok([1, 2, 3], fn x -> {:ok, x * 2} end)
@@ -124,13 +124,36 @@ defmodule Rujira.EnumTest do
       refute_receive {:result, _}, 50
     end
 
-    test "surfaces a timeout as an error" do
+    test "surfaces a timeout as an error, unlabelled when no label is given" do
       assert {:error, :timeout} =
-               Rujira.Enum.reduce_async_while_ok([1], fn _ -> Process.sleep(50) end, timeout: 1)
+               Rujira.Enum.reduce_async_while_ok(
+                 [1],
+                 fn _ -> Process.sleep(500) end,
+                 fan_out: [timeout: 1]
+               )
+    end
+
+    test "names the calling module in a timeout error" do
+      assert {:error, {:timeout, __MODULE__}} =
+               Rujira.Enum.reduce_async_while_ok(
+                 [1],
+                 fn _ -> Process.sleep(500) end,
+                 [fan_out: [timeout: 1]],
+                 __MODULE__
+               )
     end
 
     test "handles an empty enumerable" do
       assert {:ok, []} = Rujira.Enum.reduce_async_while_ok([], fn x -> {:ok, x} end)
+    end
+
+    test "rejects an unknown key in the per-call fan_out before running anything" do
+      assert {:error, :invalid_fan_out} =
+               Rujira.Enum.reduce_async_while_ok(
+                 [1],
+                 fn _ -> flunk("should not run") end,
+                 fan_out: [timout: 1]
+               )
     end
   end
 end

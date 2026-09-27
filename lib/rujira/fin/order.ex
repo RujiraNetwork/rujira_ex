@@ -101,12 +101,21 @@ defmodule Rujira.Fin.Order do
   def load(%{address: address}, side, price, owner, opts \\ []),
     do: load_at(address, side, price, owner, opts)
 
+  @doc """
+  Lists every order an `address` holds, across every pair.
+
+  Each pair is read concurrently; `opts[:fan_out]` sets the per-pair timeout
+  and how many run at once - see `Rujira.Enum`.
+  """
   @spec list_all_pairs(String.t(), Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def list_all_pairs(address, opts \\ []) do
     with {:ok, pairs} <- Pair.list(opts),
          {:ok, orders} <-
-           Rujira.Enum.reduce_async_while_ok(pairs, &list(&1, address, nil, opts),
-             timeout: 15_000
+           Rujira.Enum.reduce_async_while_ok(
+             pairs,
+             &list(&1, address, nil, opts),
+             opts,
+             __MODULE__
            ) do
       {:ok, List.flatten(orders)}
     end

@@ -94,12 +94,21 @@ defmodule Rujira.ThorchainSwap.Strategy do
   @spec get(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def get(address, opts \\ []), do: Contracts.get({__MODULE__, address}, opts)
 
+  @doc """
+  Lists every deployed swap strategy.
+
+  Each strategy is read concurrently; `opts[:fan_out]` sets the per-strategy
+  timeout and how many run at once - see `Rujira.Enum`.
+  """
   @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def list(opts \\ []) do
     with {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
-      Rujira.Enum.reduce_async_while_ok(targets, fn %{address: address} ->
-        Contracts.get({__MODULE__, address}, opts)
-      end)
+      Rujira.Enum.reduce_async_while_ok(
+        targets,
+        fn %{address: address} -> Contracts.get({__MODULE__, address}, opts) end,
+        opts,
+        __MODULE__
+      )
     end
   end
 

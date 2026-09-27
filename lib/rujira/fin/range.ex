@@ -84,6 +84,13 @@ defmodule Rujira.Fin.Range do
           {:ok, t()} | {:error, term()}
   def load(%{address: address}, idx, opts \\ []), do: load_at(address, idx, opts)
 
+  @doc """
+  Lists every range across pairs, optionally narrowed to an `owner` and to
+  named `contracts`.
+
+  Each pair is read concurrently; `opts[:fan_out]` sets the per-pair timeout
+  and how many run at once - see `Rujira.Enum`.
+  """
   @spec list_all(String.t() | nil, [String.t()] | nil, Node.opts()) ::
           {:ok, [t()]} | {:error, term()}
   def list_all(owner \\ nil, contracts \\ nil, opts \\ []) do
@@ -265,7 +272,12 @@ defmodule Rujira.Fin.Range do
 
   defp collect(pairs, owner, opts) do
     with {:ok, ranges} <-
-           Rujira.Enum.reduce_async_while_ok(pairs, &list(&1, owner, nil, opts), timeout: 15_000) do
+           Rujira.Enum.reduce_async_while_ok(
+             pairs,
+             &list(&1, owner, nil, opts),
+             opts,
+             __MODULE__
+           ) do
       {:ok, List.flatten(ranges)}
     end
   end

@@ -23,7 +23,8 @@ defmodule Rujira do
       config :rujira_ex,
         node: MyApp.Node,
         prices: Rujira.Prices.Default,
-        cache_ttl: 15_000
+        cache_ttl: 15_000,
+        fan_out: [timeout: 15_000, max_concurrency: 16]
   """
 
   @doc """
@@ -53,5 +54,21 @@ defmodule Rujira do
   @spec block_cache_ttl() :: non_neg_integer()
   def block_cache_ttl do
     Application.get_env(:rujira_ex, :block_cache_ttl, cache_ttl())
+  end
+
+  @doc """
+  Returns the configured concurrent fan-out policy.
+
+  Read by `Rujira.Enum.reduce_async_while_ok/4` for every fan-out in the
+  library, per key, under a per-call `opts[:fan_out]`. Configurable via:
+
+      config :rujira_ex, fan_out: [timeout: 15_000, max_concurrency: 16]
+
+  `:timeout` is per item, in milliseconds. An unset key takes the helper's
+  default - see `Rujira.Enum` for the full policy. Defaults to `[]`.
+  """
+  @spec fan_out() :: keyword()
+  def fan_out do
+    Application.get_env(:rujira_ex, :fan_out, [])
   end
 end

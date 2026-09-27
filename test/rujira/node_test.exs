@@ -16,6 +16,30 @@ defmodule Rujira.NodeTest do
     end
   end
 
+  describe "query/3 with :fan_out" do
+    test "drops the key before calling the impl and keeps every other opt" do
+      MockNode.expect(fn %{"a" => 1} -> MockNode.ok(%{"b" => 2}) end)
+
+      assert {:ok, %{data: _}} =
+               Node.query(& &1, %{"a" => 1}, fan_out: [timeout: 1_000], foo: :bar)
+
+      assert_received {:mock_node, %{"a" => 1}, [foo: :bar]}
+    end
+
+    test "drops it on a height read too" do
+      MockNode.expect(fn %{"a" => 1} -> MockNode.ok(%{"b" => 2}) end)
+
+      assert {:ok, %{data: _}} =
+               Node.query(fn _, _, _ -> nil end, %{"a" => 1},
+                 height: @height,
+                 fan_out: [max_concurrency: 2]
+               )
+
+      assert_received {:mock_node, %{"a" => 1}, opts}
+      refute Keyword.has_key?(opts, :fan_out)
+    end
+  end
+
   describe "query/3 with height: nil" do
     test "treats it as absent and does not forward the key" do
       MockNode.expect(fn %{"a" => 1} -> MockNode.ok(%{"b" => 2}) end)

@@ -10,9 +10,13 @@ defmodule Rujira.Node do
 
   ## Options
 
-  `opts` is a keyword list forwarded to the configured implementation, with one
-  reserved key:
+  `opts` is a keyword list forwarded to the configured implementation, with two
+  reserved keys:
 
+    * `:fan_out` - the concurrent fan-out policy (see `Rujira.Enum`). It is
+      dropped before the impl is called: it governs this library's own
+      `Task.async_stream` runs, never the node call, whose own `timeout:` is
+      the gRPC deadline and stays the impl's business.
     * `:height` - when present, it is popped from `opts` before the impl is
       called - the key itself never reaches the impl. `height: nil` is treated
       as absent. Any other value must be an integer in
@@ -97,7 +101,7 @@ defmodule Rujira.Node do
   def query(fun, request, opts \\ [])
 
   def query(fun, request, opts) do
-    case Keyword.pop(opts, :height) do
+    case opts |> Keyword.delete(:fan_out) |> Keyword.pop(:height) do
       {nil, rest} ->
         impl().query(fun, request, rest)
 
