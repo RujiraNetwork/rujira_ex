@@ -16,6 +16,7 @@ defmodule Rujira.Brune.LoggedEvent do
   alias Rujira.Contracts
   alias Rujira.Events.Event
   alias Rujira.Math
+  alias Rujira.Node
 
   @max_limit 100
 
@@ -55,13 +56,19 @@ defmodule Rujira.Brune.LoggedEvent do
 
   # --- Queries ---
 
-  @doc "Fetches one page of a pool's event log, newest first."
-  @spec list(String.t(), integer() | nil, integer() | nil) :: {:ok, [t()]} | {:error, term()}
-  def list(address, start_after \\ nil, limit \\ @max_limit) do
+  @doc """
+  Fetches one page of a pool's event log, newest first, at `opts[:height]` when
+  one is given.
+  """
+  @spec list(String.t(), integer() | nil, integer() | nil, Node.opts()) ::
+          {:ok, [t()]} | {:error, term()}
+  def list(address, start_after \\ nil, limit \\ @max_limit, opts \\ []) do
     with {:ok, %{"events" => events}} <-
-           Contracts.query_state_smart(address, %{
-             events: %{start_after: start_after, limit: limit}
-           }) do
+           Contracts.query_state_smart(
+             address,
+             %{events: %{start_after: start_after, limit: limit}},
+             opts
+           ) do
       Rujira.Enum.reduce_while_ok(events, &new(&1, address))
     end
   end

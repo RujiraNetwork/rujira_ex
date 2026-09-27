@@ -101,6 +101,9 @@ the wire boundary — inside the memoized query that talks to the node.
 All amounts are integers normalized to 8 decimal places (`1.0 = 100_000_000`). Use
 `Amount.new/1` for construction.
 
+Denom metadata (symbol, name, display) is the one exception to height reads: it is
+token identity, not chain state, so it is always read at latest - see "Query options".
+
 `Rujira.Assets` converts an `Asset` into whichever form a caller needs. A form that
 does not exist for that asset is an error, never a silent substitution:
 
@@ -202,6 +205,58 @@ height}` (keeping existing metadata keys) and `return_headers: true`, then
 verifies the impl's reply actually carries that height before returning it -
 a reply without a matching height is never returned as data, only as
 `{:error, {:height_mismatch, height, returned}}`.
+
+Every public function that reaches the node takes `opts` as its trailing
+argument and passes it down to every query it makes, so a caller can read a
+whole composite at one height. Pure functions take no `opts`.
+
+The one documented exception is denom metadata (`Rujira.Assets.Metadata`,
+`Rujira.Assets.load_metadata/2`): it is token identity, not chain state, so it
+is always read at latest and memoized, and a `:height` in `opts` is accepted
+(for arity parity) but ignored. An admin metadata change shows the current
+symbol even in a historical read; every other field of that read still
+reflects the requested height.
+
+### Memoization
+
+A height read is never cached — it is a read of the past, and caching it would
+serve it as the present. So a memoized query keeps its name, arity and cache key
+(`Memoize.invalidate(Mod, :fun, args)` keeps working) and gains a sibling one
+arity higher that takes `opts`:
+
+```elixir
+@spec list() :: {:ok, [t()]} | {:error, term()}
+defmemo list, do: fetch_list([])
+
+@doc "As `list/0`; with `height:` it reads the node uncached, otherwise it is `list/0`."
+@spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
+def list(opts), do: Node.at_height(opts, fn -> fetch_list(opts) end, &list/0)
+
+defp fetch_list(opts), do: Node.query(&Stub.x/3, request, opts)
+```
+
+`Rujira.Node.at_height/3` is the only place the `:height` check lives. Without
+`:height` the sibling is the memoized function, so any other opt is *not*
+applied — a cached value cannot honour it. Pass `height:` to bypass the cache.
+
+### Prices
+
+A position read at a height must be valued at that height, so anything that
+computes a `value_usd` threads its `opts` into `Rujira.Prices`. `get/2` and
+`value_usd/4` are *optional* callbacks, so an implementation predating them
+still satisfies the behaviour. Asked for a `:height` such an implementation
+cannot serve, `get/2` returns `{:error, :height_not_supported}`; `value_usd/4`
+has no error channel — it returns an integer — so it returns `0` rather than
+today's price, which would misvalue the position silently.
+
+### Coverage
+
+`test/rujira/height_coverage_test.exs` holds one table per protocol facade
+naming every public function that reaches the node, calls each with `height:`,
+and asserts the first node call carries `x-cosmos-block-height`. A function
+that never reaches the node is listed in its `@excluded` map with why. The two
+lists together must name every public function of the facade, so a new one
+fails the test until it is classified.
 
 ## Logger
 

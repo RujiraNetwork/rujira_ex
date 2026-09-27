@@ -10,6 +10,7 @@ defmodule Rujira.Staking.Pool.Account do
   alias Rujira.Bank
   alias Rujira.Contracts
   alias Rujira.Math
+  alias Rujira.Node
   alias Rujira.Staking.Pool
   alias Rujira.Staking.Pool.Status
 
@@ -58,27 +59,29 @@ defmodule Rujira.Staking.Pool.Account do
 
   # --- Queries ---
 
-  @spec load(Pool.t(), String.t()) :: {:ok, t()} | {:error, term()}
-  def load(%Pool{status: :not_loaded} = pool, owner) do
-    with {:ok, pool} <- Status.load(pool) do
-      load(pool, owner)
+  @spec load(Pool.t(), String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def load(pool, owner, opts \\ [])
+
+  def load(%Pool{status: :not_loaded} = pool, owner, opts) do
+    with {:ok, pool} <- Status.load(pool, opts) do
+      load(pool, owner, opts)
     end
   end
 
-  def load(%Pool{} = pool, owner) do
-    with {:ok, res} <- account(pool.address, owner),
+  def load(%Pool{} = pool, owner, opts) do
+    with {:ok, res} <- account(pool.address, owner, opts),
          {:ok, bonded} <- Amount.new(Map.get(res, "bonded")),
          {:ok, contract_pending_revenue} <- Amount.new(Map.get(res, "pending_revenue")),
-         {:ok, %{amount: liquid_shares}} <- Bank.balance(owner, pool.receipt_asset) do
+         {:ok, %{amount: liquid_shares}} <- Bank.balance(owner, pool.receipt_asset, opts) do
       {:ok, new(pool, owner, bonded, contract_pending_revenue, liquid_shares)}
     end
   end
 
-  @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
-  def from_id(id) do
+  @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def from_id(id, opts \\ []) do
     with [address, owner] <- String.split(id, "/"),
-         {:ok, pool} <- Pool.get(address) do
-      load(pool, owner)
+         {:ok, pool} <- Pool.get(address, opts) do
+      load(pool, owner, opts)
     else
       {:error, _} = err -> err
       _ -> {:error, :invalid_id}
@@ -88,11 +91,19 @@ defmodule Rujira.Staking.Pool.Account do
   # --- Private ---
 
   defmemop query(address, owner) do
-    Contracts.query_state_smart(address, %{account: %{addr: owner}})
+    fetch(address, owner, [])
   end
 
-  defp account(address, owner) do
-    case query(address, owner) do
+  defp fetch(address, owner, opts) do
+    Contracts.query_state_smart(address, %{account: %{addr: owner}}, opts)
+  end
+
+  defp account(address, owner, opts) do
+    case Node.at_height(
+           opts,
+           fn -> fetch(address, owner, opts) end,
+           fn -> query(address, owner) end
+         ) do
       {:error, %GRPC.RPCError{status: 2, message: "NotFound: query wasm contract failed"}} ->
         {:ok, %{"bonded" => "0", "pending_revenue" => "0"}}
 

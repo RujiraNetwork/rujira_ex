@@ -629,4 +629,96 @@ defmodule Rujira.AssetsTest do
       assert Agent.get(calls, & &1) == 2
     end
   end
+
+  describe "denom metadata is read at latest, not at height" do
+    @height 12_345
+
+    defp expect_metadata_once(symbol) do
+      MockNode.expect(fn %QueryDenomMetadataRequest{} ->
+        {:ok,
+         %QueryDenomMetadataResponse{
+           metadata: %DenomMetadata{
+             description: "",
+             display: symbol,
+             name: symbol,
+             symbol: symbol,
+             uri: "",
+             uri_hash: ""
+           }
+         }}
+      end)
+    end
+
+    test "Metadata.load_metadata/2 with :height sends no height metadata" do
+      expect_metadata_once("BRUNE")
+
+      assert {:ok, %Metadata{symbol: "BRUNE"}} =
+               Metadata.load_metadata("x/height-test-brune", height: @height)
+
+      assert_received {:mock_node, %QueryDenomMetadataRequest{denom: "x/height-test-brune"}, opts}
+      refute Keyword.has_key?(opts, :metadata)
+    end
+
+    test "Metadata.load_metadata/2 reuses the memo across a plain read and a height read" do
+      expect_metadata_once("BRUNE")
+
+      assert {:ok, %Metadata{symbol: "BRUNE"}} = Metadata.load_metadata("x/height-test-memo")
+
+      assert {:ok, %Metadata{symbol: "BRUNE"}} =
+               Metadata.load_metadata("x/height-test-memo", height: @height)
+
+      assert_received {:mock_node, %QueryDenomMetadataRequest{denom: "x/height-test-memo"}, _}
+      refute_received {:mock_node, %QueryDenomMetadataRequest{}, _}
+    end
+
+    test "Assets.load_metadata/2 with :height ignores it and never returns an error" do
+      expect_metadata_once("RUJI")
+
+      assert {:ok, %{symbol: "RUJI"}} =
+               Assets.load_metadata(%Asset{id: "x/height-test-ruji"}, height: @height)
+
+      assert_received {:mock_node, %QueryDenomMetadataRequest{denom: "x/height-test-ruji"}, opts}
+      refute Keyword.has_key?(opts, :metadata)
+    end
+
+    test "from_denom/2 with :height ignores it for the staking denom it wraps" do
+      expect_metadata_once("NAMI")
+
+      assert {:ok, %Asset{id: "x/staking-x/nami-index-height-test-staking", symbol: "sNAMI"}} =
+               Assets.from_denom("x/staking-x/nami-index-height-test-staking", height: @height)
+
+      assert_received {:mock_node,
+                       %QueryDenomMetadataRequest{denom: "x/nami-index-height-test-staking"},
+                       opts}
+
+      refute Keyword.has_key?(opts, :metadata)
+    end
+
+    test "from_denom/2 with :height ignores it for a nami index denom" do
+      expect_metadata_once("NAMI")
+
+      assert {:ok, %Asset{id: "x/nami-index-height-test", symbol: "NAMI"}} =
+               Assets.from_denom("x/nami-index-height-test", height: @height)
+
+      assert_received {:mock_node, %QueryDenomMetadataRequest{denom: "x/nami-index-height-test"},
+                       opts}
+
+      refute Keyword.has_key?(opts, :metadata)
+    end
+
+    test "eq_denom/3 with :height ignores it" do
+      expect_metadata_once("NAMI")
+
+      assert Assets.eq_denom(
+               %Asset{chain: "THOR", ticker: "NAMI"},
+               "x/nami-index-height-test-eq",
+               height: @height
+             )
+
+      assert_received {:mock_node,
+                       %QueryDenomMetadataRequest{denom: "x/nami-index-height-test-eq"}, opts}
+
+      refute Keyword.has_key?(opts, :metadata)
+    end
+  end
 end

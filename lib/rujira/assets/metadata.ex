@@ -1,11 +1,16 @@
 defmodule Rujira.Assets.Metadata do
   @moduledoc """
   Module for handling asset metadata.
+
+  Denom metadata (symbol, name, display) is token identity, not chain state -
+  it is always read at latest and memoized, even for a caller passing
+  `:height`. See "Tokens" in `guides/conventions.md`.
   """
 
   alias Cosmos.Bank.V1beta1.Query.Stub
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataResponse
+  alias Rujira.Node
 
   use Memoize
 
@@ -39,34 +44,49 @@ defmodule Rujira.Assets.Metadata do
 
   Invalidate with
   `Memoize.invalidate(Rujira.Assets.Metadata, :do_load_metadata, [denom])`.
+
+  Denom metadata is token identity, not chain state (see `guides/conventions.md`),
+  so it is always read at latest and memoized - `opts` is accepted for arity
+  parity with the rest of the node-reading API, but a `:height` in it is
+  ignored. The one consequence: an admin metadata change shows the current
+  symbol even in a historical read.
   """
-  @spec load_metadata(String.t()) :: {:ok, t()}
-  def load_metadata(denom) do
+  @spec load_metadata(String.t(), Node.opts()) :: {:ok, t()}
+  def load_metadata(denom, _opts \\ []) do
+    cached_metadata(denom)
+  end
+
+  # --- Private ---
+
+  defmemop(do_load_metadata(denom), do: fetch_metadata(denom))
+
+  defp cached_metadata(denom) do
     case do_load_metadata(denom) do
       {:ok, metadata} ->
         {:ok, metadata}
 
       :error ->
         Memoize.invalidate(__MODULE__, :do_load_metadata, [denom])
-
-        {:ok,
-         %__MODULE__{
-           description: "",
-           display: String.upcase(denom),
-           name: String.upcase(denom),
-           symbol: denom,
-           uri: "",
-           uri_hash: ""
-         }}
+        fallback(denom)
     end
   end
 
-  # --- Private ---
+  defp fallback(denom) do
+    {:ok,
+     %__MODULE__{
+       description: "",
+       display: String.upcase(denom),
+       name: String.upcase(denom),
+       symbol: denom,
+       uri: "",
+       uri_hash: ""
+     }}
+  end
 
-  defmemop do_load_metadata(denom) do
+  defp fetch_metadata(denom) do
     q = %QueryDenomMetadataRequest{denom: denom}
 
-    case Rujira.Node.query(&Stub.denom_metadata/2, q) do
+    case Node.query(&Stub.denom_metadata/3, q) do
       {:ok, %QueryDenomMetadataResponse{metadata: metadata}} ->
         {:ok,
          %__MODULE__{

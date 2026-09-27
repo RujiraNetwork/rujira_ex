@@ -12,6 +12,7 @@ defmodule Rujira.Staking.Pool do
   alias Rujira.Contracts
   alias Rujira.Deployments
   alias Rujira.Math
+  alias Rujira.Node
   alias Rujira.Staking.Pool.Status
 
   defmodule RevenueConverter do
@@ -92,20 +93,20 @@ defmodule Rujira.Staking.Pool do
 
   # --- Queries ---
 
-  @spec get(String.t()) :: {:ok, t()} | {:error, term()}
-  def get(address), do: Contracts.get({__MODULE__, address})
+  @spec get(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def get(address, opts \\ []), do: Contracts.get({__MODULE__, address}, opts)
 
-  @spec list() :: {:ok, [t()]} | {:error, term()}
-  def list do
-    __MODULE__
-    |> Deployments.list_targets()
-    |> Rujira.Enum.reduce_async_while_ok(fn %{address: address} ->
-      Contracts.get({__MODULE__, address})
-    end)
+  @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
+  def list(opts \\ []) do
+    with {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
+      Rujira.Enum.reduce_async_while_ok(targets, fn %{address: address} ->
+        Contracts.get({__MODULE__, address}, opts)
+      end)
+    end
   end
 
-  @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
-  def from_id(address), do: get(address)
+  @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def from_id(address, opts \\ []), do: get(address, opts)
 
   # --- Private ---
 

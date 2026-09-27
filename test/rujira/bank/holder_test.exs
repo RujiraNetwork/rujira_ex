@@ -100,4 +100,46 @@ defmodule Rujira.Bank.HolderTest do
       assert {:error, :no_native_denom} = Holder.holders(@non_native)
     end
   end
+
+  describe "height reads" do
+    @height 12_345
+    @metadata %{"x-cosmos-block-height" => "12345"}
+
+    setup do
+      MockNode.expect(fn %QueryDenomOwnersRequest{denom: "rune"} ->
+        {:ok,
+         %QueryDenomOwnersResponse{
+           denom_owners: [
+             %DenomOwner{address: "thor1a", balance: %ChainCoin{denom: "rune", amount: "100"}}
+           ],
+           pagination: %PageResponse{next_key: ""}
+         }}
+      end)
+
+      :ok
+    end
+
+    test "holders/3 carries the block-height metadata" do
+      assert {:ok, [%Holder{address: "thor1a"}]} = Holder.holders(@rune, 2, height: @height)
+
+      assert_received {:mock_node, %QueryDenomOwnersRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "a height read is never cached, so two calls reach the node twice" do
+      assert {:ok, _} = Holder.holders(@rune, 2, height: @height)
+      assert {:ok, _} = Holder.holders(@rune, 2, height: @height)
+
+      assert_received {:mock_node, %QueryDenomOwnersRequest{}, _}
+      assert_received {:mock_node, %QueryDenomOwnersRequest{}, _}
+    end
+
+    test "the Rujira.Bank facade exposes the opts arity" do
+      assert {:ok, [%Holder{address: "thor1a"}]} =
+               Rujira.Bank.holders(@rune, 2, height: @height)
+
+      assert_received {:mock_node, %QueryDenomOwnersRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+  end
 end

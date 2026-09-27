@@ -7,6 +7,7 @@ defmodule Rujira.Bank.Holder do
   alias Rujira.Assets
   alias Rujira.Assets.Asset
   alias Rujira.Coin
+  alias Rujira.Node
 
   use Memoize
 
@@ -38,22 +39,39 @@ defmodule Rujira.Bank.Holder do
   """
   @spec holders(Asset.t(), pos_integer()) :: {:ok, [t()]} | {:error, term()}
   defmemo holders(asset, limit \\ @holders_limit), expires_in: :timer.hours(1) do
+    fetch_holders(asset, limit, [])
+  end
+
+  @doc """
+  As `holders/2`, read at `opts[:height]` when one is given - a height read is
+  never cached. Without a `:height` this is `holders/2`, so the other opts are
+  not applied.
+  """
+  @spec holders(Asset.t(), pos_integer(), Node.opts()) :: {:ok, [t()]} | {:error, term()}
+  def holders(asset, limit, opts) do
+    Node.at_height(
+      opts,
+      fn -> fetch_holders(asset, limit, opts) end,
+      fn -> holders(asset, limit) end
+    )
+  end
+
+  # --- Private ---
+
+  defp fetch_holders(asset, limit, opts) do
     with {:ok, denom} <- Assets.to_native(asset),
-         {:ok, owners} <- denom_owners(denom),
+         {:ok, owners} <- denom_owners(denom, nil, opts),
          {:ok, holders} <- Rujira.Enum.reduce_while_ok(owners, &new/1) do
       {:ok, holders |> Enum.sort_by(& &1.balance.amount, :desc) |> Enum.take(limit)}
     end
   end
 
-  # --- Private ---
+  defp denom_owners(_denom, "", _opts), do: {:ok, []}
 
-  defp denom_owners(denom, key \\ nil)
-  defp denom_owners(_denom, ""), do: {:ok, []}
-
-  defp denom_owners(denom, key) do
+  defp denom_owners(denom, key, opts) do
     with {:ok, %{denom_owners: owners, pagination: %{next_key: next_key}}} <-
-           Rujira.Node.query(&Stub.denom_owners/2, request(denom, key)),
-         {:ok, next} <- denom_owners(denom, next_key) do
+           Node.query(&Stub.denom_owners/3, request(denom, key), opts),
+         {:ok, next} <- denom_owners(denom, next_key, opts) do
       {:ok, owners ++ next}
     end
   end

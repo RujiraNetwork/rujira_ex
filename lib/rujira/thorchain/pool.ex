@@ -9,6 +9,7 @@ defmodule Rujira.Thorchain.Pool do
   alias Rujira.Assets
   alias Rujira.Assets.Asset
   alias Rujira.Math
+  alias Rujira.Node
   alias Thorchain.Types.Query.Stub
   alias Thorchain.Types.QueryPoolResponse
   alias Thorchain.Types.QueryPoolsRequest
@@ -110,15 +111,19 @@ defmodule Rujira.Thorchain.Pool do
   """
   @spec list() :: {:ok, [t()]} | {:error, term()}
   defmemo list, expires_in: Rujira.cache_ttl() do
-    with {:ok, %QueryPoolsResponse{pools: pools}} <-
-           Rujira.Node.query(&Stub.pools/2, %QueryPoolsRequest{}) do
-      Rujira.Enum.reduce_while_ok(pools, &new/1)
-    end
+    fetch([])
   end
 
-  @spec get(String.t()) :: {:ok, t()} | {:error, term()}
-  def get(asset) do
-    with {:ok, pools} <- list() do
+  @doc """
+  As `list/0`, read at `opts[:height]` when one is given - a height read is never
+  cached. Without a `:height` this is `list/0`, so the other opts are not applied.
+  """
+  @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
+  def list(opts), do: Node.at_height(opts, fn -> fetch(opts) end, &list/0)
+
+  @spec get(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def get(asset, opts \\ []) do
+    with {:ok, pools} <- list(opts) do
       case Enum.find(pools, &(&1.id == asset)) do
         nil -> {:error, :not_found}
         pool -> {:ok, pool}
@@ -128,6 +133,15 @@ defmodule Rujira.Thorchain.Pool do
 
   # TODO: resolve non-layer1 asset ids (secured/synth) to their pool asset once
   # `Assets.to_layer1/1` lands. For now the id is used as-is.
-  @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
-  def from_id(id), do: get(id)
+  @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def from_id(id, opts \\ []), do: get(id, opts)
+
+  # --- Private ---
+
+  defp fetch(opts) do
+    with {:ok, %QueryPoolsResponse{pools: pools}} <-
+           Node.query(&Stub.pools/3, %QueryPoolsRequest{}, opts) do
+      Rujira.Enum.reduce_while_ok(pools, &new/1)
+    end
+  end
 end

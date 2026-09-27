@@ -120,4 +120,89 @@ defmodule Rujira.Bank.BalanceTest do
       assert {:ok, [%Coin{asset: @btc, amount: 750}]} = Balance.list_spendable("thor1abc")
     end
   end
+
+  describe "height reads" do
+    @height 12_345
+    @metadata %{"x-cosmos-block-height" => "12345"}
+
+    test "get/3 carries the block-height metadata" do
+      MockNode.expect(fn %QueryBalanceRequest{} ->
+        {:ok, %QueryBalanceResponse{balance: %ChainCoin{denom: "rune", amount: "1000"}}}
+      end)
+
+      assert {:ok, %Coin{amount: 1000}} = Balance.get("thor1abc", @rune, height: @height)
+
+      assert_received {:mock_node, %QueryBalanceRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "two height reads both reach the node" do
+      MockNode.expect(fn %QueryBalanceRequest{} ->
+        {:ok, %QueryBalanceResponse{balance: %ChainCoin{denom: "rune", amount: "1000"}}}
+      end)
+
+      assert {:ok, _} = Balance.get("thor1abc", @rune, height: @height)
+      assert {:ok, _} = Balance.get("thor1abc", @rune, height: @height)
+
+      assert_received {:mock_node, %QueryBalanceRequest{}, _}
+      assert_received {:mock_node, %QueryBalanceRequest{}, _}
+    end
+
+    test "list/2 forwards the height to every page" do
+      MockNode.expect(fn
+        %QueryAllBalancesRequest{pagination: nil} ->
+          {:ok,
+           %QueryAllBalancesResponse{
+             balances: [%ChainCoin{denom: "rune", amount: "1000"}],
+             pagination: %PageResponse{next_key: "page2"}
+           }}
+
+        %QueryAllBalancesRequest{pagination: %{key: "page2"}} ->
+          {:ok,
+           %QueryAllBalancesResponse{
+             balances: [%ChainCoin{denom: "x/ruji", amount: "500"}],
+             pagination: %PageResponse{next_key: ""}
+           }}
+      end)
+
+      assert {:ok, [%Coin{amount: 1000}, %Coin{amount: 500}]} =
+               Balance.list("thor1abc", height: @height)
+
+      assert_received {:mock_node, %QueryAllBalancesRequest{pagination: nil}, first}
+      assert Keyword.get(first, :metadata) == @metadata
+
+      assert_received {:mock_node, %QueryAllBalancesRequest{pagination: %{key: "page2"}}, second}
+      assert Keyword.get(second, :metadata) == @metadata
+    end
+
+    test "list_spendable/2 forwards the height" do
+      MockNode.expect(fn %QuerySpendableBalancesRequest{} ->
+        {:ok,
+         %QuerySpendableBalancesResponse{
+           balances: [%ChainCoin{denom: "btc-btc", amount: "750"}],
+           pagination: %PageResponse{next_key: ""}
+         }}
+      end)
+
+      assert {:ok, [%Coin{amount: 750}]} = Balance.list_spendable("thor1abc", height: @height)
+
+      assert_received {:mock_node, %QuerySpendableBalancesRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "the Rujira.Bank facade exposes the opts arity" do
+      MockNode.expect(fn %QueryAllBalancesRequest{} ->
+        {:ok,
+         %QueryAllBalancesResponse{
+           balances: [%ChainCoin{denom: "rune", amount: "1000"}],
+           pagination: %PageResponse{next_key: ""}
+         }}
+      end)
+
+      assert {:ok, [%Coin{amount: 1000}]} = Rujira.Bank.balances("thor1abc", height: @height)
+
+      assert_received {:mock_node, %QueryAllBalancesRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+  end
 end

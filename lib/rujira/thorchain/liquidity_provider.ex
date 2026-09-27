@@ -9,6 +9,7 @@ defmodule Rujira.Thorchain.LiquidityProvider do
   alias Rujira.Assets
   alias Rujira.Assets.Asset
   alias Rujira.Math
+  alias Rujira.Node
   alias Rujira.Prices
   alias Rujira.String
   alias Thorchain.Types.Query.Stub
@@ -59,8 +60,14 @@ defmodule Rujira.Thorchain.LiquidityProvider do
 
   # --- Construction ---
 
-  @spec new(QueryLiquidityProviderResponse.t()) :: {:ok, t()} | {:error, term()}
-  def new(%QueryLiquidityProviderResponse{} = lp) do
+  @doc """
+  Builds a liquidity provider from a raw position.
+
+  `opts` is forwarded to `Rujira.Prices`, so a position read at a `height:` is
+  valued with that height's prices rather than with today's.
+  """
+  @spec new(QueryLiquidityProviderResponse.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def new(%QueryLiquidityProviderResponse{} = lp, opts \\ []) do
     asset = Assets.from_string(lp.asset)
 
     with {:ok, units} <- Amount.new(lp.units),
@@ -91,26 +98,29 @@ defmodule Rujira.Thorchain.LiquidityProvider do
          luvi_deposit_value: luvi_deposit_value,
          luvi_redeem_value: luvi_redeem_value,
          luvi_growth_pct: luvi_growth_pct,
+         # A USD value is a bare number, so it has no error channel of its own: a
+         # height that could not be served surfaces as an error on the position
+         # query made at that same height, before this is ever reached.
          value_usd:
-           Prices.value_usd(asset.ticker, asset_redeem_value) +
-             Prices.value_usd("RUNE", rune_redeem_value)
+           Prices.value_usd(asset.ticker, asset_redeem_value, 8, opts) +
+             Prices.value_usd("RUNE", rune_redeem_value, 8, opts)
        }}
     end
   end
 
   # --- Queries ---
 
-  @spec get(String.t(), String.t()) :: {:ok, t()} | {:error, term()}
-  def get(asset, address) do
-    with {:ok, res} <- query(asset, address) do
-      new(res)
+  @spec get(String.t(), String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def get(asset, address, opts \\ []) do
+    with {:ok, res} <- query(asset, address, opts) do
+      new(res, opts)
     end
   end
 
-  @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
-  def from_id(id) do
+  @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def from_id(id, opts \\ []) do
     case String.split(id, "/") do
-      [asset, address] -> get(asset, address)
+      [asset, address] -> get(asset, address, opts)
       _ -> {:error, :invalid_id}
     end
   end
@@ -123,13 +133,33 @@ defmodule Rujira.Thorchain.LiquidityProvider do
   @spec query(String.t(), String.t()) ::
           {:ok, QueryLiquidityProviderResponse.t()} | {:error, term()}
   defmemo query(asset, address) do
-    Rujira.Node.query(
-      &Stub.liquidity_provider/2,
-      %QueryLiquidityProviderRequest{asset: asset, address: address}
+    fetch(asset, address, [])
+  end
+
+  @doc """
+  As `query/2`, read at `opts[:height]` when one is given - a height read is
+  never cached. Without a `:height` this is `query/2`, so the other opts are not
+  applied.
+  """
+  @spec query(String.t(), String.t(), Node.opts()) ::
+          {:ok, QueryLiquidityProviderResponse.t()} | {:error, term()}
+  def query(asset, address, opts) do
+    Node.at_height(
+      opts,
+      fn -> fetch(asset, address, opts) end,
+      fn -> query(asset, address) end
     )
   end
 
   # --- Private ---
+
+  defp fetch(asset, address, opts) do
+    Node.query(
+      &Stub.liquidity_provider/3,
+      %QueryLiquidityProviderRequest{asset: asset, address: address},
+      opts
+    )
+  end
 
   defp zero_nil(0), do: nil
   defp zero_nil(value), do: value

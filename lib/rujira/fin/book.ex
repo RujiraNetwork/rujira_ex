@@ -9,6 +9,7 @@ defmodule Rujira.Fin.Book do
   alias Rujira.Fin.Pair
   alias Rujira.Logger
   alias Rujira.Math
+  alias Rujira.Node
 
   use Memoize
 
@@ -94,31 +95,33 @@ defmodule Rujira.Fin.Book do
 
   # --- Queries ---
 
-  @spec load(Pair.t(), integer()) :: {:ok, Pair.t()} | {:error, term()}
-  def load(pair, limit \\ 75)
+  @spec load(Pair.t(), integer(), Node.opts()) :: {:ok, Pair.t()} | {:error, term()}
+  def load(pair, limit \\ 75, opts \\ [])
 
-  def load(pair, limit) do
-    with {:ok, res} <- query(pair.address),
+  def load(pair, limit, opts) do
+    with {:ok, res} <- query(pair.address, opts),
          {:ok, book} <- new(pair.address, res) do
       {:ok, %{pair | book: take(book, limit)}}
     else
       {:error, err} ->
-        Logger.error(__MODULE__, "load #{pair.address} #{inspect(err)}")
-        {:ok, %{pair | book: %__MODULE__{id: pair.address}}}
+        unless_height_error(err, fn ->
+          Logger.error(__MODULE__, "load #{pair.address} #{inspect(err)}")
+          {:ok, %{pair | book: %__MODULE__{id: pair.address}}}
+        end)
     end
   end
 
-  @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
-  def from_id(id) do
-    with {:ok, res} <- Pair.get(id),
-         {:ok, %{book: book}} <- load(res, @max_limit) do
+  @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def from_id(id, opts \\ []) do
+    with {:ok, res} <- Pair.get(id, opts),
+         {:ok, %{book: book}} <- load(res, @max_limit, opts) do
       {:ok, book}
     end
   end
 
-  @spec price(String.t()) :: {:ok, map()} | {:error, term()}
-  def price(id) do
-    with {:ok, book} <- from_id(id) do
+  @spec price(String.t(), Node.opts()) :: {:ok, map()} | {:error, term()}
+  def price(id, opts \\ []) do
+    with {:ok, book} <- from_id(id, opts) do
       {:ok, %{price: book.center, change: 0}}
     end
   end
@@ -168,7 +171,36 @@ defmodule Rujira.Fin.Book do
     %{book | bids: Enum.take(bids, limit), asks: Enum.take(asks, limit)}
   end
 
+  @doc """
+  Memoized fetch of a contract's raw order book.
+
+  Invalidate with `Memoize.invalidate(Rujira.Fin.Book, :query, [contract])`.
+  """
+  @spec query(String.t()) :: {:ok, map() | nil} | {:error, term()}
   defmemo query(contract) do
-    Contracts.query_state_smart_with_retry(contract, %{book: %{limit: @max_limit}})
+    fetch(contract, [])
+  end
+
+  @doc """
+  As `query/1`, read at `opts[:height]` when one is given - a height read is
+  never cached. Without a `:height` this is `query/1`, so the other opts are not
+  applied.
+  """
+  @spec query(String.t(), Node.opts()) :: {:ok, map() | nil} | {:error, term()}
+  def query(contract, opts) do
+    Node.at_height(opts, fn -> fetch(contract, opts) end, fn -> query(contract) end)
+  end
+
+  # A height read that could not be served is an error, never a default: the
+  # caller asked for the state at one height and must be told that height was
+  # not read. Every other error keeps today's behaviour.
+  defp unless_height_error({:height_unavailable, _} = err, _fallback), do: {:error, err}
+  defp unless_height_error({:height_mismatch, _, _} = err, _fallback), do: {:error, err}
+  defp unless_height_error(:invalid_height, _fallback), do: {:error, :invalid_height}
+  defp unless_height_error(:height_not_supported, _fallback), do: {:error, :height_not_supported}
+  defp unless_height_error(_err, fallback), do: fallback.()
+
+  defp fetch(contract, opts) do
+    Contracts.query_state_smart_with_retry(contract, %{book: %{limit: @max_limit}}, opts)
   end
 end

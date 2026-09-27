@@ -4,6 +4,11 @@ defmodule Rujira.Ghost do
 
   Pure delegation facade. Each resource module owns its struct, construction,
   and queries. Invalidate cache on the resource module, not here.
+
+  Every query takes a trailing `opts`, forwarded to `Rujira.Node.query/3`, so a
+  caller can read a whole composite at one `height:`. A memoized query's opts
+  arity reads the node uncached when given a `:height` - see the resource
+  module.
   """
 
   alias Rujira.Ghost.Vault
@@ -14,22 +19,22 @@ defmodule Rujira.Ghost do
 
   # --- Vault ---
 
-  defdelegate list_vaults(), to: Vault, as: :list
-  defdelegate get_vault(address), to: Vault, as: :get
-  defdelegate vault_from_id(id), to: Vault, as: :get
-  defdelegate load_vault(vault), to: Status, as: :load
+  defdelegate list_vaults(opts \\ []), to: Vault, as: :list
+  defdelegate get_vault(address, opts \\ []), to: Vault, as: :get
+  defdelegate vault_from_id(id, opts \\ []), to: Vault, as: :get
+  defdelegate load_vault(vault, opts \\ []), to: Status, as: :load
 
   # --- Borrower ---
 
-  defdelegate vault_borrower(address, borrower), to: Borrower, as: :get
-  defdelegate vault_borrowers(address), to: Borrower, as: :list
+  defdelegate vault_borrower(address, borrower, opts \\ []), to: Borrower, as: :get
+  defdelegate vault_borrowers(address, opts \\ []), to: Borrower, as: :list
 
   # --- Delegate ---
 
-  defdelegate vault_delegate(address, borrower, delegate), to: Delegate, as: :get
+  defdelegate vault_delegate(address, borrower, delegate, opts \\ []), to: Delegate, as: :get
 
   # --- Account ---
 
-  defdelegate load_vault_account(vault, account), to: Account, as: :load
-  defdelegate vault_account_from_id(id), to: Account, as: :from_id
+  defdelegate load_vault_account(vault, account, opts \\ []), to: Account, as: :load
+  defdelegate vault_account_from_id(id, opts \\ []), to: Account, as: :from_id
 end

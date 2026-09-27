@@ -12,6 +12,7 @@ defmodule Rujira.Ghost.Vault.Account do
   alias Rujira.Ghost.Vault
   alias Rujira.Ghost.Vault.Status
   alias Rujira.Math
+  alias Rujira.Node
 
   # --- Struct ---
 
@@ -40,22 +41,22 @@ defmodule Rujira.Ghost.Vault.Account do
 
   # --- Queries ---
 
-  @spec load(Vault.t(), String.t()) :: {:ok, t()} | {:error, term()}
-  def load(%Vault{} = vault, account) do
-    with {:ok, vault} <- Status.load(vault),
-         {:ok, asset} <- Assets.from_denom(vault.receipt_denom),
-         {:ok, %{amount: shares}} <- Bank.balance(account, asset) do
+  @spec load(Vault.t(), String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def load(%Vault{} = vault, account, opts \\ []) do
+    with {:ok, vault} <- Status.load(vault, opts),
+         {:ok, asset} <- Assets.from_denom(vault.receipt_denom, opts),
+         {:ok, %{amount: shares}} <- Bank.balance(account, asset, opts) do
       {:ok, new(vault, account, shares)}
     else
-      _ -> {:ok, new(vault, account)}
+      {:error, err} -> unless_height_error(err, fn -> {:ok, new(vault, account)} end)
     end
   end
 
-  @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
-  def from_id(id) do
+  @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def from_id(id, opts \\ []) do
     with [address, account] <- String.split(id, "/"),
-         {:ok, vault} <- Vault.get(address) do
-      load(vault, account)
+         {:ok, vault} <- Vault.get(address, opts) do
+      load(vault, account, opts)
     else
       {:error, _} = err -> err
       _ -> {:error, :invalid_id}
@@ -68,4 +69,13 @@ defmodule Rujira.Ghost.Vault.Account do
     do: Math.mul_floor(shares, ratio)
 
   defp value(_vault, _shares), do: 0
+
+  # A height read that could not be served is an error, never a default: the
+  # caller asked for the state at one height and must be told that height was
+  # not read. Every other error keeps today's behaviour.
+  defp unless_height_error({:height_unavailable, _} = err, _fallback), do: {:error, err}
+  defp unless_height_error({:height_mismatch, _, _} = err, _fallback), do: {:error, err}
+  defp unless_height_error(:invalid_height, _fallback), do: {:error, :invalid_height}
+  defp unless_height_error(:height_not_supported, _fallback), do: {:error, :height_not_supported}
+  defp unless_height_error(_err, fallback), do: fallback.()
 end

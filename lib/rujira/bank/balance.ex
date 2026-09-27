@@ -11,41 +11,51 @@ defmodule Rujira.Bank.Balance do
   alias Rujira.Assets.Asset
   alias Rujira.Coin
   alias Rujira.Logger
+  alias Rujira.Node
 
   # --- Queries ---
 
-  @doc "Fetches an account's balance of a single asset. Amount is 0 when the account holds none."
-  @spec get(String.t(), Asset.t()) :: {:ok, Coin.t()} | {:error, term()}
-  def get(address, %Asset{} = asset) do
+  @doc """
+  Fetches an account's balance of a single asset. Amount is 0 when the account
+  holds none. Read at `opts[:height]` when one is given.
+  """
+  @spec get(String.t(), Asset.t(), Node.opts()) :: {:ok, Coin.t()} | {:error, term()}
+  def get(address, %Asset{} = asset, opts \\ []) do
     with {:ok, denom} <- Assets.to_native(asset),
          {:ok, %{balance: balance}} <-
-           Rujira.Node.query(&Stub.balance/2, %QueryBalanceRequest{address: address, denom: denom}),
+           Node.query(
+             &Stub.balance/3,
+             %QueryBalanceRequest{address: address, denom: denom},
+             opts
+           ),
          {:ok, amount} <- Amount.new(coin_amount(balance)) do
       {:ok, Coin.new(asset, amount)}
     end
   end
 
-  @doc "Fetches all of an account's balances."
-  @spec list(String.t()) :: {:ok, [Coin.t()]} | {:error, term()}
-  def list(address), do: all_balances(address)
+  @doc "Fetches all of an account's balances, at `opts[:height]` when one is given."
+  @spec list(String.t(), Node.opts()) :: {:ok, [Coin.t()]} | {:error, term()}
+  def list(address, opts \\ []), do: all_balances(address, nil, opts)
 
-  @doc "Fetches an account's spendable balances (excluding locked/vesting amounts)."
-  @spec list_spendable(String.t()) :: {:ok, [Coin.t()]} | {:error, term()}
-  def list_spendable(address), do: spendable_balances(address)
+  @doc """
+  Fetches an account's spendable balances (excluding locked/vesting amounts), at
+  `opts[:height]` when one is given.
+  """
+  @spec list_spendable(String.t(), Node.opts()) :: {:ok, [Coin.t()]} | {:error, term()}
+  def list_spendable(address, opts \\ []), do: spendable_balances(address, nil, opts)
 
   # --- Private ---
 
   defp coin_amount(%{amount: amount}), do: amount
   defp coin_amount(_), do: 0
 
-  defp all_balances(address, key \\ nil)
-  defp all_balances(_address, ""), do: {:ok, []}
+  defp all_balances(_address, "", _opts), do: {:ok, []}
 
-  defp all_balances(address, key) do
+  defp all_balances(address, key, opts) do
     with {:ok, %{balances: balances, pagination: %{next_key: next_key}}} <-
-           Rujira.Node.query(&Stub.all_balances/2, all_balances_request(address, key)),
+           Node.query(&Stub.all_balances/3, all_balances_request(address, key), opts),
          {:ok, coins} <- coins_to_coins(balances),
-         {:ok, next} <- all_balances(address, next_key) do
+         {:ok, next} <- all_balances(address, next_key, opts) do
       {:ok, coins ++ next}
     end
   end
@@ -55,17 +65,17 @@ defmodule Rujira.Bank.Balance do
   defp all_balances_request(address, key),
     do: %QueryAllBalancesRequest{address: address, pagination: %PageRequest{key: key}}
 
-  defp spendable_balances(address, key \\ nil)
-  defp spendable_balances(_address, ""), do: {:ok, []}
+  defp spendable_balances(_address, "", _opts), do: {:ok, []}
 
-  defp spendable_balances(address, key) do
+  defp spendable_balances(address, key, opts) do
     with {:ok, %{balances: balances, pagination: %{next_key: next_key}}} <-
-           Rujira.Node.query(
-             &Stub.spendable_balances/2,
-             spendable_balances_request(address, key)
+           Node.query(
+             &Stub.spendable_balances/3,
+             spendable_balances_request(address, key),
+             opts
            ),
          {:ok, coins} <- coins_to_coins(balances),
-         {:ok, next} <- spendable_balances(address, next_key) do
+         {:ok, next} <- spendable_balances(address, next_key, opts) do
       {:ok, coins ++ next}
     end
   end

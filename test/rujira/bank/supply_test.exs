@@ -108,4 +108,58 @@ defmodule Rujira.Bank.SupplyTest do
       assert {:ok, [%Coin{asset: @btc, amount: 42}]} = Supply.list()
     end
   end
+
+  describe "height reads" do
+    @height 12_345
+    @metadata %{"x-cosmos-block-height" => "12345"}
+
+    test "get/2 carries the block-height metadata" do
+      MockNode.expect(fn %QuerySupplyOfRequest{} ->
+        {:ok, %QuerySupplyOfResponse{amount: %ChainCoin{denom: "rune", amount: "1000"}}}
+      end)
+
+      assert {:ok, %Coin{amount: 1000}} = Supply.get(@rune, height: @height)
+
+      assert_received {:mock_node, %QuerySupplyOfRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "two height reads both reach the node" do
+      MockNode.expect(fn %QuerySupplyOfRequest{} ->
+        {:ok, %QuerySupplyOfResponse{amount: %ChainCoin{denom: "rune", amount: "1000"}}}
+      end)
+
+      assert {:ok, _} = Supply.get(@rune, height: @height)
+      assert {:ok, _} = Supply.get(@rune, height: @height)
+
+      assert_received {:mock_node, %QuerySupplyOfRequest{}, _}
+      assert_received {:mock_node, %QuerySupplyOfRequest{}, _}
+    end
+
+    test "list/1 forwards the height to every page" do
+      MockNode.expect(fn
+        %QueryTotalSupplyRequest{pagination: nil} ->
+          {:ok,
+           %QueryTotalSupplyResponse{
+             supply: [%ChainCoin{denom: "rune", amount: "1000"}],
+             pagination: %PageResponse{next_key: "page2"}
+           }}
+
+        %QueryTotalSupplyRequest{pagination: %{key: "page2"}} ->
+          {:ok,
+           %QueryTotalSupplyResponse{
+             supply: [%ChainCoin{denom: "x/ruji", amount: "500"}],
+             pagination: %PageResponse{next_key: ""}
+           }}
+      end)
+
+      assert {:ok, [%Coin{amount: 1000}, %Coin{amount: 500}]} = Supply.list(height: @height)
+
+      assert_received {:mock_node, %QueryTotalSupplyRequest{pagination: nil}, first}
+      assert Keyword.get(first, :metadata) == @metadata
+
+      assert_received {:mock_node, %QueryTotalSupplyRequest{pagination: %{key: "page2"}}, second}
+      assert Keyword.get(second, :metadata) == @metadata
+    end
+  end
 end

@@ -10,37 +10,37 @@ defmodule Rujira.Bank.Supply do
   alias Rujira.Assets.Asset
   alias Rujira.Coin
   alias Rujira.Logger
+  alias Rujira.Node
 
   # --- Queries ---
 
-  @doc "Fetches the total supply of a single asset."
-  @spec get(Asset.t()) :: {:ok, Coin.t()} | {:error, term()}
-  def get(%Asset{} = asset) do
+  @doc "Fetches the total supply of a single asset, at `opts[:height]` when one is given."
+  @spec get(Asset.t(), Node.opts()) :: {:ok, Coin.t()} | {:error, term()}
+  def get(%Asset{} = asset, opts \\ []) do
     with {:ok, denom} <- Assets.to_native(asset),
          {:ok, %{amount: coin}} <-
-           Rujira.Node.query(&Stub.supply_of/2, %QuerySupplyOfRequest{denom: denom}),
+           Node.query(&Stub.supply_of/3, %QuerySupplyOfRequest{denom: denom}, opts),
          {:ok, amount} <- Amount.new(coin_amount(coin)) do
       {:ok, Coin.new(asset, amount)}
     end
   end
 
-  @doc "Fetches the total supply of every denom."
-  @spec list() :: {:ok, [Coin.t()]} | {:error, term()}
-  def list, do: total_supply()
+  @doc "Fetches the total supply of every denom, at `opts[:height]` when one is given."
+  @spec list(Node.opts()) :: {:ok, [Coin.t()]} | {:error, term()}
+  def list(opts \\ []), do: total_supply(nil, opts)
 
   # --- Private ---
 
   defp coin_amount(%{amount: amount}), do: amount
   defp coin_amount(_), do: 0
 
-  defp total_supply(key \\ nil)
-  defp total_supply(""), do: {:ok, []}
+  defp total_supply("", _opts), do: {:ok, []}
 
-  defp total_supply(key) do
+  defp total_supply(key, opts) do
     with {:ok, %{supply: supply, pagination: %{next_key: next_key}}} <-
-           Rujira.Node.query(&Stub.total_supply/2, total_supply_request(key)),
+           Node.query(&Stub.total_supply/3, total_supply_request(key), opts),
          {:ok, coins} <- coins_to_coins(supply),
-         {:ok, next} <- total_supply(next_key) do
+         {:ok, next} <- total_supply(next_key, opts) do
       {:ok, coins ++ next}
     end
   end

@@ -16,6 +16,7 @@ defmodule Rujira.Fin.MarketMaker.Quote do
   alias Rujira.Coin
   alias Rujira.Contracts
   alias Rujira.Math
+  alias Rujira.Node
 
   use Memoize
 
@@ -72,26 +73,40 @@ defmodule Rujira.Fin.MarketMaker.Quote do
 
       Memoize.invalidate(Rujira.Fin.MarketMaker.Quote, :do_query, [address, offer, ask, min_price && Decimal.normalize(min_price)])
   """
-  @spec query(String.t(), Asset.t(), Asset.t(), Decimal.t() | nil) ::
+  @spec query(String.t(), Asset.t(), Asset.t(), Decimal.t() | nil, Node.opts()) ::
           {:ok, t()} | {:error, term()}
-  def query(address, %Asset{} = offer, %Asset{} = ask, min_price \\ nil) do
-    do_query(address, offer, ask, normalize_min_price(min_price))
+  def query(address, %Asset{} = offer, %Asset{} = ask, min_price \\ nil, opts \\ []) do
+    min_price = normalize_min_price(min_price)
+
+    Node.at_height(
+      opts,
+      fn -> fetch(address, offer, ask, min_price, opts) end,
+      fn -> do_query(address, offer, ask, min_price) end
+    )
   end
 
   # --- Private ---
 
   defmemop do_query(address, %Asset{} = offer, %Asset{} = ask, min_price) do
+    fetch(address, offer, ask, min_price, [])
+  end
+
+  defp fetch(address, %Asset{} = offer, %Asset{} = ask, min_price, opts) do
     with {:ok, offer_denom} <- Assets.to_native(offer),
          {:ok, ask_denom} <- Assets.to_native(ask),
          {:ok, res} <-
-           Contracts.query_state_smart(address, %{
-             quote: %{
-               min_price: min_price && Decimal.to_string(min_price, :normal),
-               offer_denom: offer_denom,
-               ask_denom: ask_denom,
-               data: nil
-             }
-           }) do
+           Contracts.query_state_smart(
+             address,
+             %{
+               quote: %{
+                 min_price: min_price && Decimal.to_string(min_price, :normal),
+                 offer_denom: offer_denom,
+                 ask_denom: ask_denom,
+                 data: nil
+               }
+             },
+             opts
+           ) do
       new(%{address: address, offer: offer, ask: ask}, res)
     end
   end

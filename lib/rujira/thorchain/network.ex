@@ -7,6 +7,7 @@ defmodule Rujira.Thorchain.Network do
 
   alias Rujira.Amount
   alias Rujira.Math
+  alias Rujira.Node
   alias Thorchain.Types.Query.Stub
   alias Thorchain.Types.QueryNetworkRequest
   alias Thorchain.Types.QueryNetworkResponse
@@ -88,7 +89,20 @@ defmodule Rujira.Thorchain.Network do
   """
   @spec get() :: {:ok, t()} | {:error, term()}
   defmemo get, expires_in: Rujira.cache_ttl() do
-    with {:ok, res} <- Rujira.Node.query(&Stub.network/2, %QueryNetworkRequest{}) do
+    fetch([])
+  end
+
+  @doc """
+  As `get/0`, read at `opts[:height]` when one is given - a height read is never
+  cached. Without a `:height` this is `get/0`, so the other opts are not applied.
+  """
+  @spec get(Node.opts()) :: {:ok, t()} | {:error, term()}
+  def get(opts), do: Node.at_height(opts, fn -> fetch(opts) end, &get/0)
+
+  # --- Private ---
+
+  defp fetch(opts) do
+    with {:ok, res} <- Node.query(&Stub.network/3, %QueryNetworkRequest{}, opts) do
       new(res)
     end
   end

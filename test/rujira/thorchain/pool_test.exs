@@ -2,6 +2,9 @@ defmodule Rujira.Thorchain.PoolTest do
   use ExUnit.Case, async: true
 
   alias Rujira.Thorchain.Pool
+  alias Rujira.Test.MockNode
+  alias Thorchain.Types.QueryPoolsRequest
+  alias Thorchain.Types.QueryPoolsResponse
   alias Thorchain.Types.QueryPoolResponse
 
   defp response(extra) do
@@ -43,6 +46,55 @@ defmodule Rujira.Thorchain.PoolTest do
 
     test "leaves the tor price nil when blank" do
       assert {:ok, %Pool{asset_tor_price: nil}} = Pool.new(response(%{asset_tor_price: ""}))
+    end
+  end
+
+  describe "height reads" do
+    @height 12_345
+    @metadata %{"x-cosmos-block-height" => "12345"}
+
+    setup do
+      MockNode.expect(fn %QueryPoolsRequest{} ->
+        {:ok, %QueryPoolsResponse{pools: [response(%{})]}}
+      end)
+
+      :ok
+    end
+
+    test "list/1 carries the block-height metadata" do
+      assert {:ok, [%Pool{id: "BTC.BTC"}]} = Pool.list(height: @height)
+
+      assert_received {:mock_node, %QueryPoolsRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "a height read is never cached, so two calls reach the node twice" do
+      assert {:ok, _} = Pool.list(height: @height)
+      assert {:ok, _} = Pool.list(height: @height)
+
+      assert_received {:mock_node, %QueryPoolsRequest{}, _}
+      assert_received {:mock_node, %QueryPoolsRequest{}, _}
+    end
+
+    test "get/2 forwards the height to the list it reads" do
+      assert {:ok, %Pool{id: "BTC.BTC"}} = Pool.get("BTC.BTC", height: @height)
+
+      assert_received {:mock_node, %QueryPoolsRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "from_id/2 forwards the height" do
+      assert {:ok, %Pool{id: "BTC.BTC"}} = Pool.from_id("BTC.BTC", height: @height)
+
+      assert_received {:mock_node, %QueryPoolsRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "the Rujira.Thorchain facade exposes the opts arity" do
+      assert {:ok, [%Pool{}]} = Rujira.Thorchain.pools(height: @height)
+
+      assert_received {:mock_node, %QueryPoolsRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
     end
   end
 end

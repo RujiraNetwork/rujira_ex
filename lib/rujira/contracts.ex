@@ -1,6 +1,16 @@
 defmodule Rujira.Contracts do
   @moduledoc """
   Convenience methods for querying CosmWasm smart contracts.
+
+  ## Query options
+
+  Every query takes a trailing `opts`, forwarded to `Rujira.Node.query/3`, so a
+  caller can read a whole composite at one `height:`.
+
+  A memoized query keeps its name, arity and cache key, and gains a sibling one
+  arity higher that takes `opts`: with a `:height` that sibling reads the node
+  uncached - a height read is never cached - and without one it is the memoized
+  function itself, so the other opts are not applied.
   """
   alias Cosmos.Base.Query.V1beta1.PageRequest
   alias Cosmwasm.Wasm.V1.CodeInfoResponse
@@ -32,26 +42,24 @@ defmodule Rujira.Contracts do
 
   @spec code_info(non_neg_integer()) ::
           {:ok, CodeInfoResponse.t()} | {:error, Node.rpc_error()}
-  defmemo code_info(code_id) do
-    with {:ok, %{code_info: code_info}} <-
-           Node.query(&Stub.code/2, %QueryCodeRequest{code_id: code_id}) do
-      {:ok, code_info}
-    end
+  defmemo(code_info(code_id), do: fetch_code_info(code_id, []))
+
+  @doc "As `code_info/1`, read at `opts[:height]` when given."
+  @spec code_info(non_neg_integer(), Node.opts()) ::
+          {:ok, CodeInfoResponse.t()} | {:error, Node.rpc_error()}
+  def code_info(code_id, opts) do
+    Node.at_height(opts, fn -> fetch_code_info(code_id, opts) end, fn -> code_info(code_id) end)
   end
 
   @spec version(String.t()) ::
           {:ok, %{contract: String.t(), version: String.t()} | nil} | {:error, term()}
-  defmemo version(address) do
-    case query_state_raw(address, :erlang.iolist_to_binary("contract_info")) do
-      {:ok, %{"contract" => contract, "version" => version}} ->
-        {:ok, %{contract: contract, version: version}}
+  defmemo(version(address), do: fetch_version(address, []))
 
-      {:error, %{message: "codespace wasm code 22: no such contract:" <> _}} ->
-        {:ok, nil}
-
-      other ->
-        other
-    end
+  @doc "As `version/1`, read at `opts[:height]` when given."
+  @spec version(String.t(), Node.opts()) ::
+          {:ok, %{contract: String.t(), version: String.t()} | nil} | {:error, term()}
+  def version(address, opts) do
+    Node.at_height(opts, fn -> fetch_version(address, opts) end, fn -> version(address) end)
   end
 
   @spec build_address(binary(), String.t(), non_neg_integer() | String.t()) ::
@@ -63,17 +71,18 @@ defmodule Rujira.Contracts do
   end
 
   defmemo build_address(salt, creator, hash) do
-    with {:ok, %{address: address}} <-
-           Node.query(
-             &Stub.build_address/2,
-             %QueryBuildAddressRequest{
-               code_hash: hash,
-               creator_address: creator,
-               salt: salt
-             }
-           ) do
-      {:ok, address}
-    end
+    fetch_build_address(salt, creator, hash, [])
+  end
+
+  @doc "As `build_address/3`, read at `opts[:height]` when given."
+  @spec build_address(binary(), String.t(), non_neg_integer() | String.t(), Node.opts()) ::
+          {:ok, String.t()} | {:error, term()}
+  def build_address(salt, creator, id, opts) do
+    Node.at_height(
+      opts,
+      fn -> fetch_build_address(salt, creator, id, opts) end,
+      fn -> build_address(salt, creator, id) end
+    )
   end
 
   @spec build_address!(binary(), String.t(), non_neg_integer() | String.t()) :: String.t()
@@ -82,97 +91,61 @@ defmodule Rujira.Contracts do
     address
   end
 
+  @doc "As `build_address!/3`, read at `opts[:height]` when given."
+  @spec build_address!(binary(), String.t(), non_neg_integer() | String.t(), Node.opts()) ::
+          String.t()
+  def build_address!(salt, deployer, code_id, opts) do
+    Node.at_height(
+      opts,
+      fn -> fetch_build_address!(salt, deployer, code_id, opts) end,
+      fn -> build_address!(salt, deployer, code_id) end
+    )
+  end
+
   @spec info(String.t()) ::
           {:ok, ContractInfo.t()} | {:error, Node.rpc_error()}
-  defmemo info(address) do
-    with {:ok, %{contract_info: contract_info}} <-
-           Node.query(
-             &Stub.contract_info/2,
-             %QueryContractInfoRequest{address: address}
-           ) do
-      {:ok, contract_info}
-    end
+  defmemo(info(address), do: fetch_info(address, []))
+
+  @doc "As `info/1`, read at `opts[:height]` when given."
+  @spec info(String.t(), Node.opts()) :: {:ok, ContractInfo.t()} | {:error, Node.rpc_error()}
+  def info(address, opts) do
+    Node.at_height(opts, fn -> fetch_info(address, opts) end, fn -> info(address) end)
   end
 
   @spec codes() :: {:ok, list(CodeInfoResponse.t())} | {:error, Node.rpc_error()}
-  defmemo codes() do
-    codes_page()
-  end
+  defmemo(codes(), do: codes_page(nil, []))
 
-  defp codes_page(key \\ nil)
-
-  defp codes_page(nil) do
-    with {:ok, %{code_infos: code_infos, pagination: %{next_key: next_key}}} <-
-           Node.query(&Stub.codes/2, %QueryCodesRequest{}),
-         {:ok, next} <- codes_page(next_key) do
-      {:ok, Enum.concat(code_infos, next)}
-    end
-  end
-
-  defp codes_page(""), do: {:ok, []}
-
-  defp codes_page(key) do
-    with {:ok, %{code_infos: code_infos, pagination: %{next_key: next_key}}} <-
-           Node.query(
-             &Stub.codes/2,
-             %QueryCodesRequest{pagination: %PageRequest{key: key}}
-           ),
-         {:ok, next} <- codes_page(next_key) do
-      {:ok, Enum.concat(code_infos, next)}
-    end
+  @doc "As `codes/0`, read at `opts[:height]` when given."
+  @spec codes(Node.opts()) :: {:ok, list(CodeInfoResponse.t())} | {:error, Node.rpc_error()}
+  def codes(opts) do
+    Node.at_height(opts, fn -> codes_page(nil, opts) end, &codes/0)
   end
 
   @spec by_code(integer()) ::
           {:ok, list(t())} | {:error, Node.rpc_error()}
-  defmemo by_code(code_id) do
-    with {:ok, contracts} <- by_code_page(code_id) do
-      {:ok, Enum.map(contracts, &%__MODULE__{id: &1, address: &1})}
-    end
-  end
+  defmemo(by_code(code_id), do: fetch_by_code(code_id, []))
 
-  defp by_code_page(code_id, key \\ nil)
-
-  defp by_code_page(code_id, nil) do
-    with {:ok, %{contracts: contracts, pagination: %{next_key: next_key}}} <-
-           Node.query(
-             &Stub.contracts_by_code/2,
-             %QueryContractsByCodeRequest{code_id: code_id}
-           ),
-         {:ok, next} <- by_code_page(code_id, next_key) do
-      {:ok, Enum.concat(contracts, next)}
-    end
-  end
-
-  defp by_code_page(_code_id, ""), do: {:ok, []}
-
-  defp by_code_page(code_id, key) do
-    with {:ok, %{contracts: contracts, pagination: %{next_key: next_key}}} <-
-           Node.query(
-             &Stub.contracts_by_code/2,
-             %QueryContractsByCodeRequest{
-               code_id: code_id,
-               pagination: %PageRequest{key: key}
-             }
-           ),
-         {:ok, next} <- by_code_page(code_id, next_key) do
-      {:ok, Enum.concat(contracts, next)}
-    end
+  @doc "As `by_code/1`, read at `opts[:height]` when given."
+  @spec by_code(integer(), Node.opts()) :: {:ok, list(t())} | {:error, Node.rpc_error()}
+  def by_code(code_id, opts) do
+    Node.at_height(opts, fn -> fetch_by_code(code_id, opts) end, fn -> by_code(code_id) end)
   end
 
   @spec code(integer()) :: {:ok, QueryCodeResponse} | {:error, Node.rpc_error()}
-  defmemo code(id) do
-    with {:ok, %{code_info: code_info}} <-
-           Node.query(&Stub.code/2, %QueryCodeRequest{code_id: id}) do
-      {:ok, code_info}
-    end
+  defmemo(code(id), do: fetch_code_info(id, []))
+
+  @doc "As `code/1`, read at `opts[:height]` when given."
+  @spec code(integer(), Node.opts()) :: {:ok, QueryCodeResponse} | {:error, Node.rpc_error()}
+  def code(id, opts) do
+    Node.at_height(opts, fn -> fetch_code_info(id, opts) end, fn -> code(id) end)
   end
 
-  @spec by_codes(list(integer())) ::
+  @spec by_codes(list(integer()), Node.opts()) ::
           {:ok, list(t())} | {:error, Node.rpc_error()}
-  def by_codes(code_ids) do
+  def by_codes(code_ids, opts \\ []) do
     Enum.reduce(code_ids, {:ok, []}, fn
       el, {:ok, agg} ->
-        case by_code(el) do
+        case by_code(el, opts) do
           {:ok, contracts} -> {:ok, agg ++ contracts}
           err -> err
         end
@@ -188,10 +161,20 @@ defmodule Rujira.Contracts do
   defmemo(get({module, %__MODULE__{address: address}}), do: get({module, address}))
 
   defmemo get({module, address}) do
-    case query_state_smart(address, %{config: %{}}) do
-      {:ok, config} -> construct(module, address, config)
-      err -> err
-    end
+    fetch_get(module, address, [])
+  end
+
+  @doc "As `get/1`, read at `opts[:height]` when given."
+  @spec get({module(), String.t() | t()} | struct(), Node.opts()) ::
+          {:ok, struct()} | {:error, any()}
+  def get({module, %__MODULE__{address: address}}, opts), do: get({module, address}, opts)
+
+  def get({module, address}, opts) do
+    Node.at_height(
+      opts,
+      fn -> fetch_get(module, address, opts) end,
+      fn -> get({module, address}) end
+    )
   end
 
   # TODO: remove the `from_config/2` fallback once rujira-api has migrated every
@@ -215,20 +198,30 @@ defmodule Rujira.Contracts do
   @spec list(module(), list(integer())) ::
           {:ok, list(struct())} | {:error, Node.rpc_error()}
   defmemo list(module, code_ids) when is_list(code_ids) do
-    with {:ok, contracts} <- by_codes(code_ids) do
-      Rujira.Enum.reduce_async_while_ok(contracts, &get({module, &1}), timeout: 30_000)
-    end
+    fetch_list(module, code_ids, [])
   end
 
-  @spec query_state_raw(String.t(), binary()) ::
+  @doc "As `list/2`, read at `opts[:height]` when given."
+  @spec list(module(), list(integer()), Node.opts()) ::
+          {:ok, list(struct())} | {:error, Node.rpc_error()}
+  def list(module, code_ids, opts) when is_list(code_ids) do
+    Node.at_height(
+      opts,
+      fn -> fetch_list(module, code_ids, opts) end,
+      fn -> list(module, code_ids) end
+    )
+  end
+
+  @spec query_state_raw(String.t(), binary(), Node.opts()) ::
           {:ok, term()} | {:error, :not_found} | {:error, Node.rpc_error()}
-  def query_state_raw(address, query) do
+  def query_state_raw(address, query, opts \\ []) do
     case Node.query(
-           &Stub.raw_contract_state/2,
+           &Stub.raw_contract_state/3,
            %QueryRawContractStateRequest{
              address: address,
              query_data: query
-           }
+           },
+           opts
          ) do
       {:ok, %{data: ""}} -> {:error, :not_found}
       {:ok, %{data: data}} -> JSON.decode(data)
@@ -236,21 +229,9 @@ defmodule Rujira.Contracts do
     end
   end
 
-  @spec query_state_smart(String.t(), map()) ::
+  @spec query_state_smart(String.t(), map(), Node.opts()) ::
           {:ok, map() | nil} | {:error, Node.rpc_error()}
-  def query_state_smart(address, query) do
-    with {:ok, %{data: data}} <-
-           Node.query(&Stub.smart_contract_state/2, %QuerySmartContractStateRequest{
-             address: address,
-             query_data: JSON.encode!(query)
-           }) do
-      JSON.decode(data)
-    end
-  end
-
-  @spec query_state_smart(String.t(), map(), keyword()) ::
-          {:ok, map() | nil} | {:error, Node.rpc_error()}
-  def query_state_smart(address, query, opts) do
+  def query_state_smart(address, query, opts \\ []) do
     with {:ok, %{data: data}} <-
            Node.query(
              &Stub.smart_contract_state/3,
@@ -291,17 +272,28 @@ defmodule Rujira.Contracts do
   @spec query_state_all(String.t()) ::
           {:ok, map()} | {:error, Node.rpc_error()}
   defmemo query_state_all(address) do
-    query_state_all_page(address, nil)
+    query_state_all_page(address, nil, [])
   end
 
-  defp query_state_all_page(address, page) do
+  @doc "As `query_state_all/1`, read at `opts[:height]` when given."
+  @spec query_state_all(String.t(), Node.opts()) :: {:ok, map()} | {:error, Node.rpc_error()}
+  def query_state_all(address, opts) do
+    Node.at_height(
+      opts,
+      fn -> query_state_all_page(address, nil, opts) end,
+      fn -> query_state_all(address) end
+    )
+  end
+
+  defp query_state_all_page(address, page, opts) do
     with {:ok, %{models: models, pagination: %{next_key: next_key}}} when next_key != "" <-
            Node.query(
-             &Stub.all_contract_state/2,
-             %QueryAllContractStateRequest{address: address, pagination: page}
+             &Stub.all_contract_state/3,
+             %QueryAllContractStateRequest{address: address, pagination: page},
+             opts
            ),
          {:ok, next} <-
-           query_state_all_page(address, %PageRequest{key: next_key}) do
+           query_state_all_page(address, %PageRequest{key: next_key}, opts) do
       {:ok, decode_models(models, next)}
     else
       {:ok, %{models: models, pagination: %{next_key: nil}}} ->
@@ -316,13 +308,14 @@ defmodule Rujira.Contracts do
   end
 
   @doc "Streams the current contract state"
-  @spec stream_state_all(String.t()) :: Enumerable.t()
-  def stream_state_all(address) do
+  @spec stream_state_all(String.t(), Node.opts()) :: Enumerable.t()
+  def stream_state_all(address, opts \\ []) do
     Stream.resource(
       fn ->
         Node.query(
-          &Stub.all_contract_state/2,
-          %QueryAllContractStateRequest{address: address}
+          &Stub.all_contract_state/3,
+          %QueryAllContractStateRequest{address: address},
+          opts
         )
       end,
       fn
@@ -334,11 +327,12 @@ defmodule Rujira.Contracts do
         when next_key != "" ->
           next =
             Node.query(
-              &Stub.all_contract_state/2,
+              &Stub.all_contract_state/3,
               %QueryAllContractStateRequest{
                 address: address,
                 pagination: %PageRequest{key: next_key}
-              }
+              },
+              opts
             )
 
           {[JSON.decode!(value)], next}
@@ -353,10 +347,10 @@ defmodule Rujira.Contracts do
     )
   end
 
-  @spec query_state_smart_with_retry(String.t(), map()) ::
+  @spec query_state_smart_with_retry(String.t(), map(), Node.opts()) ::
           {:ok, map()} | {:error, term()}
-  def query_state_smart_with_retry(address, query) do
-    case query_state_smart(address, query) |> log_retry(address, query) do
+  def query_state_smart_with_retry(address, query, opts \\ []) do
+    case query_state_smart(address, query, opts) |> log_retry(address, query) do
       {:error, %GRPC.RPCError{status: 2, message: msg}}
       when msg in [
              "Invalid layer 1 string : query wasm contract failed",
@@ -366,7 +360,7 @@ defmodule Rujira.Contracts do
              "Generic error: Parsing u128: invalid digit found in string: query wasm contract failed",
              "Generic error: Error parsing whole: query wasm contract failed"
            ] ->
-        query_state_smart(address, query)
+        query_state_smart(address, query, opts)
 
       other ->
         other
@@ -374,6 +368,109 @@ defmodule Rujira.Contracts do
   end
 
   # --- Private ---
+
+  defp fetch_code_info(code_id, opts) do
+    with {:ok, %{code_info: code_info}} <-
+           Node.query(&Stub.code/3, %QueryCodeRequest{code_id: code_id}, opts) do
+      {:ok, code_info}
+    end
+  end
+
+  defp fetch_version(address, opts) do
+    case query_state_raw(address, :erlang.iolist_to_binary("contract_info"), opts) do
+      {:ok, %{"contract" => contract, "version" => version}} ->
+        {:ok, %{contract: contract, version: version}}
+
+      {:error, %{message: "codespace wasm code 22: no such contract:" <> _}} ->
+        {:ok, nil}
+
+      other ->
+        other
+    end
+  end
+
+  defp fetch_build_address(salt, creator, id, opts) when is_integer(id) do
+    with {:ok, %{data_hash: data_hash}} <- code_info(id, opts) do
+      fetch_build_address(salt, creator, Base.encode16(data_hash), opts)
+    end
+  end
+
+  defp fetch_build_address(salt, creator, hash, opts) do
+    with {:ok, %{address: address}} <-
+           Node.query(
+             &Stub.build_address/3,
+             %QueryBuildAddressRequest{
+               code_hash: hash,
+               creator_address: creator,
+               salt: salt
+             },
+             opts
+           ) do
+      {:ok, address}
+    end
+  end
+
+  defp fetch_build_address!(salt, deployer, code_id, opts) do
+    {:ok, address} = build_address(salt, deployer, code_id, opts)
+    address
+  end
+
+  defp fetch_info(address, opts) do
+    with {:ok, %{contract_info: contract_info}} <-
+           Node.query(
+             &Stub.contract_info/3,
+             %QueryContractInfoRequest{address: address},
+             opts
+           ) do
+      {:ok, contract_info}
+    end
+  end
+
+  defp codes_page("", _opts), do: {:ok, []}
+
+  defp codes_page(key, opts) do
+    with {:ok, %{code_infos: code_infos, pagination: %{next_key: next_key}}} <-
+           Node.query(&Stub.codes/3, %QueryCodesRequest{pagination: page_request(key)}, opts),
+         {:ok, next} <- codes_page(next_key, opts) do
+      {:ok, Enum.concat(code_infos, next)}
+    end
+  end
+
+  defp fetch_by_code(code_id, opts) do
+    with {:ok, contracts} <- by_code_page(code_id, nil, opts) do
+      {:ok, Enum.map(contracts, &%__MODULE__{id: &1, address: &1})}
+    end
+  end
+
+  defp by_code_page(_code_id, "", _opts), do: {:ok, []}
+
+  defp by_code_page(code_id, key, opts) do
+    with {:ok, %{contracts: contracts, pagination: %{next_key: next_key}}} <-
+           Node.query(
+             &Stub.contracts_by_code/3,
+             %QueryContractsByCodeRequest{code_id: code_id, pagination: page_request(key)},
+             opts
+           ),
+         {:ok, next} <- by_code_page(code_id, next_key, opts) do
+      {:ok, Enum.concat(contracts, next)}
+    end
+  end
+
+  defp fetch_get(module, address, opts) do
+    case query_state_smart(address, %{config: %{}}, opts) do
+      {:ok, config} -> construct(module, address, config)
+      err -> err
+    end
+  end
+
+  defp fetch_list(module, code_ids, opts) do
+    with {:ok, contracts} <- by_codes(code_ids, opts) do
+      Rujira.Enum.reduce_async_while_ok(contracts, &get({module, &1}, opts), timeout: 30_000)
+    end
+  end
+
+  defp page_request(nil), do: nil
+  defp page_request(key), do: %PageRequest{key: key}
 
   defp decode_models(models, init \\ %{}) do
     Enum.reduce(models, init, fn %Model{} = model, agg ->

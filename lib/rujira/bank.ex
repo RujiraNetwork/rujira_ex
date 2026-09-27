@@ -4,6 +4,10 @@ defmodule Rujira.Bank do
 
   Pure delegation facade. Each resource module owns its struct, construction,
   and queries. Invalidate cache on the resource module, not here.
+
+  Every query takes a trailing `opts`, forwarded to `Rujira.Node.query/3`, so a
+  caller can read at a `height:`. `holders/3` is the uncached sibling of the
+  memoized `holders/2` - see `Rujira.Bank.Holder`.
   """
 
   alias Rujira.Bank.Balance
@@ -12,17 +16,18 @@ defmodule Rujira.Bank do
 
   # --- Balance ---
 
-  defdelegate balance(address, asset), to: Balance, as: :get
-  defdelegate balances(address), to: Balance, as: :list
-  defdelegate spendable_balances(address), to: Balance, as: :list_spendable
+  defdelegate balance(address, asset, opts \\ []), to: Balance, as: :get
+  defdelegate balances(address, opts \\ []), to: Balance, as: :list
+  defdelegate spendable_balances(address, opts \\ []), to: Balance, as: :list_spendable
 
   # --- Supply ---
 
-  defdelegate supply(asset), to: Supply, as: :get
-  defdelegate total_supply(), to: Supply, as: :list
+  defdelegate supply(asset, opts \\ []), to: Supply, as: :get
+  defdelegate total_supply(opts \\ []), to: Supply, as: :list
 
   # --- Holder ---
 
   defdelegate holders(asset), to: Holder
   defdelegate holders(asset, limit), to: Holder
+  defdelegate holders(asset, limit, opts), to: Holder
 end

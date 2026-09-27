@@ -6,6 +6,7 @@ defmodule Rujira.Thorchain.OutboundFee do
   """
 
   alias Rujira.Amount
+  alias Rujira.Node
   alias Thorchain.Types.Query.Stub
   alias Thorchain.Types.QueryOutboundFeeResponse
   alias Thorchain.Types.QueryOutboundFeesRequest
@@ -64,8 +65,21 @@ defmodule Rujira.Thorchain.OutboundFee do
   """
   @spec list() :: {:ok, [t()]} | {:error, term()}
   defmemo list, expires_in: Rujira.cache_ttl() do
+    fetch([])
+  end
+
+  @doc """
+  As `list/0`, read at `opts[:height]` when one is given - a height read is never
+  cached. Without a `:height` this is `list/0`, so the other opts are not applied.
+  """
+  @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
+  def list(opts), do: Node.at_height(opts, fn -> fetch(opts) end, &list/0)
+
+  # --- Private ---
+
+  defp fetch(opts) do
     with {:ok, %QueryOutboundFeesResponse{outbound_fees: fees}} <-
-           Rujira.Node.query(&Stub.outbound_fees/2, %QueryOutboundFeesRequest{}) do
+           Node.query(&Stub.outbound_fees/3, %QueryOutboundFeesRequest{}, opts) do
       Rujira.Enum.reduce_while_ok(fees, &new/1)
     end
   end

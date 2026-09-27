@@ -7,6 +7,7 @@ defmodule Rujira.Staking.Pool.Status do
 
   alias Rujira.Amount
   alias Rujira.Contracts
+  alias Rujira.Node
   alias Rujira.Staking.Pool
 
   use Memoize
@@ -57,10 +58,10 @@ defmodule Rujira.Staking.Pool.Status do
 
   # --- Queries ---
 
-  @doc "Loads the pool's live status into its `status` field."
-  @spec load(Pool.t()) :: {:ok, Pool.t()} | {:error, term()}
-  def load(%Pool{address: address} = pool) do
-    with {:ok, res} <- query(address),
+  @doc "Loads the pool's live status into its `status` field, at `opts[:height]` when given."
+  @spec load(Pool.t(), Node.opts()) :: {:ok, Pool.t()} | {:error, term()}
+  def load(%Pool{address: address} = pool, opts \\ []) do
+    with {:ok, res} <- query(address, opts),
          {:ok, status} <- new(res) do
       {:ok, %{pool | status: status}}
     end
@@ -73,6 +74,22 @@ defmodule Rujira.Staking.Pool.Status do
   """
   @spec query(String.t()) :: {:ok, map()} | {:error, term()}
   defmemo query(address) do
-    Contracts.query_state_smart(address, %{status: %{}})
+    fetch(address, [])
+  end
+
+  @doc """
+  As `query/1`, read at `opts[:height]` when one is given - a height read is
+  never cached. Without a `:height` this is `query/1`, so the other opts are not
+  applied.
+  """
+  @spec query(String.t(), Node.opts()) :: {:ok, map()} | {:error, term()}
+  def query(address, opts) do
+    Node.at_height(opts, fn -> fetch(address, opts) end, fn -> query(address) end)
+  end
+
+  # --- Private ---
+
+  defp fetch(address, opts) do
+    Contracts.query_state_smart(address, %{status: %{}}, opts)
   end
 end

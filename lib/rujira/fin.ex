@@ -4,6 +4,11 @@ defmodule Rujira.Fin do
 
   Pure delegation facade. Each resource module owns its struct, construction,
   and queries. Invalidate cache on the resource module, not here.
+
+  Every query takes a trailing `opts`, forwarded to `Rujira.Node.query/3`, so a
+  caller can read a whole composite at one `height:`. A memoized query's opts
+  arity reads the node uncached when given a `:height` - see the resource
+  module. Pure functions (`ticker_id!/1`, `book_depth/3`) take no `opts`.
   """
 
   alias Rujira.Fin.Book
@@ -14,42 +19,48 @@ defmodule Rujira.Fin do
 
   # --- Pair ---
 
-  defdelegate get_pair(address), to: Pair, as: :get
-  defdelegate list_pairs(), to: Pair, as: :list
-  defdelegate get_stable_pair(denom), to: Pair, as: :find_stable
-  defdelegate get_default_pair(denom), to: Pair, as: :find_default
+  defdelegate get_pair(address, opts \\ []), to: Pair, as: :get
+  defdelegate list_pairs(opts \\ []), to: Pair, as: :list
+  defdelegate get_stable_pair(denom, opts \\ []), to: Pair, as: :find_stable
+  defdelegate get_default_pair(denom, opts \\ []), to: Pair, as: :find_default
   defdelegate denom_for_ticker(ticker), to: Pair
+  defdelegate denom_for_ticker(ticker, opts), to: Pair
   defdelegate get_pair_from_denoms(base, quote_denom), to: Pair, as: :find_by_denoms
-  defdelegate pair_from_id(id), to: Pair, as: :from_id
+  defdelegate get_pair_from_denoms(base, quote_denom, opts), to: Pair, as: :find_by_denoms
+  defdelegate pair_from_id(id, opts \\ []), to: Pair, as: :from_id
   defdelegate ticker_id!(pair), to: Pair
-  defdelegate get_pair_tvl(address), to: Pair, as: :tvl
+  defdelegate get_pair_tvl(address, opts \\ []), to: Pair, as: :tvl
 
   # --- Book ---
 
-  defdelegate load_pair(pair, limit \\ 75), to: Book, as: :load
-  defdelegate book_from_id(id), to: Book, as: :from_id
-  defdelegate book_price(id), to: Book, as: :price
+  defdelegate load_pair(pair, limit \\ 75, opts \\ []), to: Book, as: :load
+  defdelegate book_from_id(id, opts \\ []), to: Book, as: :from_id
+  defdelegate book_price(id, opts \\ []), to: Book, as: :price
   defdelegate book_depth(book, side, deviation), to: Book, as: :depth
 
   # --- Order ---
 
-  defdelegate list_orders(pair, address, limit \\ 30), to: Order, as: :list
-  def list_pair_orders(pair, _opts \\ []), do: Order.list(pair)
-  defdelegate load_order(pair, side, price, owner), to: Order, as: :load
-  defdelegate list_all_orders(address), to: Order, as: :list_all_pairs
-  defdelegate order_from_id(id), to: Order, as: :from_id
+  defdelegate list_orders(pair, address, limit \\ 30, opts \\ []), to: Order, as: :list
+  def list_pair_orders(pair, opts \\ []), do: Order.list(pair, nil, nil, opts)
+  defdelegate load_order(pair, side, price, owner, opts \\ []), to: Order, as: :load
+  defdelegate list_all_orders(address, opts \\ []), to: Order, as: :list_all_pairs
+  defdelegate order_from_id(id, opts \\ []), to: Order, as: :from_id
 
   # --- Range ---
 
-  def list_ranges(pair, address \\ nil, _opts \\ []), do: Range.list(pair, address)
-  defdelegate load_range(pair, idx), to: Range, as: :load
-  defdelegate list_all_ranges(address \\ nil, contracts \\ nil), to: Range, as: :list_all
-  defdelegate range_from_id(id), to: Range, as: :from_id
-  defdelegate range_tvl(pair), to: Range, as: :tvl
-  defdelegate total_range_tvl(), to: Range, as: :total_tvl
+  def list_ranges(pair, address \\ nil, opts \\ []), do: Range.list(pair, address, nil, opts)
+  defdelegate load_range(pair, idx, opts \\ []), to: Range, as: :load
+
+  defdelegate list_all_ranges(address \\ nil, contracts \\ nil, opts \\ []),
+    to: Range,
+    as: :list_all
+
+  defdelegate range_from_id(id, opts \\ []), to: Range, as: :from_id
+  defdelegate range_tvl(pair, opts \\ []), to: Range, as: :tvl
+  defdelegate total_range_tvl(opts \\ []), to: Range, as: :total_tvl
 
   # --- Simulation ---
 
-  defdelegate simulate(pair, offer), to: Simulation
-  defdelegate simulation_from_id(id), to: Simulation, as: :from_id
+  defdelegate simulate(pair, offer, opts \\ []), to: Simulation
+  defdelegate simulation_from_id(id, opts \\ []), to: Simulation, as: :from_id
 end

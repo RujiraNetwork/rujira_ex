@@ -9,6 +9,7 @@ defmodule Rujira.Ghost.Vault.Status do
   alias Rujira.Contracts
   alias Rujira.Ghost.Vault
   alias Rujira.Math
+  alias Rujira.Node
 
   use Memoize
 
@@ -78,10 +79,10 @@ defmodule Rujira.Ghost.Vault.Status do
 
   # --- Queries ---
 
-  @doc "Loads the vault's live status into its `status` field."
-  @spec load(Vault.t()) :: {:ok, Vault.t()} | {:error, term()}
-  def load(%Vault{address: address} = vault) do
-    with {:ok, res} <- query(address),
+  @doc "Loads the vault's live status into its `status` field, at `opts[:height]` when given."
+  @spec load(Vault.t(), Node.opts()) :: {:ok, Vault.t()} | {:error, term()}
+  def load(%Vault{address: address} = vault, opts \\ []) do
+    with {:ok, res} <- query(address, opts),
          {:ok, status} <- new(res) do
       {:ok, %{vault | status: status}}
     end
@@ -94,10 +95,24 @@ defmodule Rujira.Ghost.Vault.Status do
   """
   @spec query(String.t()) :: {:ok, map()} | {:error, term()}
   defmemo query(address) do
-    Contracts.query_state_smart(address, %{status: %{}})
+    fetch(address, [])
+  end
+
+  @doc """
+  As `query/1`, read at `opts[:height]` when one is given - a height read is
+  never cached. Without a `:height` this is `query/1`, so the other opts are not
+  applied.
+  """
+  @spec query(String.t(), Node.opts()) :: {:ok, map()} | {:error, term()}
+  def query(address, opts) do
+    Node.at_height(opts, fn -> fetch(address, opts) end, fn -> query(address) end)
   end
 
   # --- Private ---
+
+  defp fetch(address, opts) do
+    Contracts.query_state_smart(address, %{status: %{}}, opts)
+  end
 
   defp debt_pool(%{"size" => size, "shares" => shares, "ratio" => ratio}) do
     with {:ok, size} <- Amount.new(size),

@@ -62,10 +62,11 @@ defmodule Rujira.Brune.State do
 
   # --- Queries ---
 
-  @doc "Loads the pool's live state into its `state` field."
-  @spec load(Pool.t()) :: {:ok, Pool.t()} | {:error, term()}
-  def load(%Pool{address: address} = pool) do
-    with {:ok, res} <- query(address),
+  # `Node` is this module's `Rujira.Brune.Node`, so `Rujira.Node` is named in full here.
+  @doc "Loads the pool's live state into its `state` field, at `opts[:height]` when given."
+  @spec load(Pool.t(), Rujira.Node.opts()) :: {:ok, Pool.t()} | {:error, term()}
+  def load(%Pool{address: address} = pool, opts \\ []) do
+    with {:ok, res} <- query(address, opts),
          {:ok, state} <- new(res) do
       {:ok, %{pool | state: state}}
     end
@@ -78,10 +79,24 @@ defmodule Rujira.Brune.State do
   """
   @spec query(String.t()) :: {:ok, map()} | {:error, term()}
   defmemo query(address) do
-    Contracts.query_state_smart(address, %{state: %{}})
+    fetch(address, [])
+  end
+
+  @doc """
+  As `query/1`, read at `opts[:height]` when one is given - a height read is
+  never cached. Without a `:height` this is `query/1`, so the other opts are not
+  applied.
+  """
+  @spec query(String.t(), Rujira.Node.opts()) :: {:ok, map()} | {:error, term()}
+  def query(address, opts) do
+    Rujira.Node.at_height(opts, fn -> fetch(address, opts) end, fn -> query(address) end)
   end
 
   # --- Private ---
+
+  defp fetch(address, opts) do
+    Contracts.query_state_smart(address, %{state: %{}}, opts)
+  end
 
   defp nodes(%{"bond" => bond, "weight" => weight, "capacity" => capacity, "nodes" => nodes}) do
     with {:ok, bond} <- Amount.new(bond),

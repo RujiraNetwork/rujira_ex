@@ -73,4 +73,68 @@ defmodule Rujira.DeploymentsTest do
       assert %{module: Pair} = Enum.find(targets, &(&1.address == "thor1fin"))
     end
   end
+
+  describe "height reads" do
+    @height 12_345
+    @metadata %{"x-cosmos-block-height" => "12345"}
+
+    setup do
+      MockNode.expect(fn %QueryContractInfosRequest{} ->
+        {:ok,
+         %{
+           infos: [
+             %ContractInfo{address: "thor1fin", contract: "rujira-fin", version: "1"}
+           ]
+         }}
+      end)
+
+      :ok
+    end
+
+    test "list_all_targets/1 carries the block-height metadata" do
+      assert {:ok, [%{address: "thor1fin", module: Pair}]} =
+               Deployments.list_all_targets(height: @height)
+
+      assert_received {:mock_node, %QueryContractInfosRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "a height read is never cached, so two calls reach the node twice" do
+      assert {:ok, _} = Deployments.list_all_targets(height: @height)
+      assert {:ok, _} = Deployments.list_all_targets(height: @height)
+
+      assert_received {:mock_node, %QueryContractInfosRequest{}, _}
+      assert_received {:mock_node, %QueryContractInfosRequest{}, _}
+    end
+
+    test "list_targets/2 forwards the height through every inner lookup" do
+      assert {:ok, [%{address: "thor1fin", module: Pair}]} =
+               Deployments.list_targets(Pair, height: @height)
+
+      assert_received {:mock_node, %QueryContractInfosRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "get_target/2 forwards the height" do
+      assert {:ok, %{address: "thor1fin"}} = Deployments.get_target(Pair, height: @height)
+
+      assert_received {:mock_node, %QueryContractInfosRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "from_address/2 forwards the height" do
+      assert {:ok, %{module: Pair}} = Deployments.from_address("thor1fin", height: @height)
+
+      assert_received {:mock_node, %QueryContractInfosRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "contract_infos/1 forwards the height" do
+      assert {:ok, [%ContractInfo{address: "thor1fin"}]} =
+               Deployments.contract_infos(height: @height)
+
+      assert_received {:mock_node, %QueryContractInfosRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+  end
 end

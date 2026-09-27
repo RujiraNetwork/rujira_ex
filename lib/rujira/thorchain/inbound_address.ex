@@ -6,6 +6,7 @@ defmodule Rujira.Thorchain.InboundAddress do
   """
 
   alias Rujira.Amount
+  alias Rujira.Node
   alias Rujira.String
   alias Thorchain.Types.Query.Stub
   alias Thorchain.Types.QueryInboundAddressesRequest
@@ -76,8 +77,21 @@ defmodule Rujira.Thorchain.InboundAddress do
   """
   @spec list() :: {:ok, [t()]} | {:error, term()}
   defmemo list, expires_in: Rujira.cache_ttl() do
+    fetch([])
+  end
+
+  @doc """
+  As `list/0`, read at `opts[:height]` when one is given - a height read is never
+  cached. Without a `:height` this is `list/0`, so the other opts are not applied.
+  """
+  @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
+  def list(opts), do: Node.at_height(opts, fn -> fetch(opts) end, &list/0)
+
+  # --- Private ---
+
+  defp fetch(opts) do
     with {:ok, %QueryInboundAddressesResponse{inbound_addresses: addresses}} <-
-           Rujira.Node.query(&Stub.inbound_addresses/2, %QueryInboundAddressesRequest{}) do
+           Node.query(&Stub.inbound_addresses/3, %QueryInboundAddressesRequest{}, opts) do
       Rujira.Enum.reduce_while_ok(addresses, &new/1)
     end
   end

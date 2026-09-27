@@ -11,6 +11,7 @@ defmodule Rujira.Ghost.Vault do
   alias Rujira.Ghost.Vault.Interest
   alias Rujira.Ghost.Vault.Status
   alias Rujira.Math
+  alias Rujira.Node
 
   # --- Struct ---
 
@@ -63,15 +64,15 @@ defmodule Rujira.Ghost.Vault do
 
   # --- Queries ---
 
-  @spec get(String.t()) :: {:ok, t()} | {:error, term()}
-  def get(address), do: Contracts.get({__MODULE__, address})
+  @spec get(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def get(address, opts \\ []), do: Contracts.get({__MODULE__, address}, opts)
 
-  @spec list() :: {:ok, [t()]} | {:error, term()}
-  def list do
-    __MODULE__
-    |> Deployments.list_targets()
-    |> Rujira.Enum.reduce_async_while_ok(fn %{address: address} ->
-      Contracts.get({__MODULE__, address})
-    end)
+  @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
+  def list(opts \\ []) do
+    with {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
+      Rujira.Enum.reduce_async_while_ok(targets, fn %{address: address} ->
+        Contracts.get({__MODULE__, address}, opts)
+      end)
+    end
   end
 end

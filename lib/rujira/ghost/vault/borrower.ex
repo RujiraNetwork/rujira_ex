@@ -8,6 +8,7 @@ defmodule Rujira.Ghost.Vault.Borrower do
   alias Rujira.Amount
   alias Rujira.Contracts
   alias Rujira.Math
+  alias Rujira.Node
 
   use Memoize
 
@@ -62,16 +63,16 @@ defmodule Rujira.Ghost.Vault.Borrower do
 
   # --- Queries ---
 
-  @spec get(String.t(), String.t()) :: {:ok, t()} | {:error, term()}
-  def get(vault, address) do
-    with {:ok, res} <- query(vault, address) do
+  @spec get(String.t(), String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def get(vault, address, opts \\ []) do
+    with {:ok, res} <- query(vault, address, opts) do
       new(res)
     end
   end
 
-  @spec list(String.t()) :: {:ok, [t()]} | {:error, term()}
-  def list(vault) do
-    with {:ok, borrowers} <- query_borrowers(vault) do
+  @spec list(String.t(), Node.opts()) :: {:ok, [t()]} | {:error, term()}
+  def list(vault, opts \\ []) do
+    with {:ok, borrowers} <- query_borrowers(vault, opts) do
       Rujira.Enum.reduce_while_ok(borrowers, &new/1)
     end
   end
@@ -83,7 +84,17 @@ defmodule Rujira.Ghost.Vault.Borrower do
   """
   @spec query(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
   defmemo query(vault, address) do
-    Contracts.query_state_smart(vault, %{borrower: %{addr: address}})
+    fetch(vault, address, [])
+  end
+
+  @doc """
+  As `query/2`, read at `opts[:height]` when one is given - a height read is
+  never cached. Without a `:height` this is `query/2`, so the other opts are not
+  applied.
+  """
+  @spec query(String.t(), String.t(), Node.opts()) :: {:ok, map()} | {:error, term()}
+  def query(vault, address, opts) do
+    Node.at_height(opts, fn -> fetch(vault, address, opts) end, fn -> query(vault, address) end)
   end
 
   @doc """
@@ -93,18 +104,37 @@ defmodule Rujira.Ghost.Vault.Borrower do
   """
   @spec query_borrowers(String.t()) :: {:ok, [map()]} | {:error, term()}
   defmemo query_borrowers(vault) do
-    query_borrowers_page(vault, nil)
+    query_borrowers_page(vault, nil, [])
+  end
+
+  @doc """
+  As `query_borrowers/1`, read at `opts[:height]` when one is given - a height
+  read is never cached. Without a `:height` this is `query_borrowers/1`, so the
+  other opts are not applied.
+  """
+  @spec query_borrowers(String.t(), Node.opts()) :: {:ok, [map()]} | {:error, term()}
+  def query_borrowers(vault, opts) do
+    Node.at_height(
+      opts,
+      fn -> query_borrowers_page(vault, nil, opts) end,
+      fn -> query_borrowers(vault) end
+    )
   end
 
   # --- Private ---
 
-  defp query_borrowers_page(vault, cursor) do
+  defp fetch(vault, address, opts) do
+    Contracts.query_state_smart(vault, %{borrower: %{addr: address}}, opts)
+  end
+
+  defp query_borrowers_page(vault, cursor, opts) do
     vault
-    |> Contracts.query_state_smart_with_retry(%{
-      borrowers: %{start_after: cursor, limit: @max_limit}
-    })
+    |> Contracts.query_state_smart_with_retry(
+      %{borrowers: %{start_after: cursor, limit: @max_limit}},
+      opts
+    )
     |> Contracts.paginate("borrowers", @max_limit, fn borrowers ->
-      query_borrowers_page(vault, borrowers |> List.last() |> Map.get("addr"))
+      query_borrowers_page(vault, borrowers |> List.last() |> Map.get("addr"), opts)
     end)
   end
 end

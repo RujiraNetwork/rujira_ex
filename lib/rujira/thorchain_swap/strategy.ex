@@ -11,6 +11,7 @@ defmodule Rujira.ThorchainSwap.Strategy do
   alias Rujira.Contracts
   alias Rujira.Deployments
   alias Rujira.Math
+  alias Rujira.Node
 
   use Memoize
 
@@ -90,16 +91,16 @@ defmodule Rujira.ThorchainSwap.Strategy do
 
   # --- Queries ---
 
-  @spec get(String.t()) :: {:ok, t()} | {:error, term()}
-  def get(address), do: Contracts.get({__MODULE__, address})
+  @spec get(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def get(address, opts \\ []), do: Contracts.get({__MODULE__, address}, opts)
 
-  @spec list() :: {:ok, [t()]} | {:error, term()}
-  def list do
-    __MODULE__
-    |> Deployments.list_targets()
-    |> Rujira.Enum.reduce_async_while_ok(fn %{address: address} ->
-      Contracts.get({__MODULE__, address})
-    end)
+  @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
+  def list(opts \\ []) do
+    with {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
+      Rujira.Enum.reduce_async_while_ok(targets, fn %{address: address} ->
+        Contracts.get({__MODULE__, address}, opts)
+      end)
+    end
   end
 
   @doc """
@@ -110,26 +111,56 @@ defmodule Rujira.ThorchainSwap.Strategy do
       Memoize.invalidate(Rujira.ThorchainSwap.Strategy, :query_markets, [address])
       Memoize.invalidate(Rujira.ThorchainSwap.Strategy, :query_vaults, [address])
   """
-  @spec load(t()) :: {:ok, t()} | {:error, term()}
-  def load(%__MODULE__{address: address} = strategy) do
-    with {:ok, markets} <- query_markets(address),
-         {:ok, vaults} <- query_vaults(address) do
+  @spec load(t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def load(%__MODULE__{address: address} = strategy, opts \\ []) do
+    with {:ok, markets} <- query_markets(address, opts),
+         {:ok, vaults} <- query_vaults(address, opts) do
       {:ok, %{strategy | markets: markets, vaults: vaults}}
     end
   end
 
-  # --- Private ---
-
   @spec query_markets(String.t()) :: {:ok, [String.t()]} | {:error, term()}
   defmemo query_markets(address) do
-    with {:ok, %{"markets" => markets}} <- Contracts.query_state_smart(address, %{markets: %{}}) do
-      {:ok, markets}
-    end
+    fetch_markets(address, [])
+  end
+
+  @doc """
+  As `query_markets/1`, read at `opts[:height]` when one is given - a height read
+  is never cached. Without a `:height` this is `query_markets/1`, so the other
+  opts are not applied.
+  """
+  @spec query_markets(String.t(), Node.opts()) :: {:ok, [String.t()]} | {:error, term()}
+  def query_markets(address, opts) do
+    Node.at_height(opts, fn -> fetch_markets(address, opts) end, fn -> query_markets(address) end)
   end
 
   @spec query_vaults(String.t()) :: {:ok, [Vault.t()]} | {:error, term()}
   defmemo query_vaults(address) do
-    with {:ok, %{"vaults" => vaults}} <- Contracts.query_state_smart(address, %{vaults: %{}}) do
+    fetch_vaults(address, [])
+  end
+
+  @doc """
+  As `query_vaults/1`, read at `opts[:height]` when one is given - a height read
+  is never cached. Without a `:height` this is `query_vaults/1`, so the other
+  opts are not applied.
+  """
+  @spec query_vaults(String.t(), Node.opts()) :: {:ok, [Vault.t()]} | {:error, term()}
+  def query_vaults(address, opts) do
+    Node.at_height(opts, fn -> fetch_vaults(address, opts) end, fn -> query_vaults(address) end)
+  end
+
+  # --- Private ---
+
+  defp fetch_markets(address, opts) do
+    with {:ok, %{"markets" => markets}} <-
+           Contracts.query_state_smart(address, %{markets: %{}}, opts) do
+      {:ok, markets}
+    end
+  end
+
+  defp fetch_vaults(address, opts) do
+    with {:ok, %{"vaults" => vaults}} <-
+           Contracts.query_state_smart(address, %{vaults: %{}}, opts) do
       Rujira.Enum.reduce_while_ok(vaults, [], &vault/1)
     end
   end

@@ -17,10 +17,34 @@ defmodule Rujira.Prices do
 
   The default implementation memoizes prices using the global cache TTL.
   See `Rujira.cache_ttl/0`.
+
+  ## Query options
+
+  `get/2` and `value_usd/4` take a trailing `opts`, forwarded to
+  `Rujira.Node.query/3`, so a position read at a `height:` is valued with the
+  prices of that height rather than of now.
+
+  Both are *optional* callbacks — an implementation written before they existed
+  still satisfies the behaviour. Asked for a `:height` such an implementation
+  cannot serve:
+
+    * `get/2` returns `{:error, :height_not_supported}`.
+    * `value_usd/4` has no error channel — it returns an integer — so it
+      returns `0`. A price from the present is not a price at that height, and
+      returning one would misvalue the position silently.
+
+  Without a `:height`, both fall through to the arity the implementation does
+  export, so the other opts are not applied.
   """
 
+  alias Rujira.Node
+
   @callback get(String.t()) :: {:ok, Decimal.t()} | {:error, term()}
+  @callback get(String.t(), Node.opts()) :: {:ok, Decimal.t()} | {:error, term()}
   @callback value_usd(String.t(), integer(), integer()) :: integer()
+  @callback value_usd(String.t(), integer(), integer(), Node.opts()) :: integer()
+
+  @optional_callbacks get: 2, value_usd: 4
 
   @doc """
   Fetches the USD price for an asset.
@@ -31,9 +55,46 @@ defmodule Rujira.Prices do
   @spec get(String.t()) :: {:ok, Decimal.t()} | {:error, term()}
   def get(ticker), do: impl().get(ticker)
 
+  @doc """
+  As `get/1`, priced at `opts[:height]` when one is given.
+
+  `{:error, :height_not_supported}` when a `:height` is given and the configured
+  implementation does not export `get/2`.
+  """
+  @spec get(String.t(), Node.opts()) :: {:ok, Decimal.t()} | {:error, term()}
+  def get(ticker, opts) do
+    impl = impl()
+
+    if exports?(impl, :get, 2) do
+      impl.get(ticker, opts)
+    else
+      Node.at_height(opts, fn -> {:error, :height_not_supported} end, fn -> impl.get(ticker) end)
+    end
+  end
+
+  @doc """
+  Values `amount` of `ticker` in USD, priced at `opts[:height]` when one is given.
+
+  `0` when a `:height` is given and the configured implementation does not
+  export `value_usd/4` — see the moduledoc.
+  """
   @spec value_usd(String.t(), integer(), integer()) :: integer()
-  def value_usd(ticker, amount, decimals \\ 8) do
-    impl().value_usd(ticker, amount, decimals)
+  @spec value_usd(String.t(), integer(), integer(), Node.opts()) :: integer()
+  def value_usd(ticker, amount, decimals \\ 8, opts \\ []) do
+    impl = impl()
+
+    if exports?(impl, :value_usd, 4) do
+      impl.value_usd(ticker, amount, decimals, opts)
+    else
+      Node.at_height(opts, fn -> 0 end, fn -> impl.value_usd(ticker, amount, decimals) end)
+    end
+  end
+
+  # --- Private ---
+
+  defp exports?(module, fun, arity) do
+    Code.ensure_loaded(module)
+    function_exported?(module, fun, arity)
   end
 
   defp impl do

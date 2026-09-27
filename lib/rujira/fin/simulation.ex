@@ -17,6 +17,7 @@ defmodule Rujira.Fin.Simulation do
   alias Rujira.Contracts
   alias Rujira.Fin.Pair
   alias Rujira.Math
+  alias Rujira.Node
 
   use Memoize
 
@@ -59,19 +60,25 @@ defmodule Rujira.Fin.Simulation do
 
   # --- Queries ---
 
-  @spec simulate(Pair.t() | String.t(), Coin.t()) :: {:ok, t()} | {:error, term()}
-  def simulate(%Pair{address: address} = pair, %Coin{asset: offer_asset, amount: amount} = offer) do
+  @spec simulate(Pair.t() | String.t(), Coin.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def simulate(pair, offer, opts \\ [])
+
+  def simulate(
+        %Pair{address: address} = pair,
+        %Coin{asset: offer_asset, amount: amount} = offer,
+        opts
+      ) do
     with {:ok, offer_denom} <- Assets.to_native(offer_asset),
          {:ok, ask} <- ask_asset(pair, offer_denom),
-         {:ok, res} <- query(address, offer_asset, amount),
+         {:ok, res} <- query(address, offer_asset, amount, opts),
          {:ok, simulation} <- new(%{pair: address, offer: offer, ask: ask}, res) do
       {:ok, %{simulation | id: id(address, offer_denom, amount)}}
     end
   end
 
-  def simulate(address, %Coin{} = offer) when is_binary(address) do
-    with {:ok, pair} <- Pair.get(address) do
-      simulate(pair, offer)
+  def simulate(address, %Coin{} = offer, opts) when is_binary(address) do
+    with {:ok, pair} <- Pair.get(address, opts) do
+      simulate(pair, offer, opts)
     end
   end
 
@@ -85,25 +92,46 @@ defmodule Rujira.Fin.Simulation do
   """
   @spec query(String.t(), Asset.t(), non_neg_integer()) :: {:ok, map()} | {:error, term()}
   defmemo query(address, %Asset{} = asset, amount) do
-    with {:ok, denom} <- Assets.to_native(asset) do
-      Contracts.query_state_smart_with_retry(address, %{
-        simulate: %{denom: denom, amount: Integer.to_string(amount)}
-      })
-    end
+    fetch(address, asset, amount, [])
   end
 
-  @spec from_id(String.t()) :: {:ok, t()} | {:error, term()}
-  def from_id(id) do
+  @doc """
+  As `query/3`, read at `opts[:height]` when one is given - a height read is
+  never cached. Without a `:height` this is `query/3`, so the other opts are not
+  applied.
+  """
+  @spec query(String.t(), Asset.t(), non_neg_integer(), Node.opts()) ::
+          {:ok, map()} | {:error, term()}
+  def query(address, %Asset{} = asset, amount, opts) do
+    Node.at_height(
+      opts,
+      fn -> fetch(address, asset, amount, opts) end,
+      fn -> query(address, asset, amount) end
+    )
+  end
+
+  @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def from_id(id, opts \\ []) do
     with [address, denom, amount_str] <- String.split(id, ":"),
          {:ok, amount} when is_integer(amount) <- Math.to_integer(amount_str),
          {:ok, offer} <- Coin.new(denom, amount) do
-      simulate(address, offer)
+      simulate(address, offer, opts)
     else
       _ -> {:error, :invalid_id}
     end
   end
 
   # --- Private ---
+
+  defp fetch(address, %Asset{} = asset, amount, opts) do
+    with {:ok, denom} <- Assets.to_native(asset) do
+      Contracts.query_state_smart_with_retry(
+        address,
+        %{simulate: %{denom: denom, amount: Integer.to_string(amount)}},
+        opts
+      )
+    end
+  end
 
   @spec ask_asset(Pair.t(), String.t()) :: {:ok, Asset.t()} | {:error, :invalid_offer}
   defp ask_asset(%Pair{token_base: base, token_quote: quote}, offer_denom) do

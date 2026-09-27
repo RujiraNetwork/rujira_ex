@@ -4,10 +4,16 @@ defmodule Rujira.Assets do
 
   Merges base-layer asset handling (chain/symbol/denom parsing) with
   app-layer token support (x/ruji, x/staking-*, etc.).
+
+  Denom metadata is token identity, not chain state, so `load_metadata/2` (and
+  anything built on it, like `from_denom/2`) always reads it at latest and
+  memoized, even when the caller passes `:height` for the rest of the read.
+  See "Tokens" in `guides/conventions.md`.
   """
 
   alias Rujira.Assets.Asset
   alias Rujira.Assets.Metadata
+  alias Rujira.Node
 
   @delimiters [".", "-", "/", "~"]
 
@@ -21,14 +27,22 @@ defmodule Rujira.Assets do
 
   # --- Metadata ---
 
-  @spec load_metadata(Asset.t()) :: {:ok, map()} | {:error, term()}
-  def load_metadata(%Asset{id: "x/" <> _ = denom} = asset) do
-    with {:ok, metadata} <- Metadata.load_metadata(denom) do
+  @doc """
+  An asset's metadata. Token-factory (`x/`) denoms carry theirs on chain, so
+  those are read from the node - always at latest, since denom metadata is
+  token identity and ignores `opts[:height]` (see `Rujira.Assets.Metadata`).
+  Every other asset's metadata is derived from the asset itself.
+  """
+  @spec load_metadata(Asset.t(), Node.opts()) :: {:ok, map()} | {:error, term()}
+  def load_metadata(asset, opts \\ [])
+
+  def load_metadata(%Asset{id: "x/" <> _ = denom} = asset, opts) do
+    with {:ok, metadata} <- Metadata.load_metadata(denom, opts) do
       {:ok, %{metadata | decimals: decimals(asset)}}
     end
   end
 
-  def load_metadata(%Asset{ticker: ticker} = asset) do
+  def load_metadata(%Asset{ticker: ticker} = asset, _opts) do
     {:ok, %{symbol: ticker, decimals: decimals(asset)}}
   end
 
@@ -238,16 +252,23 @@ defmodule Rujira.Assets do
   token-factory denom rather than failing.
 
   Asset ids such as `BTC.BTC` are not denoms; use `from_string/1` for those.
+
+  The denoms whose asset comes from on-chain metadata (`x/nami-index-…`,
+  `x/brune`) always read it at latest - denom metadata ignores `opts[:height]`
+  (see `Rujira.Assets.Metadata`).
   """
-  @spec from_denom(String.t()) :: {:ok, Asset.t()} | {:error, :invalid_denom}
-  def from_denom("x/ruji") do
+  @spec from_denom(String.t(), Node.opts()) :: {:ok, Asset.t()} | {:error, :invalid_denom}
+  def from_denom(denom, opts \\ [])
+
+  def from_denom("x/ruji", _opts) do
     {:ok, %Asset{id: "THOR.RUJI", type: :native, chain: "THOR", symbol: "RUJI", ticker: "RUJI"}}
   end
 
-  def from_denom("x/staking-" <> id = denom), do: build_staking(from_denom(id), denom)
+  def from_denom("x/staking-" <> id = denom, opts),
+    do: build_staking(from_denom(id, opts), denom)
 
-  def from_denom("x/nami-index-" <> _ = denom) do
-    with {:ok, metadata} <- load_metadata(%Asset{id: denom}) do
+  def from_denom("x/nami-index-" <> _ = denom, opts) do
+    with {:ok, metadata} <- load_metadata(%Asset{id: denom}, opts) do
       {:ok,
        %Asset{
          id: denom,
@@ -259,8 +280,8 @@ defmodule Rujira.Assets do
     end
   end
 
-  def from_denom("x/brune" = denom) do
-    with {:ok, metadata} <- load_metadata(%Asset{id: denom}) do
+  def from_denom("x/brune" = denom, opts) do
+    with {:ok, metadata} <- load_metadata(%Asset{id: denom}, opts) do
       {:ok,
        %Asset{
          id: denom,
@@ -272,30 +293,30 @@ defmodule Rujira.Assets do
     end
   end
 
-  def from_denom("x/" <> _ = denom), do: {:ok, token_factory(denom)}
+  def from_denom("x/" <> _ = denom, _opts), do: {:ok, token_factory(denom)}
 
-  def from_denom("rune") do
+  def from_denom("rune", _opts) do
     {:ok, %Asset{id: "THOR.RUNE", type: :native, chain: "THOR", symbol: "RUNE", ticker: "RUNE"}}
   end
 
-  def from_denom("tcy") do
+  def from_denom("tcy", _opts) do
     {:ok, %Asset{id: "THOR.TCY", type: :native, chain: "THOR", symbol: "TCY", ticker: "TCY"}}
   end
 
-  def from_denom("thor." <> symbol) do
+  def from_denom("thor." <> symbol, _opts) do
     symbol = String.upcase(symbol)
 
     {:ok,
      %Asset{id: "THOR.#{symbol}", type: :native, chain: "THOR", symbol: symbol, ticker: symbol}}
   end
 
-  def from_denom(denom), do: build_denom(Regex.run(@denom_regex, denom), denom)
+  def from_denom(denom, _opts), do: build_denom(Regex.run(@denom_regex, denom), denom)
 
   # --- eq_denom ---
 
-  @spec eq_denom(Asset.t(), String.t()) :: boolean()
-  def eq_denom(%Asset{} = a, denom) do
-    case from_denom(denom) do
+  @spec eq_denom(Asset.t(), String.t(), Node.opts()) :: boolean()
+  def eq_denom(%Asset{} = a, denom, opts \\ []) do
+    case from_denom(denom, opts) do
       {:ok, asset} -> a.chain == asset.chain and a.ticker == asset.ticker
       _ -> false
     end
