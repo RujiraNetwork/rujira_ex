@@ -247,6 +247,8 @@ Use consistent error atoms across the codebase:
 | `:height_not_supported` | `Rujira.Node.query/3` given `:height` with an arity-2 `fun` (can't carry metadata); also `Prices.get/4`/`value_usd/4` given `:height` against an implementation with no opts arity |
 | `{:height_mismatch, height, returned}` | The reply's `returned` height doesn't match the requested `height` - `Rujira.Node.query/3` reads it from the headers (`nil` when they were dropped), `Rujira.Thorchain.block/2` from the block header |
 | `{:height_unavailable, height}` | A node error from `Rujira.Node.query/3` or `Rujira.Thorchain.block/2` means the requested `height` cannot be served (pruned, in the future, etc.) |
+| `{:timeout, module}` | A `Rujira.Enum.reduce_async_while_ok/4` fan-out item outlives its resolved `:timeout` - `module` is the caller-supplied `label`, `:timeout` bare if none was given |
+| `:invalid_fan_out` | An `opts[:fan_out]` or configured `fan_out:` keyword has a key other than `:timeout`/`:max_concurrency`, or a non-positive-integer value |
 
 ## Query options
 
@@ -270,6 +272,35 @@ is always read at latest and memoized, and a `:height` in `opts` is accepted
 (for arity parity) but ignored. An admin metadata change shows the current
 symbol even in a historical read; every other field of that read still
 reflects the requested height.
+
+### Fan-out
+
+Every concurrent list in this library goes through
+`Rujira.Enum.reduce_async_while_ok/4`, which owns the whole policy - how long
+one item may take and how many run at once - not the individual call site.
+A call site passes its query `opts` straight through and names itself as the
+`label`.
+
+The policy is read from the `:fan_out` keyword, by key, in this precedence:
+
+1. `opts[:fan_out]` - the caller's query opts, per call.
+2. `config :rujira_ex, fan_out: [...]` - the consumer's app env
+   (`Rujira.fan_out/0`).
+3. The defaults: `timeout: 15_000`, `max_concurrency:
+   System.schedulers_online()`.
+
+Precedence is per key, so a per-call `timeout:` leaves a configured
+`max_concurrency:` in place. Both values must be positive integers, and no
+other key is allowed in either source - anything else is
+`{:error, :invalid_fan_out}`, returned before a single item runs.
+
+`:timeout` is per item, not for the whole fan-out. An item that outlives it
+is killed and the fan-out returns `{:error, {:timeout, label}}`. This is
+unrelated to the gRPC deadline, which stays the node implementation's own
+setting. `:fan_out` never reaches the node implementation: it governs this
+library's own `Task.async_stream` runs, and gRPC stubs reject unknown
+options, unlike `:height`, which `Rujira.Node.query/3` turns into an
+`x-cosmos-block-height` header rather than stripping.
 
 ### Memoization
 

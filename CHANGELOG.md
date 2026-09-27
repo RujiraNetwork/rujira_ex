@@ -4,6 +4,35 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.6.1
+
+### Changed
+
+- Fan-out policy: every concurrent list (`Rujira.Contracts.list/2`,
+  `Rujira.Brune.Pool.list/1`, `Rujira.Fin.Order.list_all_pairs/2`,
+  `Rujira.Fin.Range.list_all/3`, `Rujira.Ghost.Vault.list/1`,
+  `Rujira.Staking.Pool.list/1`, `Rujira.ThorchainSwap.Strategy.list/1`) now
+  shares one per-item timeout (default `15_000`ms) and one `max_concurrency`
+  default (`System.schedulers_online/0`), owned by
+  `Rujira.Enum.reduce_async_while_ok/4`. Configure it with `config
+  :rujira_ex, fan_out: [...]` or per call with `fan_out:` in `opts`; the
+  previous hard-coded 5 s/15 s/30 s per-call budgets are gone. A budget
+  overrun is now `{:error, {:timeout, module}}`, not `{:error, :timeout}` —
+  migration: match the tuple. An unknown key or a non-positive-integer value
+  in `:fan_out` (per call or in config) is `{:error, :invalid_fan_out}`.
+  `:fan_out` never reaches the node implementation — gRPC stubs reject
+  unknown options, and the gRPC call deadline stays the node implementation's
+  own setting.
+
+### Fixed
+
+- **`Rujira.Prices.Default`**: the oracle's "Price not found" reply is now
+  recognised on both serving paths — gRPC status 2 (Unknown) from the node's
+  own gRPC server, and status 3 (InvalidArgument, `"...: invalid request"`)
+  through the Cosmos SDK's ABCI query path — so a ticker with no oracle price
+  reaches the FIN fallback again instead of surfacing the raw node error on
+  the ABCI path.
+
 ## 0.6.0
 
 Breaking release: rujira_ex now returns chain data as typed structs whose
