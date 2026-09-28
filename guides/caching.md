@@ -66,8 +66,39 @@ carries over depends on what it depends on:
 | Depends on | Refreshes |
 |---|---|
 | A specific contract, balance, denom, or the contract registry | Only when that source's last-changed height passes the read's height — otherwise the frontier entry carries over. |
+| A denom's metadata not existing (`{:denom_metadata, denom}`) | Only when a block creates that denom — see below. |
 | Anything market-, pool-, oracle-, or THORChain-module-derived (`:per_block` sources) | Every block. These go straight to the exact store at the requested height; a frontier entry would never be valid past the block it was read in. |
-| Denom metadata, `code_info` when found, `build_address` (identity) | Never — cached forever, independent of height. |
+| Denom metadata when found, `code_info` when found, `build_address` (identity) | Never — cached forever, independent of height. |
+
+### Denom metadata
+
+The two answers have two lifetimes, so they are cached differently.
+
+Metadata the node **holds** is identity: `x/denom`'s `MsgCreateDenom` is the
+only message on a running chain that writes bank denom metadata, and it
+refuses a denom that already has some. Metadata is written once and never
+rewritten, so it is cached forever.
+
+The node holding **none** is a fact only until the denom is created. It is
+cached against `{:denom_metadata, denom}`, which
+`Rujira.Cache.Invalidator` raises on any `create_denom` event, from any block
+stage, matching `new_token_denom` against the denom by plain string equality —
+the event's value is the bank store's own key, byte for byte. So
+`{:error, :not_found}` is served from cache until, and exactly until, a block
+creates the denom.
+
+Denom metadata is read at the node's latest and a caller's `:height` is
+ignored, so the absence is anchored at the head rather than at the caller's
+height. That is sound because creation is monotonic: a denom the node's latest
+does not know was not created at or before the head either. Before the first
+`advance/1` there is no head to anchor it to, so the absence is not cached at
+all — the lookup still answers, it just re-reads the node.
+
+> **Latent risk.** `rujira-rs` defines `/thorchain.denom.v1.MsgSetMetadata`,
+> which THORChain does not register today, so nothing can send it. If
+> THORChain ever adds it, it becomes a second write path — one that also
+> changes metadata that already exists — and its event has to join this rule,
+> with metadata-when-found moving off identity.
 
 ## Errors
 

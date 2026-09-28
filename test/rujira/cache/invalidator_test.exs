@@ -66,6 +66,30 @@ defmodule Rujira.Cache.InvalidatorTest do
       assert {:denom_transfers, "x/ruji"} in sources
     end
 
+    test "create_denom changes the denom's metadata, in whatever stage it was emitted" do
+      attrs = %{"creator" => "thor1admin", "new_token_denom" => "x/brune"}
+      created = event("create_denom", attrs)
+
+      for block <- [
+            block([created]),
+            block([], [created]),
+            block([], [], [tx("H", 0, [created])])
+          ] do
+        assert {:denom_metadata, "x/brune"} in Invalidator.sources(block)
+      end
+    end
+
+    test "create_denom names the denom exactly, and names none without the attribute" do
+      sources =
+        Invalidator.sources(block([event("create_denom", %{"new_token_denom" => "x/Brune"})]))
+
+      assert {:denom_metadata, "x/Brune"} in sources
+      refute {:denom_metadata, "x/brune"} in sources
+
+      assert Invalidator.sources(block([event("create_denom", %{"creator" => "thor1a"})])) ==
+               [:per_block]
+    end
+
     test "an upgrade changes everything, in whatever stage it was emitted" do
       assert :all in Invalidator.sources(block([event("version", %{"version" => "3.10.0"})]))
       assert :all in Invalidator.sources(block([], [event("version", %{})]))

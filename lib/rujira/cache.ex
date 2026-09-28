@@ -32,6 +32,7 @@ defmodule Rujira.Cache do
   | `:contract_registry` | `instantiate`, `migrate`, `store_code` |
   | `{:balance, address}` | that address spending or receiving coins |
   | `{:denom_transfers, denom}` | any transfer of that denom |
+  | `{:denom_metadata, denom}` | `create_denom` for that denom - the one message that writes its bank metadata |
   | `:per_block` | every block. State with no event of its own - the oracle, mimir, pools, nodes, the network |
   | `:all` | an upgrade block, a reset, `invalidate_all/0` |
 
@@ -106,6 +107,7 @@ defmodule Rujira.Cache do
           | {:contract, String.t()}
           | {:balance, String.t()}
           | {:denom_transfers, String.t()}
+          | {:denom_metadata, String.t()}
 
   @typedoc """
   A read's sources: a fixed list, a function of the value for a read whose

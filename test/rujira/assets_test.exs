@@ -12,7 +12,14 @@ defmodule Rujira.AssetsTest do
   alias Rujira.Assets
   alias Rujira.Assets.Asset
   alias Rujira.Assets.Metadata
+  alias Rujira.Cache
+  alias Rujira.Node
   alias Rujira.Test.MockNode
+  alias Rujira.Thorchain.Block
+  alias Thorchain.Types.BlockEvent
+  alias Thorchain.Types.BlockResponseHeader
+  alias Thorchain.Types.EventKeyValuePair
+  alias Thorchain.Types.QueryBlockResponse
 
   # A token-factory denom takes its identity from the chain's metadata for it.
   # Unless a test scripts one, these denoms are ones the node holds none for.
@@ -701,6 +708,48 @@ defmodule Rujira.AssetsTest do
     end
   end
 
+  describe "a denom the node holds no metadata for" do
+    @absent "x/absent-metadata-test"
+
+    test "is refetched once a block creates it, and is an identity fact from then on" do
+      calls = counting_node(@absent, [no_denom_metadata(@absent), metadata_reply("ABSENT")])
+
+      assert {:error, :not_found} = Metadata.load_metadata(@absent)
+      assert {:error, :not_found} = Metadata.load_metadata(@absent)
+      assert Agent.get(calls, & &1) == 1
+
+      assert :ok = advance(1_000_001, [create_denom(@absent)])
+
+      assert {:ok, %Metadata{symbol: "ABSENT"}} = Metadata.load_metadata(@absent)
+      assert Agent.get(calls, & &1) == 2
+
+      # Identity now: nothing a later block can say brings it back to the node.
+      assert :ok = advance(1_000_002, [create_denom(@absent)])
+      assert {:ok, %Metadata{symbol: "ABSENT"}} = Metadata.load_metadata(@absent)
+      assert Agent.get(calls, & &1) == 2
+    end
+
+    test "stays cached when a block creates some other denom" do
+      calls = counting_node(@absent, [no_denom_metadata(@absent), metadata_reply("NEVER")])
+
+      assert {:error, :not_found} = Metadata.load_metadata(@absent)
+      assert :ok = advance(1_000_001, [create_denom("x/someone-elses-denom")])
+
+      assert {:error, :not_found} = Metadata.load_metadata(@absent)
+      assert Agent.get(calls, & &1) == 1
+    end
+
+    test "is not cached at all before the first advance/1, and still answers" do
+      reset_cache()
+      calls = counting_node(@absent, [no_denom_metadata(@absent), no_denom_metadata(@absent)])
+
+      assert Cache.head() == nil
+      assert {:error, :not_found} = Metadata.load_metadata(@absent)
+      assert {:error, :not_found} = Metadata.load_metadata(@absent)
+      assert Agent.get(calls, & &1) == 2
+    end
+  end
+
   describe "denom metadata is read at latest, not at height" do
     @height 12_345
 
@@ -869,6 +918,43 @@ defmodule Rujira.AssetsTest do
          denom_units: [%DenomUnit{denom: symbol, exponent: decimals}]
        }
      }}
+  end
+
+  # Scripts one reply per call for `denom`, and counts the calls. The last reply
+  # is repeated, so an unexpected extra call is caught by the count, not by a
+  # crash in the mock.
+  defp counting_node(denom, replies) do
+    {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+    MockNode.expect(fn %QueryDenomMetadataRequest{denom: ^denom} ->
+      n = Agent.get_and_update(calls, &{&1, &1 + 1})
+      Enum.at(replies, n, List.last(replies))
+    end)
+
+    calls
+  end
+
+  defp advance(height, events) do
+    {:ok, block} =
+      Block.new(%QueryBlockResponse{
+        header: %BlockResponseHeader{height: height, chain_id: "thorchain-1", time: ""},
+        begin_block_events: events,
+        end_block_events: [],
+        finalize_block_events: [],
+        txs: []
+      })
+
+    Node.advance(block)
+  end
+
+  defp create_denom(denom) do
+    %BlockEvent{
+      event_kv_pair: [
+        %EventKeyValuePair{key: "type", value: "create_denom"},
+        %EventKeyValuePair{key: "creator", value: "thor1creator"},
+        %EventKeyValuePair{key: "new_token_denom", value: denom}
+      ]
+    }
   end
 
   # The node's own reply for a denom it holds no metadata for.

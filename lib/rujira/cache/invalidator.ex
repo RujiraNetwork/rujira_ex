@@ -21,6 +21,7 @@ defmodule Rujira.Cache.Invalidator do
   | `:contract_registry` | `instantiate`, `migrate`, `store_code` |
   | `{:balance, address}` | `coin_spent`'s `spender`, `coin_received`'s `receiver` |
   | `{:denom_transfers, denom}` | every denom in those events' `amount` |
+  | `{:denom_metadata, denom}` | `create_denom`'s `new_token_denom` |
   | `:all` | `version` - the upgrade event, in whatever stage it was emitted |
   | `:per_block` | always |
 
@@ -31,6 +32,17 @@ defmodule Rujira.Cache.Invalidator do
   `THOR`-native envelopes (`swap`, `transfer`, `set_mimir`, ...) contribute
   nothing of their own. They change module state, which `:per_block` already
   covers, and they carry no contract address.
+
+  ## Denom metadata
+
+  `create_denom` is the one message that writes bank denom metadata on a
+  running chain, and it refuses a denom that already has some - so metadata is
+  written once, and the event that announces it is the only thing that can
+  turn "the node holds no metadata for this denom" from true into false. The
+  event's `new_token_denom` is the bank store's own key, byte for byte, so the
+  match is plain string equality with no normalisation. A contract-driven
+  create emits it too, in whatever stage the contract ran in, and a reverted
+  create takes its event down with its state write.
   """
 
   alias Rujira.Brune.Events.Event, as: BruneEvent
@@ -65,6 +77,7 @@ defmodule Rujira.Cache.Invalidator do
     |> registry(type)
     |> upgrade(type)
     |> transfers(type, attrs)
+    |> metadata(type, attrs)
   end
 
   defp event(%BruneEvent{address: address}, acc), do: contract(acc, address)
@@ -95,6 +108,14 @@ defmodule Rujira.Cache.Invalidator do
     do: coins(acc, Map.get(attrs, "receiver"), Map.get(attrs, "amount"))
 
   defp transfers(acc, _type, _attrs), do: acc
+
+  defp metadata(acc, "create_denom", attrs), do: created(acc, Map.get(attrs, "new_token_denom"))
+  defp metadata(acc, _type, _attrs), do: acc
+
+  defp created(acc, denom) when is_binary(denom) and denom != "",
+    do: MapSet.put(acc, {:denom_metadata, denom})
+
+  defp created(acc, _denom), do: acc
 
   defp coins(acc, address, amount), do: acc |> balance(address) |> denoms(amount)
 
