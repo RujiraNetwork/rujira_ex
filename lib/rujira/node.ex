@@ -57,7 +57,9 @@ defmodule Rujira.Node do
   call), and return the stub's result unchanged.
   """
 
+  alias Rujira.Cache
   alias Rujira.Math
+  alias Rujira.Thorchain.Block
 
   @typedoc """
   An error returned by the chain node.
@@ -94,6 +96,38 @@ defmodule Rujira.Node do
   ]
 
   @block_height_header "x-cosmos-block-height"
+
+  # --- Head ---
+
+  @doc """
+  Moves the library's head to `height`, invalidating what the blocks in
+  between changed.
+
+  Call it on every new height, before consuming that height. It is the one
+  thing the consumer must drive: a read without `height:` is served at the
+  head, and before the first `advance/1` it is `{:error, :no_head}`.
+
+      Rujira.Node.advance(height)
+      Rujira.Node.advance(%Rujira.Thorchain.Block{} = block)
+
+  A `%Rujira.Thorchain.Block{}` is used when it is the height being applied,
+  so an indexer that already holds the block pays no second fetch. Any other
+  height in between is fetched. A height at or below the head is a no-op - the
+  head never goes backwards.
+
+  The work runs in the calling process, under a lock: one caller applies the
+  blocks while the others return at once. **`:ok` therefore means scheduled,
+  not applied** - the head may still be catching up when it returns. An indexer
+  calls `advance/1` and then reads that block with `height:` pinned, rather
+  than heightless.
+
+  `{:error, reason}` is this caller's own block fetch failing. The head is
+  unchanged, and the next `advance/1` retries the same block; after
+  `max_block_failures` of those in a row the head resets to the target rather
+  than staying stale. See `Rujira.Cache` for the configuration.
+  """
+  @spec advance(pos_integer() | Block.t()) :: :ok | {:error, term()}
+  defdelegate advance(height), to: Cache
 
   # --- Queries ---
 
