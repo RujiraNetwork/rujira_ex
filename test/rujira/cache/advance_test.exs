@@ -210,7 +210,7 @@ defmodule Rujira.Cache.AdvanceTest do
   end
 
   describe "the lock" do
-    test "a losing caller returns :ok and the head still reaches its target" do
+    test "a losing caller returns only once the head has reached its own height" do
       stall(2701)
 
       assert :ok = Node.advance(2700)
@@ -220,14 +220,49 @@ defmodule Rujira.Cache.AdvanceTest do
 
       # The lock is provably held: this caller can only raise the target.
       loser = Task.async(fn -> Node.advance(2703) end)
+      await_target(2703)
 
-      assert :ok = Task.await(loser)
+      # It has raised the target, so it lost the race - and it is still waiting.
+      assert Task.yield(loser, 100) == nil
       assert Cache.head() == 2700
 
       send(fetch, :release)
 
       assert :ok = Task.await(holder)
+      assert :ok = Task.await(loser)
       assert Cache.head() == 2703
+    end
+
+    test "a losing caller times out when the head never reaches its height" do
+      configure(lock_timeout: 200)
+      holder = hold_lock()
+
+      # The lock never goes stale, so this caller can never take it over.
+      assert {:error, :timeout} = Node.advance(2750)
+
+      assert Cache.head() == nil
+      assert Tables.target() == 2750
+      assert [{:lock, ^holder, _at}] = :ets.lookup(Tables.lock(), :lock)
+    end
+
+    test "a losing caller takes over when the holder crashes" do
+      configure(lock_timeout: 60_000)
+      count_blocks()
+
+      assert :ok = Node.advance(2760)
+
+      holder = idle()
+      :ets.insert(Tables.lock(), {:lock, holder, System.monotonic_time(:millisecond)})
+
+      loser = Task.async(fn -> Node.advance(2761) end)
+      assert Task.yield(loser, 100) == nil
+      assert Cache.head() == 2760
+
+      # Far inside lock_timeout: only the monitor can get this caller moving.
+      Process.exit(holder, :kill)
+
+      assert :ok = Task.await(loser)
+      assert Cache.head() == 2761
     end
 
     test "a target raised while the holder is finishing is not left behind" do
@@ -241,11 +276,13 @@ defmodule Rujira.Cache.AdvanceTest do
       # The holder is applying the last block of its own target, so it has to
       # re-read the target before it lets the lock go - in the fill loop, or in
       # the recheck after the release.
-      assert :ok = Task.await(Task.async(fn -> Node.advance(2802) end))
+      raiser = Task.async(fn -> Node.advance(2802) end)
+      await_target(2802)
 
       send(fetch, :release)
 
       assert :ok = Task.await(holder)
+      assert :ok = Task.await(raiser)
       assert Cache.head() == 2802
     end
 
@@ -262,15 +299,15 @@ defmodule Rujira.Cache.AdvanceTest do
     end
 
     test "a lock that is neither stale nor dead is left where it is" do
-      configure(lock_timeout: 60_000)
-      row = {:lock, idle(), System.monotonic_time(:millisecond)}
-      :ets.insert(Tables.lock(), row)
+      configure(lock_timeout: 150)
+      holder = hold_lock()
 
-      assert :ok = Node.advance(3000)
+      assert {:error, :timeout} = Node.advance(3000)
       assert Cache.head() == nil
-      assert Tables.target() == 3000
+      assert [{:lock, ^holder, _at}] = :ets.lookup(Tables.lock(), :lock)
 
-      :ets.delete_object(Tables.lock(), row)
+      Process.exit(holder, :kill)
+      :ets.delete(Tables.lock(), :lock)
 
       assert :ok = Node.advance(3000)
       assert Cache.head() == 3000
@@ -297,7 +334,7 @@ defmodule Rujira.Cache.AdvanceTest do
       assert :ok = Node.advance(block(3200))
       assert :ok = Node.advance(block(3199))
 
-      assert :ets.select_count(Tables.meta(), [{{{:pushed, :_}, :_}, [], [true]}]) == 0
+      assert pushed_count() == 0
     end
 
     test "blocks pushed at different heights do not overwrite each other" do
@@ -306,25 +343,85 @@ defmodule Rujira.Cache.AdvanceTest do
 
       assert :ok = Node.advance(3300)
 
-      # Both are pushed before either can be applied: the lock is held.
+      # Both are pushed before either can be applied: the lock is held. Each
+      # pusher now waits for its own height, so both run in a task.
       row = {:lock, idle(), System.monotonic_time(:millisecond)}
       :ets.insert(Tables.lock(), row)
 
-      assert :ok = Node.advance(block(3301))
-      assert :ok = Node.advance(block(3302))
+      first = Task.async(fn -> Node.advance(block(3301)) end)
+      second = Task.async(fn -> Node.advance(block(3302)) end)
+
+      await_pushed(2)
       assert Cache.head() == 3300
 
       :ets.delete_object(Tables.lock(), row)
 
-      assert :ok = Node.advance(3302)
+      assert :ok = Task.await(first)
+      assert :ok = Task.await(second)
 
       assert Cache.head() == 3302
       assert :counters.get(counter, 1) == 0
-      assert :ets.select_count(Tables.meta(), [{{{:pushed, :_}, :_}, [], [true]}]) == 0
+      assert pushed_count() == 0
+    end
+  end
+
+  describe "telemetry" do
+    test "a fill reports the head it moved and the blocks it applied" do
+      count_blocks()
+      attach([:rujira, :cache, :advance])
+
+      assert :ok = Node.advance(3600)
+      assert_receive {:telemetry, %{from: 0, to: 3600, blocks: 0, duration: duration}, %{}}
+      assert duration >= 0
+
+      assert :ok = Node.advance(3603)
+      assert_receive {:telemetry, %{from: 3600, to: 3603, blocks: 3}, %{}}
+    end
+
+    test "an upgrade, an invalidate_all and a catch-up each report their reason" do
+      attach([:rujira, :cache, :reset])
+
+      assert :ok = Node.advance(3700)
+      assert :ok = Node.advance(block(3701, [event("version", %{"version" => "3.10.0"})]))
+      assert_receive {:telemetry, %{from: 3700, to: 3701}, %{reason: :upgrade}}
+
+      assert :ok = Cache.invalidate_all()
+      assert_receive {:telemetry, %{from: 3701, to: 3701}, %{reason: :invalidate_all}}
+
+      configure(max_catchup: 2)
+
+      assert :ok = Node.advance(3710)
+      assert_receive {:telemetry, %{from: 3701, to: 3710}, %{reason: :catchup}}
+    end
+
+    test "a block that keeps failing reports a stuck-block reset" do
+      configure(max_block_failures: 1)
+      count_blocks(fn 3801 -> {:error, @error} end)
+      attach([:rujira, :cache, :reset])
+
+      assert :ok = Node.advance(3800)
+      capture_log(fn -> assert :ok = Node.advance(3801) end)
+
+      assert_receive {:telemetry, %{from: 3800, to: 3801}, %{reason: :stuck_block}}
     end
   end
 
   # --- Fixtures ---
+
+  @doc false
+  def forward(_event, measurements, metadata, test),
+    do: send(test, {:telemetry, measurements, metadata})
+
+  # Forwards one event to the test process. The handler is a module function,
+  # not a closure: `:telemetry` logs about the performance of a local one every
+  # time it is attached.
+  defp attach(event) do
+    handler = {__MODULE__, event, System.unique_integer()}
+
+    :telemetry.attach(handler, event, &__MODULE__.forward/4, self())
+    on_exit(fn -> :telemetry.detach(handler) end)
+    :ok
+  end
 
   defp configure(opts) do
     original = Application.get_env(:rujira_ex, Cache)
@@ -361,6 +458,57 @@ defmodule Rujira.Cache.AdvanceTest do
     pid = spawn(fn -> Process.sleep(:infinity) end)
     on_exit(fn -> Process.exit(pid, :kill) end)
     pid
+  end
+
+  # A process that holds the lock and keeps reacquiring it, the way a holder in
+  # a long catch-up does, so it never goes stale enough to be taken over.
+  defp hold_lock do
+    pid = spawn(&refresh_lock/0)
+    on_exit(fn -> Process.exit(pid, :kill) end)
+
+    await_lock(pid)
+    pid
+  end
+
+  defp refresh_lock do
+    :ets.insert(Tables.lock(), {:lock, self(), System.monotonic_time(:millisecond)})
+    Process.sleep(10)
+    refresh_lock()
+  end
+
+  defp await_lock(pid), do: eventually(&locked_by/0, {:ok, pid})
+
+  defp locked_by do
+    case :ets.lookup(Tables.lock(), :lock) do
+      [{:lock, pid, _at}] -> {:ok, pid}
+      _ -> :none
+    end
+  end
+
+  defp await_target(target), do: eventually(&Tables.target/0, target)
+
+  defp await_pushed(count), do: eventually(&pushed_count/0, count)
+
+  defp pushed_count,
+    do: :ets.select_count(Tables.meta(), [{{{:pushed, :_}, :_}, [], [true]}])
+
+  # Polls `read` until it gives `expected`. Tables.target/0 and the pushed
+  # blocks are written by another process before it races for the lock, so
+  # there is nothing to receive - only a value to watch.
+  defp eventually(read, expected, attempts \\ 200)
+
+  defp eventually(read, expected, 0),
+    do: flunk("expected #{inspect(expected)}, got #{inspect(read.())}")
+
+  defp eventually(read, expected, attempts) do
+    case read.() do
+      ^expected ->
+        :ok
+
+      _other ->
+        Process.sleep(5)
+        eventually(read, expected, attempts - 1)
+    end
   end
 
   # Scripts the fetch of one height to block until the test releases it, so the

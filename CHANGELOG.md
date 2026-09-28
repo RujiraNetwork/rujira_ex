@@ -43,6 +43,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `list`/`load`/`from_id`, plus cached `query_actions`/`query_status`).
   `Rujira.Deployments` now resolves `"rujira-revenue"` contracts to
   `Rujira.Revenue.Converter` by default.
+- Cache telemetry: three `:telemetry` events, listed together by
+  `Rujira.Cache.Telemetry.events/0` and documented in `Rujira.Cache` and
+  [Caching](guides/caching.md).
+  - `[:rujira, :cache, :fetch]` - one per read: `duration`, and the `store`
+    (`:frontier`/`:exact`/`:identity`), the `result` (`:hit`/`:miss`/`:error`)
+    and the `module`/`function` of the query key. The key's arguments are
+    deliberately left out of the metadata.
+  - `[:rujira, :cache, :advance]` - one per fill: the head `from` and `to`,
+    the `blocks` applied, and the `duration`.
+  - `[:rujira, :cache, :reset]` - one per invalidation of everything, with a
+    `reason` of `:catchup`, `:stuck_block`, `:upgrade` or `:invalidate_all`
+    and the heights either side. Each also logs a `Logger.warning`.
+  - Emission is wrapped, so a handler that raises cannot turn a read into an
+    error. Adds `{:telemetry, "~> 1.0"}`, already an indirect dependency
+    through `grpc`.
+- `Rujira.Cache.Testing`, for a consumer's own test suite: `set_head/1` puts a
+  head in place with no node fetch, and `reset!/0` empties every store and
+  leaves no head, for a test asserting `{:error, :no_head}`.
 
 ### Changed (breaking)
 
@@ -188,6 +206,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Rujira.Ghost.Credit.Account`.
 - `Rujira.Contracts.query_state_smart/3` success is typed as any decoded JSON
   value (`term()`), not `map() | nil`.
+
+### Changed
+
+- `Rujira.Node.advance/1`'s `:ok` now means **applied**, not scheduled. A
+  caller that loses the race for the lock waits for the caller that won it and
+  returns only once the head has reached its own height, so a consumer may read
+  heightless straight after `advance/1` and be served the block it just pushed.
+  It monitors the holder, so a crash is taken over at once, and otherwise
+  re-reads the head on a short bounded backoff; the holder's own path is
+  unchanged and publishes nothing. `{:error, :timeout}` is new: `lock_timeout`
+  passing while another caller held the lock and the head never reached the
+  height. The advance itself is not abandoned - the target keeps the height,
+  and whoever holds the lock is still filling towards it.
 
 ### Fixed
 
