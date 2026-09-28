@@ -1,5 +1,5 @@
 defmodule Rujira.Thorchain.PoolTest do
-  use ExUnit.Case, async: true
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Thorchain.Pool
   alias Rujira.Test.MockNode
@@ -68,12 +68,12 @@ defmodule Rujira.Thorchain.PoolTest do
       assert Keyword.get(opts, :metadata) == @metadata
     end
 
-    test "a height read is never cached, so two calls reach the node twice" do
+    test "a second read at the same height is served from the cache" do
       assert {:ok, _} = Pool.list(height: @height)
       assert {:ok, _} = Pool.list(height: @height)
 
       assert_received {:mock_node, %QueryPoolsRequest{}, _}
-      assert_received {:mock_node, %QueryPoolsRequest{}, _}
+      refute_received {:mock_node, %QueryPoolsRequest{}, _}
     end
 
     test "get/2 forwards the height to the list it reads" do

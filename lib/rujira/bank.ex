@@ -6,8 +6,9 @@ defmodule Rujira.Bank do
   and queries. Invalidate cache on the resource module, not here.
 
   Every query takes a trailing `opts`, forwarded to `Rujira.Node.query/3`, so a
-  caller can read at a `height:`. `holders/2` is the uncached sibling of the
-  memoized `holders/1` - see `Rujira.Bank.Holder`.
+  caller can read at a `height:`. Every lookup here is cached per
+  `Rujira.Cache`, resolved at `opts[:height]` or, without one, at the head -
+  see the resource module.
   """
 
   alias Rujira.Bank.Balance
