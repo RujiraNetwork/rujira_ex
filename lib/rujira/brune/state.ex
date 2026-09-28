@@ -65,7 +65,8 @@ defmodule Rujira.Brune.State do
   @doc "Loads the pool's live state into its `state` field, at `opts[:height]` when given."
   @spec load(Pool.t(), Rujira.Node.opts()) :: {:ok, Pool.t()} | {:error, term()}
   def load(%Pool{address: address} = pool, opts \\ []) do
-    with {:ok, res} <- query(address, opts),
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, res} <- query(address, opts),
          {:ok, state} <- new(res) do
       {:ok, %{pool | state: state}}
     end

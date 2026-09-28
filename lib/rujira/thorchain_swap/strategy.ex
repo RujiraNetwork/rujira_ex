@@ -101,7 +101,8 @@ defmodule Rujira.ThorchainSwap.Strategy do
   """
   @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def list(opts \\ []) do
-    with {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
       Rujira.Enum.reduce_async_while_ok(
         targets,
         fn %{address: address} -> Contracts.get({__MODULE__, address}, opts) end,
@@ -117,7 +118,8 @@ defmodule Rujira.ThorchainSwap.Strategy do
   @doc "Loads the strategy's live `markets` and `vaults` into its fields."
   @spec load(t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def load(%__MODULE__{address: address} = strategy, opts \\ []) do
-    with {:ok, markets} <- query_markets(address, opts),
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, markets} <- query_markets(address, opts),
          {:ok, vaults} <- query_vaults(address, opts) do
       {:ok, %{strategy | markets: markets, vaults: vaults}}
     end

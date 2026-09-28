@@ -1,5 +1,11 @@
 defmodule Rujira.Ghost.Vault.AccountTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  `load/3` reads a receipt-token balance through `Rujira.Cache`, whose stores and
+  head are global, so this case runs sync and starts from an empty cache - two
+  tests reading the same holder at the shared head would otherwise serve the
+  first one's answer to the second.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Cosmos.Bank.V1beta1.QueryBalanceRequest
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest

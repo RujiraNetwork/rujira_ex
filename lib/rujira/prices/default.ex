@@ -12,6 +12,10 @@ defmodule Rujira.Prices.Default do
   resolved at `opts[:height]` or - without one - at the head. A price moves
   every block with no event of its own, so each is read per block: the oracle
   price directly, the FIN price through the book it is derived from.
+
+  `{:error, :no_price}` is a fact about the height it was read at, not a failed
+  read, so it is cached with the price it stands in for: a ticker neither leg
+  prices is asked for once per block, not once per caller.
   """
   @behaviour Rujira.Prices
 
@@ -64,10 +68,12 @@ defmodule Rujira.Prices.Default do
   @doc "As `oracle_price/1`, read at `opts[:height]` when given."
   @spec oracle_price(String.t(), Node.opts()) :: {:ok, Decimal.t()} | {:error, term()}
   def oracle_price(ticker, opts) do
-    with {:ok, opts} <- Cache.pin(opts) do
-      Cache.fetch({__MODULE__, :oracle_price, [ticker]}, [:per_block], opts, fn _height ->
-        fetch_oracle_price(ticker, opts)
-      end)
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, value} <-
+           Cache.fetch({__MODULE__, :oracle_price, [ticker]}, [:per_block], opts, fn _height ->
+             fetch_oracle_price(ticker, opts)
+           end) do
+      priced(value)
     end
   end
 
@@ -82,14 +88,24 @@ defmodule Rujira.Prices.Default do
   @doc "As `fin_price/1`, read at `opts[:height]` when given."
   @spec fin_price(String.t(), Node.opts()) :: {:ok, Decimal.t()} | {:error, term()}
   def fin_price(ticker, opts) do
-    with {:ok, opts} <- Cache.pin(opts) do
-      Cache.fetch({__MODULE__, :fin_price, [ticker]}, [:per_block], opts, fn _height ->
-        fetch_fin_price(ticker, opts)
-      end)
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, value} <-
+           Cache.fetch({__MODULE__, :fin_price, [ticker]}, [:per_block], opts, fn _height ->
+             fetch_fin_price(ticker, opts)
+           end) do
+      priced(value)
     end
   end
 
   # --- Private ---
+
+  # `:no_price` is what the leg answered at that height, so it is stored as the
+  # fact it is and read back out at the boundary.
+  defp priced(:none), do: {:error, :no_price}
+  defp priced(price), do: {:ok, price}
+
+  defp unpriced({:error, :no_price}), do: {:ok, :none}
+  defp unpriced(result), do: result
 
   defp to_usd(amount, price, decimals) do
     amount
@@ -101,6 +117,7 @@ defmodule Rujira.Prices.Default do
     (&Q.oracle_price/3)
     |> Node.query(%QueryOraclePriceRequest{symbol: ticker}, opts)
     |> oracle_result(ticker)
+    |> unpriced()
   end
 
   # An unset price message, or a price the chain renders as absent, is the same
@@ -129,6 +146,10 @@ defmodule Rujira.Prices.Default do
   # height, a denom FIN quotes that `Assets` does not know - is returned
   # unchanged.
   defp fetch_fin_price(ticker, opts) do
+    ticker |> fin_price_at(opts) |> unpriced()
+  end
+
+  defp fin_price_at(ticker, opts) do
     with {:ok, denom} <- Rujira.Fin.denom_for_ticker(ticker, opts),
          {:ok, pair} <- Rujira.Fin.get_default_pair(denom, opts),
          {:ok, %{book: %{center: center}}} <- Rujira.Fin.load_pair(pair, 1, opts),

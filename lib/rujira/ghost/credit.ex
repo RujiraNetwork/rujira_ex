@@ -122,7 +122,8 @@ defmodule Rujira.Ghost.Credit do
   """
   @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def list(opts \\ []) do
-    with {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
       Rujira.Enum.reduce_async_while_ok(
         targets,
         fn %{address: address} -> Contracts.get({__MODULE__, address}, opts) end,
@@ -135,7 +136,8 @@ defmodule Rujira.Ghost.Credit do
   @doc "Loads the contract's own vault borrower positions into `borrows`."
   @spec load(t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def load(%__MODULE__{address: address} = credit, opts \\ []) do
-    with {:ok, borrows} <- query_borrows(address, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, borrows} <- query_borrows(address, opts) do
       {:ok, %{credit | borrows: borrows}}
     end
   end

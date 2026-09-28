@@ -60,7 +60,8 @@ defmodule Rujira.Staking.Pool.Status do
   @doc "Loads the pool's live status into its `status` field, at `opts[:height]` when given."
   @spec load(Pool.t(), Node.opts()) :: {:ok, Pool.t()} | {:error, term()}
   def load(%Pool{address: address} = pool, opts \\ []) do
-    with {:ok, res} <- query(address, opts),
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, res} <- query(address, opts),
          {:ok, status} <- new(res) do
       {:ok, %{pool | status: status}}
     end

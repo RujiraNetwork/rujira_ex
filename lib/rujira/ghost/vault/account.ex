@@ -11,6 +11,7 @@ defmodule Rujira.Ghost.Vault.Account do
 
   alias Rujira.Amount
   alias Rujira.Bank
+  alias Rujira.Cache
   alias Rujira.Ghost.Vault
   alias Rujira.Ghost.Vault.Status
   alias Rujira.Ghost.Vault.Status.DepositPool
@@ -48,14 +49,16 @@ defmodule Rujira.Ghost.Vault.Account do
   """
   @spec load(Vault.t(), String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def load(%Vault{receipt_asset: receipt_asset} = vault, account, opts \\ []) do
-    with {:ok, %{amount: shares}} <- Bank.balance(account, receipt_asset, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, %{amount: shares}} <- Bank.balance(account, receipt_asset, opts) do
       {:ok, new(vault, account, shares)}
     end
   end
 
   @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def from_id(id, opts \\ []) do
-    with [address, account] <- String.split(id, "/"),
+    with {:ok, opts} <- Cache.pin(opts),
+         [address, account] <- String.split(id, "/"),
          {:ok, vault} <- Vault.get(address, opts) do
       load(vault, account, opts)
     else

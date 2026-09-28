@@ -168,6 +168,20 @@ defmodule Rujira.Fin.RangeTest do
       assert {:error, :not_found} = Range.load(@pair, {:dynamic, 5})
     end
 
+    test "a missing index is cached, so a second read does not re-ask the node" do
+      MockNode.expect(fn _ -> {:error, not_found()} end)
+
+      assert {:error, :not_found} = Range.load(@pair, 5)
+      assert {:error, :not_found} = Range.load(@pair, 5)
+      assert {:error, :not_found} = Range.load(@pair, {:dynamic, 5})
+      assert {:error, :not_found} = Range.load(@pair, {:dynamic, 5})
+
+      # One read per kind - the fixed and the dynamic query are separate keys.
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
     test "asking a contract without dynamic ranges for one is an error, not a miss" do
       # It reads `{"range": {"dynamic": "5"}}` as a bare index and cannot parse
       # it. Nothing constructs such an id for that contract, so this surfaces

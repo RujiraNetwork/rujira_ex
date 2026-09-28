@@ -14,7 +14,7 @@ defmodule Rujira.Fin.Price do
   market-maker prices appear on trade events only.
 
   Decimal values are normalised on construction so equal prices are equal terms.
-  This lets a `Price.t()` be used directly as a memoized cache key — the same
+  This lets a `Price.t()` be used directly as a cache key — the same
   price parsed from an event, an order id, or an order query always compares
   equal, so querying and invalidating share one typed boundary.
   """

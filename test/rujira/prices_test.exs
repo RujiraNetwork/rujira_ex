@@ -270,6 +270,31 @@ defmodule Rujira.PricesTest do
       assert [_, _] = metadata_of_every_call()
     end
 
+    test ":no_price is cached, so a second lookup does not re-ask either leg" do
+      MockNode.expect(fn
+        %QueryOraclePriceRequest{} -> {:error, @no_oracle_price}
+        %QueryContractInfosRequest{} -> {:ok, %{infos: []}}
+      end)
+
+      assert {:error, :no_price} = Prices.get("ATOM", height: @height)
+      assert {:error, :no_price} = Prices.get("ATOM", height: @height)
+
+      # One oracle call and one registry call, not two of each.
+      assert [@metadata, @metadata] = metadata_of_every_call()
+    end
+
+    test ":no_price is only the answer for its own height" do
+      MockNode.expect(fn
+        %QueryOraclePriceRequest{} -> {:error, @no_oracle_price}
+        %QueryContractInfosRequest{} -> {:ok, %{infos: []}}
+      end)
+
+      assert {:error, :no_price} = Prices.get("ATOM", height: @height)
+      assert {:error, :no_price} = Prices.get("ATOM", height: @height - 1)
+
+      assert [_, _, _, _] = metadata_of_every_call()
+    end
+
     test "an error is never cached, so the next lookup retries it" do
       MockNode.expect(fn %QueryOraclePriceRequest{} -> {:error, @unavailable} end)
 

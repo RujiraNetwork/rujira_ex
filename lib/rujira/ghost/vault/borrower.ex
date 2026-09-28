@@ -67,14 +67,16 @@ defmodule Rujira.Ghost.Vault.Borrower do
 
   @spec get(String.t(), String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def get(vault, address, opts \\ []) do
-    with {:ok, res} <- query(vault, address, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, res} <- query(vault, address, opts) do
       new(res)
     end
   end
 
   @spec list(String.t(), Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def list(vault, opts \\ []) do
-    with {:ok, borrowers} <- query_borrowers(vault, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, borrowers} <- query_borrowers(vault, opts) do
       Rujira.Enum.reduce_while_ok(borrowers, &new/1)
     end
   end

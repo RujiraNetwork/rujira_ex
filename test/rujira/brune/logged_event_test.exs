@@ -72,6 +72,22 @@ defmodule Rujira.Brune.LoggedEventTest do
       assert {:error, %GRPC.RPCError{}} = LoggedEvent.list("thor1pool")
     end
 
+    test "a reply with no 'events' is invalid_response, not a raw success" do
+      MockNode.expect(fn %{"events" => _} -> MockNode.ok(%{"pages" => []}) end)
+
+      assert {:error, :invalid_response} = LoggedEvent.list("thor1pool")
+    end
+
+    test "an invalid reply is not cached, so the next read asks the node again" do
+      MockNode.expect(fn %{"events" => _} -> MockNode.ok(%{"pages" => []}) end)
+
+      assert {:error, :invalid_response} = LoggedEvent.list("thor1pool")
+      assert {:error, :invalid_response} = LoggedEvent.list("thor1pool")
+
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
+    end
+
     test "a second read at the same height is served from the cache" do
       MockNode.expect(fn %{"events" => _} -> MockNode.ok(%{"events" => []}) end)
 

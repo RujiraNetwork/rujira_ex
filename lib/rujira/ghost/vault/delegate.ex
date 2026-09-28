@@ -40,7 +40,8 @@ defmodule Rujira.Ghost.Vault.Delegate do
 
   @spec get(String.t(), String.t(), String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def get(vault, borrower, address, opts \\ []) do
-    with {:ok, res} <- query(vault, borrower, address, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, res} <- query(vault, borrower, address, opts) do
       new(res)
     end
   end

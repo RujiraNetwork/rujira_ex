@@ -89,6 +89,35 @@ defmodule Rujira.Ghost.CreditTest do
   end
 
   describe "list/1" do
+    test "the head moving mid fan-out does not split the list across heights" do
+      parent = self()
+      pinned = default_head()
+
+      MockNode.expect(fn
+        %QueryContractInfosRequest{} ->
+          {:ok, %{infos: [info("thor1credita"), info("thor1creditb")]}}
+
+        %{"config" => _} ->
+          # `MockNode.query/3` posts `{:mock_node, request, opts}` to the leg's
+          # own Task mailbox, so the leg forwards the height it was read at.
+          receive do
+            {:mock_node, _request, opts} ->
+              send(parent, {:leg_height, get_in(opts, [:metadata, "x-cosmos-block-height"])})
+          end
+
+          # The head moves while the fan-out is still running. One item at a
+          # time, so the second leg is read after the move.
+          set_head(pinned + 1)
+          MockNode.ok(config())
+      end)
+
+      assert {:ok, [_, _]} = Credit.list(fan_out: [max_concurrency: 1])
+
+      expected = Integer.to_string(pinned)
+      assert_received {:leg_height, ^expected}
+      assert_received {:leg_height, ^expected}
+    end
+
     test "lists every deployed credit contract" do
       MockNode.expect(fn
         %QueryContractInfosRequest{} ->

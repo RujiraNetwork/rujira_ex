@@ -13,6 +13,9 @@ defmodule Rujira.Fin.Order do
   state; an oracle-priced one moves with the oracle, which announces itself with
   no event, so it is read per block. A page of orders may hold either, so it is
   read per block too.
+
+  An order the pair does not hold is `{:error, :not_found}`, cached as the fact
+  it is under that order's own sources rather than re-read every time.
   """
 
   alias Rujira.Amount
@@ -195,16 +198,11 @@ defmodule Rujira.Fin.Order do
 
   defp build(_, _), do: {:error, :invalid_attrs}
 
-  defp load_at(address, side, price, owner, opts),
-    do: loaded(address, query(address, owner, side, price, opts))
-
-  # An order the pair does not hold is `:not_found`. Every other error is the
-  # contract's or the node's, and is handed back unchanged.
-  defp loaded(address, {:ok, order}), do: build(address, order)
-  defp loaded(_address, {:error, err}), do: missing(Contracts.not_found?(err), err)
-
-  defp missing(true, _err), do: {:error, :not_found}
-  defp missing(false, err), do: {:error, err}
+  defp load_at(address, side, price, owner, opts) do
+    with {:ok, order} <- query(address, owner, side, price, opts) do
+      build(address, order)
+    end
+  end
 
   defp type(%Price.Fixed{}), do: :fixed
   defp type(%Price.Oracle{}), do: :oracle
@@ -212,9 +210,14 @@ defmodule Rujira.Fin.Order do
   defp deviation(%Price.Oracle{deviation: deviation}), do: deviation
   defp deviation(%Price.Fixed{}), do: nil
 
-  @doc "A single order by `(owner, side, price)` on a contract."
+  @doc """
+  A single order by `(owner, side, price)` on a contract.
+
+  An order the contract does not hold is `{:error, :not_found}`, cached as the
+  fact it is until the order's own sources change.
+  """
   @spec query(String.t(), String.t(), side(), Price.order()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, map()} | {:error, :not_found} | {:error, term()}
   def query(address, owner, side, price), do: query(address, owner, side, price, [])
 
   @doc """
@@ -224,15 +227,17 @@ defmodule Rujira.Fin.Order do
   oracle, so it is read per block - see `order_sources/2`.
   """
   @spec query(String.t(), String.t(), side(), Price.order(), Node.opts()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, map()} | {:error, :not_found} | {:error, term()}
   def query(address, owner, side, price, opts) do
-    with {:ok, opts} <- Cache.pin(opts) do
-      Cache.fetch(
-        {__MODULE__, :query, [address, owner, side, Price.to_query(price)]},
-        order_sources(address, price),
-        opts,
-        fn _height -> fetch_order(address, owner, side, price, opts) end
-      )
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, value} <-
+           Cache.fetch(
+             {__MODULE__, :query, [address, owner, side, Price.to_query(price)]},
+             order_sources(address, price),
+             opts,
+             fn _height -> fetch_order(address, owner, side, price, opts) end
+           ) do
+      found(value)
     end
   end
 
@@ -271,13 +276,26 @@ defmodule Rujira.Fin.Order do
   defp order_sources(_address, %Price.Oracle{}), do: [:per_block]
   defp order_sources(address, %Price.Fixed{}), do: [{:contract, address}]
 
+  defp found(:none), do: {:error, :not_found}
+  defp found(value), do: {:ok, value}
+
+  # An order the pair does not hold is a fact about the pair, not a failed read,
+  # so it is cached under the order's own sources. Every other error is the
+  # contract's or the node's, and is handed back unchanged.
   defp fetch_order(address, owner, side, price, opts) do
-    Contracts.query_state_smart(
-      address,
+    address
+    |> Contracts.query_state_smart(
       %{order: [owner, Atom.to_string(side), Price.to_query(price)]},
       opts
     )
+    |> absent()
   end
+
+  defp absent({:error, err} = result) do
+    if Contracts.not_found?(err), do: {:ok, :none}, else: result
+  end
+
+  defp absent(result), do: result
 
   defp query_orders_page(contract, owner, cursor, opts) do
     contract

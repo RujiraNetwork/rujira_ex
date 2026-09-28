@@ -15,7 +15,8 @@ defmodule Rujira.Fin.Range do
 
   A range is the pair contract's own stored state, so every read here is cached
   per `Rujira.Cache` against `{:contract, pair}` and resolved at `opts[:height]`
-  or - without one - at the head.
+  or - without one - at the head. An `idx` a kind does not hold is
+  `{:error, :not_found}`, cached against the contract as the fact it is.
   """
 
   alias Rujira.Cache
@@ -173,37 +174,54 @@ defmodule Rujira.Fin.Range do
     end
   end
 
-  @doc "A single fixed range by `idx` on a contract."
-  @spec query(String.t(), integer()) :: {:ok, map()} | {:error, term()}
+  @doc """
+  A single fixed range by `idx` on a contract.
+
+  An `idx` the contract holds no fixed range for is `{:error, :not_found}`,
+  cached as the fact it is until the contract changes.
+  """
+  @spec query(String.t(), integer()) :: {:ok, map()} | {:error, :not_found} | {:error, term()}
   def query(address, idx), do: query(address, idx, [])
 
   @doc "As `query/2`, read at `opts[:height]` when given."
-  @spec query(String.t(), integer(), Node.opts()) :: {:ok, map()} | {:error, term()}
+  @spec query(String.t(), integer(), Node.opts()) ::
+          {:ok, map()} | {:error, :not_found} | {:error, term()}
   def query(address, idx, opts) do
-    with {:ok, opts} <- Cache.pin(opts) do
-      Cache.fetch(
-        {__MODULE__, :query, [address, idx]},
-        [{:contract, address}],
-        opts,
-        fn _height -> fetch_range(address, idx, opts) end
-      )
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, value} <-
+           Cache.fetch(
+             {__MODULE__, :query, [address, idx]},
+             [{:contract, address}],
+             opts,
+             fn _height -> fetch_range(address, idx, opts) end
+           ) do
+      found(value)
     end
   end
 
-  @doc "A single dynamic range by `idx` on a contract."
-  @spec query_dynamic(String.t(), integer()) :: {:ok, map()} | {:error, term()}
+  @doc """
+  A single dynamic range by `idx` on a contract.
+
+  An `idx` the contract holds no dynamic range for is `{:error, :not_found}`,
+  cached as the fact it is until the contract changes.
+  """
+  @spec query_dynamic(String.t(), integer()) ::
+          {:ok, map()} | {:error, :not_found} | {:error, term()}
   def query_dynamic(address, idx), do: query_dynamic(address, idx, [])
 
   @doc "As `query_dynamic/2`, read at `opts[:height]` when given."
-  @spec query_dynamic(String.t(), integer(), Node.opts()) :: {:ok, map()} | {:error, term()}
+  @spec query_dynamic(String.t(), integer(), Node.opts()) ::
+          {:ok, map()} | {:error, :not_found} | {:error, term()}
   def query_dynamic(address, idx, opts) do
-    with {:ok, opts} <- Cache.pin(opts) do
-      Cache.fetch(
-        {__MODULE__, :query_dynamic, [address, idx]},
-        [{:contract, address}],
-        opts,
-        fn _height -> fetch_dynamic_range(address, idx, opts) end
-      )
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, value} <-
+           Cache.fetch(
+             {__MODULE__, :query_dynamic, [address, idx]},
+             [{:contract, address}],
+             opts,
+             fn _height -> fetch_dynamic_range(address, idx, opts) end
+           ) do
+      found(value)
     end
   end
 
@@ -229,10 +247,13 @@ defmodule Rujira.Fin.Range do
 
   defp build(_, _, _), do: {:error, :invalid_attrs}
 
-  defp load_at(address, {:dynamic, idx}, opts),
-    do: loaded(address, query_dynamic(address, idx, opts))
+  defp load_at(address, {:dynamic, idx}, opts) do
+    with {:ok, range} <- query_dynamic(address, idx, opts), do: build(address, range)
+  end
 
-  defp load_at(address, idx, opts), do: loaded(address, query(address, idx, opts))
+  defp load_at(address, idx, opts) do
+    with {:ok, range} <- query(address, idx, opts), do: build(address, range)
+  end
 
   defp load_parts([address, "dynamic", idx], opts),
     do: load_part(address, idx, &{:dynamic, &1}, opts)
@@ -246,13 +267,8 @@ defmodule Rujira.Fin.Range do
     end
   end
 
-  # A range the contract does not hold is `:not_found`. Every other error is the
-  # contract's or the node's, and is handed back unchanged.
-  defp loaded(address, {:ok, range}), do: build(address, range)
-  defp loaded(_address, {:error, err}), do: missing(Contracts.not_found?(err), err)
-
-  defp missing(true, _err), do: {:error, :not_found}
-  defp missing(false, err), do: {:error, err}
+  defp found(:none), do: {:error, :not_found}
+  defp found(value), do: {:ok, value}
 
   # A dynamic range's id names its kind, so it round-trips through `from_id/1`
   # to the query that can actually find it.
@@ -280,12 +296,25 @@ defmodule Rujira.Fin.Range do
   defp take(ranges, n), do: Enum.take(ranges, n)
 
   defp fetch_range(address, idx, opts) do
-    Contracts.query_state_smart(address, %{range: Kernel.to_string(idx)}, opts)
+    address
+    |> Contracts.query_state_smart(%{range: Kernel.to_string(idx)}, opts)
+    |> absent()
   end
 
   defp fetch_dynamic_range(address, idx, opts) do
-    Contracts.query_state_smart(address, %{range: %{dynamic: Kernel.to_string(idx)}}, opts)
+    address
+    |> Contracts.query_state_smart(%{range: %{dynamic: Kernel.to_string(idx)}}, opts)
+    |> absent()
   end
+
+  # A range the contract does not hold is a fact about the contract, not a failed
+  # read, so it is cached against it. Every other error is the contract's or the
+  # node's, and is handed back unchanged.
+  defp absent({:error, err} = result) do
+    if Contracts.not_found?(err), do: {:ok, :none}, else: result
+  end
+
+  defp absent(result), do: result
 
   defp fetch_dynamic_ranges(contract, owner, opts) do
     with {:ok, ranges} <- query_dynamic_ranges_page(contract, owner, nil, opts) do
