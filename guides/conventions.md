@@ -342,27 +342,55 @@ library's own `Task.async_stream` runs, and gRPC stubs reject unknown
 options, unlike `:height`, which `Rujira.Node.query/3` turns into an
 `x-cosmos-block-height` header rather than stripping.
 
-### Memoization
+### Caching
 
-A height read is never cached — it is a read of the past, and caching it would
-serve it as the present. So a memoized query keeps its name, arity and cache key
-(`Memoize.invalidate(Mod, :fun, args)` keeps working) and gains a sibling one
-arity higher that takes `opts`:
+Every cached read goes through `Rujira.Cache`, keyed by height — a value at
+height `h` is cached under `h`, not thrown away because it isn't "now". There
+is no more `defmemo`/`use Memoize`, no `expires_in:`/TTL, and no uncached
+height path via `Rujira.Node.at_height/3`: every read, at any height, goes through
+the cache.
 
 ```elixir
-@spec list() :: {:ok, [t()]} | {:error, term()}
-defmemo list, do: fetch_list([])
-
-@doc "As `list/0`; with `height:` it reads the node uncached, otherwise it is `list/0`."
 @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
-def list(opts), do: Node.at_height(opts, fn -> fetch_list(opts) end, &list/0)
-
-defp fetch_list(opts), do: Node.query(&Stub.x/3, request, opts)
+def list(opts \\ []) do
+  with {:ok, opts} <- Cache.pin(opts) do
+    Cache.fetch({__MODULE__, :list, []}, [:contract_registry], opts, fn h ->
+      Node.query(&Stub.x/3, request, height: h)
+    end)
+  end
+end
 ```
 
-`Rujira.Node.at_height/3` is the only place the `:height` check lives. Without
-`:height` the sibling is the memoized function, so any other opt is *not*
-applied — a cached value cannot honour it. Pass `height:` to bypass the cache.
+- `Cache.pin/1` resolves `opts[:height]` once, at the public entry point —
+  the caller's given height, or the head. It returns `{:ok, opts}` with
+  `height:` put back in, or `{:error, :no_head | :invalid_height}`. A nested
+  call receives the pinned `opts` and pins again, which is a no-op, so a
+  whole composite read stays at one height even if the head moves underneath
+  it.
+- `Cache.fetch/4`'s query key is `{__MODULE__, :fun, [plain args]}` — never a
+  struct, never the height, never `opts`. Normalize a struct argument first
+  (`Assets.to_native/1` for an `Asset`, an address for `Contracts`, the wire
+  form of a price).
+- `fun` performs the node read at the height it is given and must not
+  re-resolve the height itself.
+- `fun` returns `{:ok, _}` or `{:error, _}`; only `{:ok, _}` is stored. A
+  domain not-found that is a chain fact (see "Entity ids") is returned as
+  `{:ok, :none}` (or an equivalent tagged value) inside `fun` and mapped back
+  to `{:error, :not_found}` at the public boundary, so it is cached like any
+  other value rather than refetched on every call.
+- `sources` names what would change the answer — a fixed list, or a function
+  of the result for a read whose sources are only known from what came back
+  (e.g. `fn list -> [:contract_registry | Enum.map(list, &{:contract,
+  &1.address})] end`). See `Rujira.Cache`'s moduledoc for the source list.
+- A no-opts arity stays and delegates to the opts arity with `[]`, which
+  reads at the head: `def list, do: list([])`.
+- A derived lookup with no source of its own (an `Enum.find` over an
+  already-cached list) stays a plain, uncached function.
+
+Public behaviour is unchanged: names, arities and return shapes stay the
+same. A moduledoc or `@doc` that used to mention memoization, a TTL, or
+`Memoize.invalidate/3` now says "cached per `Rujira.Cache`; resolved at
+`opts[:height]` or the head."
 
 ### Prices
 

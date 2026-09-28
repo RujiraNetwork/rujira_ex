@@ -17,7 +17,7 @@ Each protocol follows the same shape. Resource modules are **self-contained**: s
 
 | Module | Owns |
 |--------|------|
-| `Protocol.Resource` | Struct, `new`, `get`, `list`, `load`, all queries (including cross-resource), `use Memoize` |
+| `Protocol.Resource` | Struct, `new`, `get`, `list`, `load`, all queries (including cross-resource), cached through `Rujira.Cache` |
 | `Protocol` | Public API: **only `defdelegate`** — no function bodies, no logic |
 | `Protocol.Events` | Event parsing pipeline |
 
@@ -29,7 +29,7 @@ A function belongs on the module that owns the **return type**. `list_all_orders
 defmodule Rujira.Protocol.Resource do
   @moduledoc "Resource for Protocol. Use `Rujira.Protocol` as the public API."
 
-  use Memoize
+  alias Rujira.Cache
 
   # --- Struct ---
   defstruct id: nil,
@@ -44,14 +44,22 @@ defmodule Rujira.Protocol.Resource do
   def new(...), do: ...
 
   # --- Queries ---
-  @spec get(String.t()) :: {:ok, t()} | {:error, term()}
-  def get(address), do: Contracts.get({__MODULE__, address})
+  @spec get(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def get(address, opts \\ []) do
+    with {:ok, opts} <- Cache.pin(opts), do: Contracts.get({__MODULE__, address}, opts)
+  end
 
-  @spec list() :: {:ok, [t()]} | {:error, term()}
-  defmemo list, do: ...
+  @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
+  def list(opts \\ []) do
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :list, []}, [:contract_registry], opts, fn h ->
+        query(h)
+      end)
+    end
+  end
 
   # --- Private queries ---
-  defmemo query(...), do: Contracts.query_state_smart(...)
+  defp query(height), do: Contracts.query_state_smart(..., height: height)
 end
 ```
 
@@ -69,16 +77,23 @@ end
 
 ### Cache invalidation
 
-Cache lives on the resource module that defines `defmemo`. Invalidate the module that owns the data — never the facade.
+There is no per-function cache to invalidate by hand. Every cached read goes
+through `Rujira.Cache.fetch/4`, keyed by `{module, fun, args}` and by height,
+with a declared `sources` list (a contract, a balance, a denom, the contract
+registry, …). The consumer drives `Rujira.Node.advance/1` on every new
+height; the library reads the block's events, works out which sources they
+touched, and invalidates exactly those cached rows — see
+[Caching](caching.md) for the full model.
 
-```elixir
-Memoize.invalidate(Rujira.Fin.Pair, :list, [])
-Memoize.invalidate(Rujira.Fin.Pair, :find_by_denoms, ["rune", "tcy"])
-Memoize.invalidate(Rujira.Fin.Book, :query, ["thor1pair"])
-Memoize.invalidate(Rujira.Fin.Order, :query_orders, ["thor1pair", "thor1user"])
-```
+A resource module never invalidates itself. It only:
 
-The facade uses `defdelegate` — it does not cache.
+- resolves its height once with `Rujira.Cache.pin/1`, at every public,
+  `opts`-taking entry point;
+- declares the right `sources` on every `Cache.fetch/4` call, so `advance/1`
+  knows when a cached row is stale.
+
+The facade uses `defdelegate` — it does not cache, and it does not
+invalidate.
 
 ### File structure per protocol
 

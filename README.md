@@ -23,7 +23,7 @@ end
 - `Rujira.Coin` — asset + amount pairs
 - `Rujira.Fin` — FIN DEX query API (pairs, order books, orders, ranges)
 - `Rujira.Events` — multi-protocol event parser with typed envelopes
-- `Rujira.Contracts` — CosmWasm smart contract queries (memoized)
+- `Rujira.Contracts` — CosmWasm smart contract queries (cached)
 - `Rujira.Deployments` — on-chain contract registry resolved live from THORChain
 - `Rujira.Node` — pluggable gRPC node abstraction
 - `Rujira.Prices` — pluggable price provider with oracle and FIN book fallback
@@ -33,10 +33,12 @@ end
 
 ```elixir
 config :rujira_ex,
-  node: MyApp.Node,           # required — implement Rujira.Node behaviour
-  prices: Rujira.Prices.Default,  # optional — defaults to oracle + FIN mid-price fallback
-  cache_ttl: 15_000           # optional — memoization TTL in ms (default: 15s)
+  node: MyApp.Node,               # required — implement Rujira.Node behaviour
+  prices: Rujira.Prices.Default   # optional — defaults to oracle + FIN mid-price fallback
 ```
+
+See [Caching](guides/caching.md#configuration) for the cache's own tuning
+knobs (`retention`, `frontier_max_rows`, `max_markers`, …).
 
 ## Usage
 
@@ -79,6 +81,27 @@ decimals = Rujira.Assets.decimals(asset)
 {:ok, %{book: book}} = Rujira.Fin.load_pair(pair, limit)
 mid_price = book.center
 ```
+
+## Caching
+
+Implement `Rujira.Node` (`query/3`) and call `Rujira.Node.advance/1` on every
+new height, before consuming it — the library fetches that block, invalidates
+whatever it changed, and moves its head.
+
+Reads without `height:` are served at the head. Before the first `advance/1`,
+they return `{:error, :no_head}`. Pass `height:` for a historical read, and
+pin it while indexing a block.
+
+```elixir
+# indexer: advance first, then index at the pinned height
+:ok = Rujira.Node.advance(height)
+{:ok, pairs} = Rujira.Fin.list_pairs(height: height)
+
+# API consumer: reads without height: are served at the head
+{:ok, pairs} = Rujira.Fin.list_pairs()
+```
+
+See [Caching](guides/caching.md) for the full model.
 
 ## Guides
 

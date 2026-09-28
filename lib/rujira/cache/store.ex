@@ -49,7 +49,10 @@ defmodule Rujira.Cache.Store do
     * walks `sweep_per_block` rows from a cursor, dropping those that are
       invalid at the head or left behind by an old generation;
     * collapses the marker table when it is over `max_markers`, raising the
-      marker floor to the frontier's oldest `as_of` first.
+      marker floor to the frontier's oldest `as_of` first - and if that
+      collapse frees nothing (an old but still-valid frontier row is pinning
+      the floor), evicts that oldest frontier row so the next sweep's floor
+      can climb past it.
 
   The first two jobs walk the `frontier_index`, an `ordered_set` of
   `{{as_of, gen, query_key}}` that orders the frontier by age. The cursor is a
@@ -151,7 +154,7 @@ defmodule Rujira.Cache.Store do
     safe(:ok, fn ->
       evict(Config.sweep_per_block())
       walk(cursor(), Config.sweep_per_block(), gen)
-      Markers.prune(oldest_as_of(head), Config.max_markers())
+      prune_markers(head)
     end)
   end
 
@@ -161,6 +164,26 @@ defmodule Rujira.Cache.Store do
     case :ets.first(Tables.frontier_index()) do
       {as_of, _gen, _query_key} -> as_of
       _ -> head
+    end
+  end
+
+  # --- Private: markers ---
+
+  # An old but still-valid frontier row pins `oldest_as_of`, so the collapse
+  # can free nothing block after block. When it does, the pinning row is
+  # evicted - safe, since it is just refetched - so the next sweep's floor
+  # can climb past it.
+  defp prune_markers(head) do
+    case Markers.prune(oldest_as_of(head), Config.max_markers()) do
+      true -> evict_oldest_row()
+      false -> :ok
+    end
+  end
+
+  defp evict_oldest_row do
+    case :ets.first(Tables.frontier_index()) do
+      {_as_of, _gen, _query_key} = key -> drop(key)
+      _ -> :ok
     end
   end
 

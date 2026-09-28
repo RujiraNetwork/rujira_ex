@@ -31,6 +31,15 @@ defmodule Rujira.Cache.Markers do
   A collapse that would not raise the floor is skipped: everything at or below
   the current floor has already gone, and a marker is only ever raised to the
   height being applied, which is above the head and so above the floor.
+
+  A single old but still-valid frontier row - one that never had a source
+  change - pins the frontier's oldest `as_of` forever, so the floor the sweep
+  passes never rises past it and the collapse frees nothing, block after
+  block. `prune/2` reports this back as `true`: still over the cap after the
+  attempt. `Rujira.Cache.Store` responds by evicting the frontier's oldest row
+  - always safe, since the evicted entry is just refetched on its next read -
+  which frees the pin and lets the next sweep's floor climb past whatever the
+  stuck collapse could not reach.
   """
 
   alias Rujira.Cache.Tables
@@ -79,13 +88,19 @@ defmodule Rujira.Cache.Markers do
 
   The floor is raised first and the markers at or below it are dropped after -
   see the moduledoc. A floor that would not move frees nothing, so it is not
-  rescanned.
+  rescanned. Returns whether the table is still over `max_markers` once the
+  attempt is done, so the caller can evict a frontier row to unstick a floor
+  that a still-valid old row is pinning.
   """
-  @spec prune(non_neg_integer(), pos_integer()) :: :ok
+  @spec prune(non_neg_integer(), pos_integer()) :: boolean()
   def prune(floor, max_markers) do
-    case over_cap?(max_markers) and floor > Tables.marker_floor() do
-      true -> collapse(floor)
-      false -> :ok
+    case over_cap?(max_markers) do
+      true ->
+        maybe_collapse(floor)
+        over_cap?(max_markers)
+
+      false ->
+        false
     end
   end
 
@@ -98,6 +113,13 @@ defmodule Rujira.Cache.Markers do
     case :ets.info(Tables.markers(), :size) do
       size when is_integer(size) -> size > max_markers
       _ -> false
+    end
+  end
+
+  defp maybe_collapse(floor) do
+    case floor > Tables.marker_floor() do
+      true -> collapse(floor)
+      false -> :ok
     end
   end
 

@@ -19,7 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `Rujira.Ghost.Credit` — the contract's config (`get_credit`/`list_credits`/
     `credit_from_id`/`load_credit`), whose `borrows` loads the vault borrower
     positions the contract itself holds, as `Rujira.Ghost.Vault.Borrower`
-    structs, through the memoized `query_borrows`.
+    structs, through the cached `query_borrows`.
   - `Rujira.Ghost.Credit.Account` — a credit account with its
     `Rujira.Ghost.Credit.Collateral`, `Rujira.Ghost.Credit.Debt` (a
     `Rujira.Ghost.Vault.Delegate` and its value) and
@@ -38,69 +38,83 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     `Rujira.Ghost.Credit` by default.
 - `Rujira.Revenue` protocol facade, exposing the rujira-revenue contract
   (v1.1.0 and v2.x) as typed chain data: `Rujira.Revenue.Converter` (`get`/
-  `list`/`load`/`from_id`, plus memoized `query_actions`/`query_status`).
+  `list`/`load`/`from_id`, plus cached `query_actions`/`query_status`).
   `Rujira.Deployments` now resolves `"rujira-revenue"` contracts to
   `Rujira.Revenue.Converter` by default.
 
 ### Changed (breaking)
 
-- Caching - group B: `Rujira.Fin` and `Rujira.Prices.Default` read through
-  `Rujira.Cache` instead of memoizing. Every lookup resolves at `opts[:height]`
-  or - without one - at the head the consumer moves with
-  `Rujira.Node.advance/1`, so a heightless read before the first `advance/1` is
-  `{:error, :no_head}`, and a height read is now cached rather than always
-  reaching the node. With it:
-  - `Rujira.Fin.Pair.list/0,1` is cached against the code registry and every
-    pair it resolved. `denom_for_ticker`, `find_stable`, `find_default`,
-    `find_by_denoms` and `from_id` derive from that one list in memory and are
-    no longer cached on their own.
-  - `Rujira.Fin.Book.query/1,2`, `Rujira.Fin.Order.query/4,5` for an
-    oracle-priced order, `Rujira.Fin.Order.query_orders/2,3`,
-    `Rujira.Fin.Simulation.query/3,4`, `Rujira.Fin.MarketMaker.Quote.query/5`
-    and both `Rujira.Prices.Default` legs are read per block: they move with
-    the oracle and the market makers, which announce themselves with no event,
-    so each is valid at the height it was read at and no other.
-  - `Rujira.Fin.Order.query/4,5` for a fixed price, and every
-    `Rujira.Fin.Range` query, are cached against the pair contract alone, so a
-    block that does not touch it carries them over.
-  - `Rujira.Fin.Simulation.query/3,4` keys on the offer asset's native denom
-    and `Rujira.Fin.MarketMaker.Quote.query/5` on the offer and ask denoms plus
-    `min_price`'s wire form, rather than on the structs they arrive in.
-  - `Rujira.Prices.Default.oracle_price/1,2` and `fin_price/1,2` no longer
-    expire on `Rujira.cache_ttl/0`; a price is held at its own height.
-  - `Rujira.Fin.denom_for_ticker/1,2` and `get_pair_from_denoms/2,3` keep both
-    arities, now as one function with a default `opts`.
-
-- `Rujira.Contracts`, `Rujira.Deployments`, `Rujira.Assets.Metadata` and
-  `Rujira.Thorchain.Block` read through `Rujira.Cache` instead of memoizing:
-  every read resolves at `opts[:height]` or, without one, at the head the
-  consumer moves with `Rujira.Node.advance/1` - so a heightless read before the
-  first `advance/1` is `{:error, :no_head}`, and a height read is now cached
-  rather than always reaching the node. Blocks invalidate what they changed;
-  `Rujira.Cache.invalidate_all/0` is the only fallback. With it:
-  - `Rujira.Contracts.code/1,2` is removed - it was `code_info/1,2` under
-    another name.
-  - `Rujira.Deployments.invalidate/0` is removed. `get_target`, `from_address`,
-    `from_id`, `list_all_targets` and `list_targets` derive from the one cached
-    `contract_infos/0,1` read, so there is nothing of their own to invalidate.
-  - `Rujira.Contracts.code_info/1,2` is `{:error, :not_found}` for a code id
-    the node holds no code under, cached as the fact it is, rather than the
-    node's gRPC error.
-  - `Rujira.Assets.Metadata.load_metadata/2` is `{:error, :not_found}` where it
-    returned the node's "no metadata for denom" error, and caches that fact.
-    `Rujira.Assets.from_denom/2` and `from_id/2` are unchanged: a denom the
-    node holds no metadata for is still named here.
-  - `Rujira.Thorchain.Block.get/2` no longer expires a cached block on the
-    `block_cache_ttl` window; a block is held at its own height, and how many
-    are held is the cache's `retention`.
-  - Caching - group D: `Rujira.Thorchain.Network`, `Mimir`, `Pool`,
+- **Caching.** Every read across the library now goes through `Rujira.Cache`
+  instead of memoizing or reading the node raw. The consumer implements
+  `Rujira.Node` and calls `Rujira.Node.advance/1` on every new height; a
+  heightless read is served at the head that call moves, and before the first
+  `advance/1` it is `{:error, :no_head}`. A block invalidates exactly the
+  cached rows its events touched; `Rujira.Cache.invalidate_all/0` is the only
+  fallback for what `advance/1` cannot see. See
+  [Caching](guides/caching.md) for the full model. Landed as four groups:
+  - **Group A** - `Rujira.Contracts`, `Rujira.Deployments`,
+    `Rujira.Assets.Metadata` and `Rujira.Thorchain.Block`:
+    - `Rujira.Contracts.code/1,2` is removed - it was `code_info/1,2` under
+      another name.
+    - `Rujira.Deployments.invalidate/0` is removed. `get_target`,
+      `from_address`, `from_id`, `list_all_targets` and `list_targets` derive
+      from the one cached `contract_infos/0,1` read, so there is nothing of
+      their own to invalidate.
+    - `Rujira.Contracts.code_info/1,2` is `{:error, :not_found}` for a code id
+      the node holds no code under, cached as the fact it is, rather than the
+      node's gRPC error.
+    - `Rujira.Assets.Metadata.load_metadata/2` is `{:error, :not_found}` where
+      it returned the node's "no metadata for denom" error, and caches that
+      fact. `Rujira.Assets.from_denom/2` and `from_id/2` are unchanged: a
+      denom the node holds no metadata for is still named here.
+    - `Rujira.Thorchain.Block.get/2` no longer expires a cached block on the
+      `block_cache_ttl` window; a block is held at its own height, and how
+      many are held is the cache's `retention`.
+  - **Group B** - `Rujira.Fin` and `Rujira.Prices.Default`:
+    - `Rujira.Fin.Pair.list/0,1` is cached against the code registry and every
+      pair it resolved. `denom_for_ticker`, `find_stable`, `find_default`,
+      `find_by_denoms` and `from_id` derive from that one list in memory and
+      are no longer cached on their own.
+    - `Rujira.Fin.Book.query/1,2`, `Rujira.Fin.Order.query/4,5` for an
+      oracle-priced order, `Rujira.Fin.Order.query_orders/2,3`,
+      `Rujira.Fin.Simulation.query/3,4`, `Rujira.Fin.MarketMaker.Quote.query/5`
+      and both `Rujira.Prices.Default` legs are read per block: they move with
+      the oracle and the market makers, which announce themselves with no
+      event, so each is valid at the height it was read at and no other.
+    - `Rujira.Fin.Order.query/4,5` for a fixed price, and every
+      `Rujira.Fin.Range` query, are cached against the pair contract alone, so
+      a block that does not touch it carries them over.
+    - `Rujira.Fin.Simulation.query/3,4` keys on the offer asset's native
+      denom and `Rujira.Fin.MarketMaker.Quote.query/5` on the offer and ask
+      denoms plus `min_price`'s wire form, rather than on the structs they
+      arrive in.
+    - `Rujira.Prices.Default.oracle_price/1,2` and `fin_price/1,2` no longer
+      expire on `Rujira.cache_ttl/0`; a price is held at its own height.
+    - `Rujira.Fin.denom_for_ticker/1,2` and `get_pair_from_denoms/2,3` keep
+      both arities, now as one function with a default `opts`.
+  - **Group C** - `Rujira.Ghost.Vault.Status`, `.Borrower`, `.Delegate`,
+    `Rujira.Ghost.Credit` (`query_borrows`), `Rujira.Ghost.Credit.Account`
+    (`query_account`, `query_accounts_by_owner`, `query_all_accounts`),
+    `Rujira.Staking.Pool.Status`, `Rujira.Staking.Pool.Account`,
+    `Rujira.Brune.State`, `Rujira.Revenue.Converter` (`query_actions`,
+    `query_status`) and `Rujira.ThorchainSwap.Strategy` (`query_markets`,
+    `query_vaults`):
+    - `Rujira.Ghost.Credit.Account.predict/4` and
+      `Rujira.Brune.LoggedEvent.list/4` are now cached, against
+      `{:contract, address}`.
+    - `Rujira.Revenue.Converter.query_actions/1,2` and `query_status/1,2`,
+      and `Rujira.ThorchainSwap.Strategy.query_markets/1,2` and
+      `query_vaults/1,2`, are `{:error, :invalid_response}` for a reply
+      missing its expected key, rather than caching the raw, malformed map as
+      a success.
+  - **Group D** - `Rujira.Thorchain.Network`, `Mimir`, `Pool`,
     `InboundAddress`, `OutboundFee` and `LiquidityProvider`, and
-    `Rujira.Bank.Balance`, `Supply` and `Holder`, read through `Rujira.Cache`
-    instead of memoizing or reading the node raw. `Bank.Balance.get/3, list/2,
-    list_spendable/2` and `Bank.Supply.get/2` are newly cached (previously
-    uncached node reads); `Bank.Holder.holders/1,2` drops its 1-hour TTL.
-    `Bank.Supply.list/1` (every denom's supply) has no single invalidation tag,
-    so it is cached against `:per_block` rather than carried over.
+    `Rujira.Bank.Balance`, `Supply` and `Holder`:
+    - `Bank.Balance.get/3, list/2, list_spendable/2` and `Bank.Supply.get/2`
+      are newly cached (previously uncached node reads);
+      `Bank.Holder.holders/1,2` drops its 1-hour TTL.
+    - `Bank.Supply.list/1` (every denom's supply) has no single invalidation
+      tag, so it is cached against `:per_block` rather than carried over.
 - A token-factory (`x/…`) denom takes its symbol, ticker and decimals from the
   denom metadata THORChain holds for it, and the `Asset` carries that metadata.
   A denom the node holds no metadata for is still named here: `x/brune` is
@@ -145,21 +159,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Rujira.Ghost.Credit.Account`.
 - `Rujira.Contracts.query_state_smart/3` success is typed as any decoded JSON
   value (`term()`), not `map() | nil`.
-- **Caching - group C**
-  - `Rujira.Ghost.Vault.Status`, `.Borrower`, `.Delegate`, `Rujira.Ghost.Credit`
-    (`query_borrows`), `Rujira.Ghost.Credit.Account` (`query_account`,
-    `query_accounts_by_owner`, `query_all_accounts`), `Rujira.Staking.Pool.Status`,
-    `Rujira.Staking.Pool.Account`, `Rujira.Brune.State`, `Rujira.Revenue.Converter`
-    (`query_actions`, `query_status`) and `Rujira.ThorchainSwap.Strategy`
-    (`query_markets`, `query_vaults`) read through `Rujira.Cache` instead of
-    memoizing - a height read is now cached rather than always reaching the node,
-    and blocks invalidate what they changed.
-  - `Rujira.Ghost.Credit.Account.predict/4` and `Rujira.Brune.LoggedEvent.list/4`
-    are now cached, against `{:contract, address}`.
-  - `Rujira.Revenue.Converter.query_actions/1,2` and `query_status/1,2`, and
-    `Rujira.ThorchainSwap.Strategy.query_markets/1,2` and `query_vaults/1,2`, are
-    `{:error, :invalid_response}` for a reply missing its expected key, rather
-    than caching the raw, malformed map as a success.
 
 ### Fixed
 

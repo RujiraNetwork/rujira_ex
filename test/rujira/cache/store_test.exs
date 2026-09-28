@@ -221,6 +221,25 @@ defmodule Rujira.Cache.StoreTest do
       assert Tables.marker_floor() == 101
       assert Markers.marker({:balance, "thor1b"}) == 102
     end
+
+    test "an old but still-valid frontier row does not pin the marker table past its cap" do
+      configure(max_markers: 1, sweep_per_block: 100)
+      gen = Tables.gen()
+
+      assert :ok = Node.advance(100)
+      assert :ok = Store.frontier_put(gen, :old, 50, [], :old)
+
+      for {height, addr} <- Enum.zip(101..120, Enum.map(1..20, &"thor1#{&1}")) do
+        assert :ok =
+                 Node.advance(
+                   block(height, [
+                     event("coin_spent", %{"spender" => addr, "amount" => "1rune"})
+                   ])
+                 )
+      end
+
+      assert :ets.info(Tables.markers(), :size) <= 1
+    end
   end
 
   # --- Fixtures ---
