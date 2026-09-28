@@ -309,7 +309,7 @@ defmodule Rujira.HeightCoverageTest do
     end
   end
 
-  # Denom metadata is token identity, read at latest and memoized - it is the
+  # Denom metadata is token identity, read at latest and cached as identity - it is the
   # one query a height read does not carry the height on (see @excluded), so it
   # is not one of the composite's height legs.
   defp assert_all_calls_at_height do

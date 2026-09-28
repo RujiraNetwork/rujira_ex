@@ -3,7 +3,7 @@ defmodule Rujira.Cache.AdvanceTest do
   `Rujira.Node.advance/1`: the head, the gap fill, and the two resets.
 
   The cache's tables are global, so this case runs sync and every test uses a
-  height range of its own - the block cache is memoized per height.
+  height range of its own - blocks are cached per height in Rujira.Cache's exact store, and advance fetches them uncached.
   """
   use ExUnit.Case, async: false
 

@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `div/2` raises on a zero divisor.
 - `Rujira.Deployments.from_id/1,2`, resolving a `Rujira.Deployments.Target` by
   its `id` (its contract `address`) - round-trips with `from_address/1,2`.
+- Cache control: `Rujira.Node.advance/1`, `Rujira.Cache.head/0`,
+  `invalidate_all/0` and `pin/1`.
 - Ghost credit, exposing the rujira-ghost-credit contract (v1.0.4) as typed
   chain data, delegated from the existing `Rujira.Ghost` facade:
   - `Rujira.Ghost.Credit` — the contract's config (`get_credit`/`list_credits`/

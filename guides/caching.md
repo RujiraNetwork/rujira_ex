@@ -14,7 +14,7 @@ Four stores back this:
 - **Frontier** — state as of the head. An entry carries over across blocks
   until one of its sources changes, so a block that touches nothing a read
   depends on costs that read nothing.
-- **Exact** — immutable facts keyed by height, pruned from the oldest height
+- **Exact** — immutable facts keyed by height, pruned from the least-recently-inserted height
   once `retention` distinct heights are held.
 - **Identity** — height-independent, cached forever (e.g. denom metadata).
 
@@ -93,7 +93,7 @@ config :rujira_ex, Rujira.Cache,
 
 | Key | Default | Meaning |
 |---|---|---|
-| `retention` | `100` | Distinct heights kept in the exact store before the oldest is pruned. |
+| `retention` | `100` | Distinct heights kept in the exact store; the least-recently-inserted height is dropped when this limit is reached. |
 | `max_catchup` | `100` | Largest gap `advance/1` will fill block by block before resetting instead. |
 | `frontier_max_rows` | `100_000` | Frontier rows kept before the sweep evicts by oldest `as_of`. |
 | `max_markers` | `100_000` | Marker-table rows kept before the sweep collapses the table to the frontier's oldest `as_of`. |

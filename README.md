@@ -94,7 +94,11 @@ pin it while indexing a block.
 
 ```elixir
 # indexer: advance first, then index at the pinned height
-:ok = Rujira.Node.advance(height)
+# a failed advance leaves the head where it was; the next call retries
+with {:error, reason} <- Rujira.Node.advance(height) do
+  Logger.warning("advance to #{height} failed: #{inspect(reason)}")
+end
+
 {:ok, pairs} = Rujira.Fin.list_pairs(height: height)
 
 # API consumer: reads without height: are served at the head
