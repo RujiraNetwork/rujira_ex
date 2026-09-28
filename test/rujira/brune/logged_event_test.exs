@@ -1,5 +1,9 @@
 defmodule Rujira.Brune.LoggedEventTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  `list/4` reads through `Rujira.Cache`, whose stores and head are global, so
+  this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Brune.Events.Event, as: BruneEvent
   alias Rujira.Brune.Events.NodeBond
@@ -66,6 +70,16 @@ defmodule Rujira.Brune.LoggedEventTest do
       MockNode.expect(fn _ -> {:error, %GRPC.RPCError{status: 2, message: "boom"}} end)
 
       assert {:error, %GRPC.RPCError{}} = LoggedEvent.list("thor1pool")
+    end
+
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"events" => _} -> MockNode.ok(%{"events" => []}) end)
+
+      assert {:ok, []} = LoggedEvent.list("thor1pool", nil, 100, height: default_head())
+      assert {:ok, []} = LoggedEvent.list("thor1pool", nil, 100, height: default_head())
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
     end
   end
 end

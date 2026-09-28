@@ -11,13 +11,12 @@ defmodule Rujira.Ghost.Credit do
   """
 
   alias Rujira.Assets
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Deployments
   alias Rujira.Ghost.Vault.Borrower
   alias Rujira.Math
   alias Rujira.Node
-
-  use Memoize
 
   defmodule CollateralRatio do
     @moduledoc """
@@ -133,13 +132,7 @@ defmodule Rujira.Ghost.Credit do
     end
   end
 
-  @doc """
-  Loads the contract's own vault borrower positions into `borrows`.
-
-  Memoized on `address` - invalidate with:
-
-      Memoize.invalidate(Rujira.Ghost.Credit, :query_borrows, [address])
-  """
+  @doc "Loads the contract's own vault borrower positions into `borrows`."
   @spec load(t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def load(%__MODULE__{address: address} = credit, opts \\ []) do
     with {:ok, borrows} <- query_borrows(address, opts) do
@@ -147,28 +140,21 @@ defmodule Rujira.Ghost.Credit do
     end
   end
 
-  @doc """
-  Memoized fetch of the vault borrower positions held by the credit contract.
-
-  Invalidate with `Memoize.invalidate(Rujira.Ghost.Credit, :query_borrows, [address])`.
-  """
+  @doc "The vault borrower positions held by the credit contract, cached per `Rujira.Cache`."
   @spec query_borrows(String.t()) :: {:ok, [Borrower.t()]} | {:error, term()}
-  defmemo query_borrows(address) do
-    fetch_borrows(address, [])
-  end
+  def query_borrows(address), do: query_borrows(address, [])
 
   @doc """
-  As `query_borrows/1`, read at `opts[:height]` when one is given - a height read
-  is never cached. Without a `:height` this is `query_borrows/1`, so the other
-  opts are not applied.
+  As `query_borrows/1`, cached per `Rujira.Cache`; resolved at `opts[:height]`
+  or the head.
   """
   @spec query_borrows(String.t(), Node.opts()) :: {:ok, [Borrower.t()]} | {:error, term()}
   def query_borrows(address, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_borrows(address, opts) end,
-      fn -> query_borrows(address) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :query_borrows, [address]}, [:per_block], opts, fn _height ->
+        fetch_borrows(address, opts)
+      end)
+    end
   end
 
   # --- Private ---

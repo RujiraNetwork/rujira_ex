@@ -162,12 +162,6 @@ defmodule Rujira.Revenue.ConverterTest do
     end
 
     test "resolves one v1.1.0 and one v2.x target" do
-      Memoize.invalidate(Converter)
-
-      on_exit(fn ->
-        Memoize.invalidate(Converter)
-      end)
-
       counter = :atomics.new(1, [])
 
       MockNode.expect(fn
@@ -195,12 +189,6 @@ defmodule Rujira.Revenue.ConverterTest do
   end
 
   describe "load/2" do
-    setup do
-      Memoize.invalidate(Converter)
-      on_exit(fn -> Memoize.invalidate(Converter) end)
-      :ok
-    end
-
     test "resolves actions and a last action from status" do
       msg = Base.encode64(~s({"swap":{}}))
 
@@ -315,6 +303,42 @@ defmodule Rujira.Revenue.ConverterTest do
       end)
 
       assert {:error, :invalid_attrs} = Converter.load(%Converter{address: "thor1revenue"})
+    end
+
+    test "a reply missing 'actions' is invalid_response, not a raw success" do
+      MockNode.expect(fn
+        %{"actions" => %{}} -> MockNode.ok(%{})
+        %{"status" => %{}} -> MockNode.ok(%{"last" => nil})
+      end)
+
+      assert {:error, :invalid_response} = Converter.load(%Converter{address: "thor1revenue"})
+    end
+
+    test "a reply missing 'last' is invalid_response, not a raw success" do
+      MockNode.expect(fn
+        %{"actions" => %{}} -> MockNode.ok(%{"actions" => []})
+        %{"status" => %{}} -> MockNode.ok(%{})
+      end)
+
+      assert {:error, :invalid_response} = Converter.load(%Converter{address: "thor1revenue"})
+    end
+  end
+
+  describe "query_actions/2 and query_status/2" do
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn
+        %{"actions" => %{}} -> MockNode.ok(%{"actions" => []})
+        %{"status" => %{}} -> MockNode.ok(%{"last" => nil})
+      end)
+
+      assert {:ok, []} = Converter.query_actions("thor1revenue", height: default_head())
+      assert {:ok, []} = Converter.query_actions("thor1revenue", height: default_head())
+      assert {:ok, nil} = Converter.query_status("thor1revenue", height: default_head())
+      assert {:ok, nil} = Converter.query_status("thor1revenue", height: default_head())
+
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
     end
   end
 end

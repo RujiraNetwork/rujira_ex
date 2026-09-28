@@ -154,6 +154,18 @@ defmodule Rujira.Ghost.CreditTest do
     end
   end
 
+  describe "query_borrows/2" do
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"borrows" => %{}} -> MockNode.ok(%{"borrowers" => []}) end)
+
+      assert {:ok, []} = Credit.query_borrows("thor1credit", height: @height)
+      assert {:ok, []} = Credit.query_borrows("thor1credit", height: @height)
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+  end
+
   # --- Fixtures ---
 
   defp credit, do: %Credit{id: "thor1credit", address: "thor1credit"}
