@@ -146,6 +146,16 @@ defmodule Rujira.Thorchain.Block do
 
   def get(_height, _opts), do: {:error, :invalid_height}
 
+  @doc false
+  @spec fetch_uncached(integer(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  def fetch_uncached(height, opts \\ [])
+
+  def fetch_uncached(height, opts)
+      when is_integer(height) and height >= @min_height and height <= @max_height,
+      do: fetch(height, opts)
+
+  def fetch_uncached(_height, _opts), do: {:error, :invalid_height}
+
   # --- Private ---
 
   defp fetch(height, opts) do

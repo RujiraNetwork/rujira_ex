@@ -96,6 +96,15 @@ defmodule Rujira.Cache.AdvanceTest do
       assert {:error, @error} = Node.advance(1601)
       assert :counters.get(counter, 1) == 2
     end
+
+    test "advance does not store the blocks it fetches" do
+      count_blocks()
+
+      assert :ok = Node.advance(1700)
+      assert :ok = Node.advance(1701)
+
+      assert exact_row_count({Block, :get, [1701]}) == 0
+    end
   end
 
   describe "invalidation" do
@@ -387,6 +396,12 @@ defmodule Rujira.Cache.AdvanceTest do
       finalize_block_events: [],
       txs: []
     }
+  end
+
+  defp exact_row_count(query_key) do
+    :ets.select_count(Tables.exact(), [
+      {{{:_, :_, query_key}, :_}, [], [true]}
+    ])
   end
 
   defp event(type, attrs \\ %{}) do

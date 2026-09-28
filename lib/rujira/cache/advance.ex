@@ -221,7 +221,7 @@ defmodule Rujira.Cache.Advance do
   end
 
   defp fetch(y) do
-    task = Task.async(fn -> Block.get(y) end)
+    task = Task.async(fn -> Block.fetch_uncached(y) end)
 
     case Task.yield(task, @fetch_timeout) || Task.shutdown(task, :brutal_kill) do
       {:ok, result} -> result

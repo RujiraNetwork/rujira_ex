@@ -33,6 +33,17 @@ defmodule Rujira.ContractsTest do
     def new(_), do: {:error, :invalid_attrs}
   end
 
+  defmodule Headless do
+    @moduledoc false
+    defstruct owner: nil
+
+    @type t :: %__MODULE__{owner: String.t() | nil}
+
+    @spec new(map()) :: {:ok, t()} | {:error, term()}
+    def new(%{"owner" => owner}), do: {:ok, %__MODULE__{owner: owner}}
+    def new(_), do: {:error, :invalid_attrs}
+  end
+
   describe "get/2" do
     test "a height read carries the block-height metadata into the config query" do
       MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(%{"owner" => "thor1owner"}) end)
@@ -206,6 +217,20 @@ defmodule Rujira.ContractsTest do
 
       assert_received {:mock_node, %QueryContractsByCodeRequest{}, _}
       refute_received {:mock_node, %QueryContractsByCodeRequest{}, _}
+    end
+
+    test "a resolved contract with no binary address fails loudly rather than losing its source" do
+      MockNode.expect(fn
+        %QueryContractsByCodeRequest{code_id: 9} ->
+          {:ok, %{contracts: ["thor1b"], pagination: %{next_key: ""}}}
+
+        %{"config" => %{}} ->
+          MockNode.ok(%{"owner" => "thor1owner"})
+      end)
+
+      assert_raise ArgumentError, ~r/no binary address/, fn ->
+        Contracts.list(Headless, [9])
+      end
     end
   end
 

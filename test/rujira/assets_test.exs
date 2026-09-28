@@ -659,9 +659,17 @@ defmodule Rujira.AssetsTest do
     end
 
     test "returns the node's error unchanged when the query fails" do
-      MockNode.expect(fn %QueryDenomMetadataRequest{} -> {:error, :not_found} end)
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+      error = %GRPC.RPCError{status: 13, message: "boom"}
 
-      assert {:error, :not_found} = Metadata.load_metadata(@denom)
+      MockNode.expect(fn %QueryDenomMetadataRequest{} ->
+        Agent.update(calls, &(&1 + 1))
+        {:error, error}
+      end)
+
+      assert {:error, ^error} = Metadata.load_metadata(@denom)
+      assert {:error, ^error} = Metadata.load_metadata(@denom)
+      assert Agent.get(calls, & &1) == 2
     end
 
     test "a failed query is not cached, so a later call retries and succeeds" do

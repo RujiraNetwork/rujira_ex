@@ -571,11 +571,21 @@ defmodule Rujira.Contracts do
 
   defp no_contract?(_), do: false
 
-  # A list is only as valid as the registry it was read from and the contracts
-  # it resolved; a contract that has none is not a source of its own.
+  # A list is only as valid as the registry it was read from and every
+  # contract it resolved; a member with no binary address would otherwise
+  # silently lose its own invalidation source, so this fails loudly instead.
   defp list_sources(contracts) do
-    [:contract_registry | for(%{address: a} <- contracts, is_binary(a), do: {:contract, a})]
+    [:contract_registry | Enum.map(contracts, &contract_source/1)]
   end
+
+  defp contract_source(%{address: a}) when is_binary(a), do: {:contract, a}
+
+  defp contract_source(other),
+    do:
+      raise(
+        ArgumentError,
+        "Contracts.list/3 resolved a contract with no binary address: #{inspect(other)}"
+      )
 
   defp fetch_list(module, code_ids, opts) do
     with {:ok, contracts} <- by_codes(code_ids, opts) do
