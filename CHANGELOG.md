@@ -67,8 +67,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
       node's gRPC error.
     - `Rujira.Assets.Metadata.load_metadata/2` is `{:error, :not_found}` where
       it returned the node's "no metadata for denom" error, and caches that
-      fact. `Rujira.Assets.from_denom/2` and `from_id/2` are unchanged: a
-      denom the node holds no metadata for is still named here.
+      fact - against the new `{:denom_metadata, denom}` source rather than
+      forever, so the first `advance/1` applying a `create_denom` for that
+      denom refetches it. Metadata the node holds is still identity: no
+      message can rewrite it. With no head, the not-found is not cached and
+      the lookup still answers. `Rujira.Assets.from_denom/2` and `from_id/2`
+      are unchanged: a denom the node holds no metadata for is still named
+      here.
     - `Rujira.Thorchain.Block.get/2` no longer expires a cached block on the
       `block_cache_ttl` window; a block is held at its own height, and how
       many are held is the cache's `retention`.
