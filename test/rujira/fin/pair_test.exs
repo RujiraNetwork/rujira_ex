@@ -1,5 +1,9 @@
 defmodule Rujira.Fin.PairTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  The pair list is read through `Rujira.Cache`, whose stores and head are
+  global, so this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Cosmos.Bank.V1beta1.Metadata, as: DenomMetadata
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
@@ -11,9 +15,8 @@ defmodule Rujira.Fin.PairTest do
   alias Thorchain.Types.ContractInfo
   alias Thorchain.Types.QueryContractInfosRequest
 
-  # A height read is never cached, so the pair list these tests script is the
-  # one they get, whatever else has been memoized.
   @height 500
+  @metadata %{"x-cosmos-block-height" => "500"}
 
   defp asset(denom) do
     {:ok, asset} = Assets.from_denom(denom)
@@ -290,6 +293,85 @@ defmodule Rujira.Fin.PairTest do
 
     test "still matches the chain exactly" do
       assert {:error, :not_found} = Pair.from_id("BSC.bRUNE/THOR.RUNE", height: @height)
+    end
+  end
+
+  describe "list/1" do
+    setup do
+      MockNode.expect(fn
+        %QueryContractInfosRequest{} ->
+          {:ok,
+           %{infos: [%ContractInfo{address: "thor1pair", contract: "rujira-fin", version: "1"}]}}
+
+        %QueryDenomMetadataRequest{denom: denom} ->
+          {:error,
+           %GRPC.RPCError{status: 5, message: "client metadata for denom #{denom}: not found"}}
+
+        %{"config" => _} ->
+          MockNode.ok(brune_pair_config())
+      end)
+    end
+
+    test "a height read carries the block-height metadata into every leg" do
+      assert {:ok, [%Pair{address: "thor1pair"}]} = Pair.list(height: @height)
+
+      for {request, opts} <- config_and_registry_calls() do
+        assert Keyword.get(opts, :metadata) == @metadata,
+               "#{inspect(request)} did not carry the height"
+      end
+    end
+
+    test "a second read at the same height is served from the cache" do
+      assert {:ok, [_]} = Pair.list(height: @height)
+      flush()
+      assert {:ok, [_]} = Pair.list(height: @height)
+
+      assert config_and_registry_calls() == []
+    end
+
+    test "the lookups derived from it read nothing of their own" do
+      assert {:ok, [_]} = Pair.list(height: @height)
+      flush()
+
+      assert {:ok, "x/brune"} = Pair.denom_for_ticker("bRUNE", height: @height)
+      assert {:ok, %Pair{}} = Pair.find_by_denoms("x/brune", "rune", height: @height)
+      assert {:ok, %Pair{}} = Pair.find_default("x/brune", height: @height)
+
+      assert config_and_registry_calls() == []
+    end
+
+    test "another height is another list, so it reaches the node again" do
+      assert {:ok, [_]} = Pair.list(height: @height)
+      flush()
+      assert {:ok, [_]} = Pair.list(height: @height - 1)
+
+      assert config_and_registry_calls() != []
+    end
+
+    test "a heightless read is at the head, and has none before the first advance" do
+      assert {:ok, [_]} = Pair.list()
+
+      reset_cache()
+      assert {:error, :no_head} = Pair.list()
+    end
+  end
+
+  # Denom metadata is token identity, read at latest - it is the one query a
+  # height read does not carry the height on, so it is not one of the legs.
+  defp config_and_registry_calls(acc \\ []) do
+    receive do
+      {:mock_node, %QueryDenomMetadataRequest{}, _opts} -> config_and_registry_calls(acc)
+      {:mock_node, request, opts} -> config_and_registry_calls([{request, opts} | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
+  defp flush do
+    receive do
+      {:mock_node, _, _} -> flush()
+    after
+      0 -> :ok
     end
   end
 

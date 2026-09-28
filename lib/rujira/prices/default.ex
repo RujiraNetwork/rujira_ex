@@ -8,15 +8,15 @@ defmodule Rujira.Prices.Default do
   that would answer with a price nobody asked for.
 
   Every lookup takes a trailing `opts`, forwarded to `Rujira.Node.query/3`, so a
-  price can be read at a `height:`. The memoized lookups keep their name, arity
-  and cache key and gain a sibling one arity higher — a height read is never
-  cached.
+  price can be read at a `height:`. Both legs are cached per `Rujira.Cache`,
+  resolved at `opts[:height]` or - without one - at the head. A price moves
+  every block with no event of its own, so each is read per block: the oracle
+  price directly, the FIN price through the book it is derived from.
   """
   @behaviour Rujira.Prices
 
-  use Memoize
-
   alias Rujira.Amount
+  alias Rujira.Cache
   alias Rujira.Node
   alias Thorchain.Types.Query.Stub, as: Q
   alias Thorchain.Types.QueryOraclePriceRequest
@@ -41,63 +41,52 @@ defmodule Rujira.Prices.Default do
   def get("bRUNE", opts), do: get("RUNE", opts)
 
   def get(ticker, opts) do
-    case oracle_price(ticker, opts) do
-      {:error, :no_price} -> fin_price(ticker, opts)
-      result -> result
+    with {:ok, opts} <- Cache.pin(opts) do
+      case oracle_price(ticker, opts) do
+        {:error, :no_price} -> fin_price(ticker, opts)
+        result -> result
+      end
     end
   end
 
   @impl true
   def value_usd(ticker, amount, decimals \\ 8, opts \\ []) do
-    with {:ok, price} <- get(ticker, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, price} <- get(ticker, opts) do
       {:ok, to_usd(amount, price, decimals)}
     end
   end
 
-  @doc """
-  Memoized oracle price lookup.
-
-  Invalidate with `Memoize.invalidate(Rujira.Prices.Default, :oracle_price, [ticker])`.
-  """
+  @doc "The chain oracle's price for `ticker`."
   @spec oracle_price(String.t()) :: {:ok, Decimal.t()} | {:error, term()}
-  defmemo oracle_price(ticker), expires_in: Rujira.cache_ttl() do
-    fetch_oracle_price(ticker, [])
-  end
+  def oracle_price(ticker), do: oracle_price(ticker, [])
 
-  @doc """
-  As `oracle_price/1`, read at `opts[:height]` when one is given - a height read
-  is never cached. Without a `:height` this is `oracle_price/1`, so the other
-  opts are not applied.
-  """
+  @doc "As `oracle_price/1`, read at `opts[:height]` when given."
   @spec oracle_price(String.t(), Node.opts()) :: {:ok, Decimal.t()} | {:error, term()}
   def oracle_price(ticker, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_oracle_price(ticker, opts) end,
-      fn -> oracle_price(ticker) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :oracle_price, [ticker]}, [:per_block], opts, fn _height ->
+        fetch_oracle_price(ticker, opts)
+      end)
+    end
   end
 
   @doc """
-  Memoized FIN-derived price: mid-price of the asset's default pair (a stable
-  pair when one exists, otherwise the first pair quoting that asset), multiplied
-  by the quote asset's USD price.
-
-  Invalidate with `Memoize.invalidate(Rujira.Prices.Default, :fin_price, [ticker])`.
+  The FIN-derived price: mid-price of the asset's default pair (a stable pair
+  when one exists, otherwise the first pair quoting that asset), multiplied by
+  the quote asset's USD price.
   """
   @spec fin_price(String.t()) :: {:ok, Decimal.t()} | {:error, term()}
-  defmemo fin_price(ticker), expires_in: Rujira.cache_ttl() do
-    fetch_fin_price(ticker, [])
-  end
+  def fin_price(ticker), do: fin_price(ticker, [])
 
-  @doc """
-  As `fin_price/1`, read at `opts[:height]` when one is given - a height read is
-  never cached. Without a `:height` this is `fin_price/1`, so the other opts are
-  not applied.
-  """
+  @doc "As `fin_price/1`, read at `opts[:height]` when given."
   @spec fin_price(String.t(), Node.opts()) :: {:ok, Decimal.t()} | {:error, term()}
   def fin_price(ticker, opts) do
-    Node.at_height(opts, fn -> fetch_fin_price(ticker, opts) end, fn -> fin_price(ticker) end)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :fin_price, [ticker]}, [:per_block], opts, fn _height ->
+        fetch_fin_price(ticker, opts)
+      end)
+    end
   end
 
   # --- Private ---

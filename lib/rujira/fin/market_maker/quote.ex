@@ -13,12 +13,11 @@ defmodule Rujira.Fin.MarketMaker.Quote do
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Assets.Asset
+  alias Rujira.Cache
   alias Rujira.Coin
   alias Rujira.Contracts
   alias Rujira.Math
   alias Rujira.Node
-
-  use Memoize
 
   # --- Struct ---
 
@@ -64,53 +63,56 @@ defmodule Rujira.Fin.MarketMaker.Quote do
   `ask`, optionally bounded by `min_price`.
 
   A market maker with nothing to quote (the contract responds `null`) returns
-  `{:error, :not_found}`.
+  `{:error, :not_found}` - a fact about the maker, cached as one until the next
+  block.
 
-  Memoized (privately, as `do_query/4`) on the typed
-  `(address, offer, ask, min_price)` tuple. `min_price` is normalised via
-  `Decimal.normalize/1` (or left `nil`) so equal decimals (e.g. `1.5` and
-  `1.50`) share a cache key. Invalidate with the same normalised value:
-
-      Memoize.invalidate(Rujira.Fin.MarketMaker.Quote, :do_query, [address, offer, ask, min_price && Decimal.normalize(min_price)])
+  Cached per `Rujira.Cache`, resolved at `opts[:height]` or - without one - at
+  the head. A quote is priced off the book and the oracle, neither of which
+  announces itself with an event, so it is read per block. The assets are
+  resolved to their native denoms and `min_price` to the string that goes on the
+  wire before the cache is keyed, so equal decimals (`1.5` and `1.50`) are the
+  one read.
   """
   @spec query(String.t(), Asset.t(), Asset.t(), Decimal.t() | nil, Node.opts()) ::
           {:ok, t()} | {:error, term()}
   def query(address, %Asset{} = offer, %Asset{} = ask, min_price \\ nil, opts \\ []) do
-    min_price = normalize_min_price(min_price)
+    min_price = wire_min_price(min_price)
 
-    Node.at_height(
-      opts,
-      fn -> fetch(address, offer, ask, min_price, opts) end,
-      fn -> do_query(address, offer, ask, min_price) end
-    )
-  end
-
-  # --- Private ---
-
-  defmemop do_query(address, %Asset{} = offer, %Asset{} = ask, min_price) do
-    fetch(address, offer, ask, min_price, [])
-  end
-
-  defp fetch(address, %Asset{} = offer, %Asset{} = ask, min_price, opts) do
-    with {:ok, offer_denom} <- Assets.to_native(offer),
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, offer_denom} <- Assets.to_native(offer),
          {:ok, ask_denom} <- Assets.to_native(ask),
          {:ok, res} <-
-           Contracts.query_state_smart(
-             address,
-             %{
-               quote: %{
-                 min_price: min_price && Decimal.to_string(min_price, :normal),
-                 offer_denom: offer_denom,
-                 ask_denom: ask_denom,
-                 data: nil
-               }
-             },
-             opts
+           Cache.fetch(
+             {__MODULE__, :query, [address, offer_denom, ask_denom, min_price]},
+             [:per_block],
+             opts,
+             fn _height -> fetch(address, offer_denom, ask_denom, min_price, opts) end
            ) do
       new(%{address: address, offer: offer, ask: ask}, res)
     end
   end
 
-  defp normalize_min_price(nil), do: nil
-  defp normalize_min_price(%Decimal{} = value), do: Decimal.normalize(value)
+  # --- Private ---
+
+  defp fetch(address, offer_denom, ask_denom, min_price, opts) do
+    Contracts.query_state_smart(
+      address,
+      %{
+        quote: %{
+          min_price: min_price,
+          offer_denom: offer_denom,
+          ask_denom: ask_denom,
+          data: nil
+        }
+      },
+      opts
+    )
+  end
+
+  # The wire form is the key: `Decimal.normalize/1` first, so `1.50` and `1.5`
+  # are the one price on the wire and in the cache alike.
+  defp wire_min_price(nil), do: nil
+
+  defp wire_min_price(%Decimal{} = value),
+    do: value |> Decimal.normalize() |> Decimal.to_string(:normal)
 end

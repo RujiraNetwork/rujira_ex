@@ -1,11 +1,18 @@
 defmodule Rujira.Fin.SimulationTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  A simulation is read through `Rujira.Cache`, whose stores and head are
+  global, so this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Assets
   alias Rujira.Coin
   alias Rujira.Fin.Pair
   alias Rujira.Fin.Simulation
   alias Rujira.Test.MockNode
+
+  @height 500
+  @metadata %{"x-cosmos-block-height" => "500"}
 
   @pair %Pair{
     address: "thor1pair",
@@ -73,6 +80,96 @@ defmodule Rujira.Fin.SimulationTest do
       {:ok, btc} = Assets.from_denom("btc-btc")
 
       assert {:error, :invalid_attrs} = Simulation.simulate(@pair, Coin.new(btc, 3000))
+    end
+  end
+
+  describe "query/4" do
+    test "a height read carries the block-height metadata into the simulate query" do
+      MockNode.expect(fn %{"simulate" => _} ->
+        MockNode.ok(%{"returned" => "1", "fee" => "0"})
+      end)
+
+      {:ok, btc} = Assets.from_denom("btc-btc")
+
+      assert {:ok, _} = Simulation.query("thor1pair", btc, 1000, height: @height)
+      assert_received {:mock_node, _request, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"simulate" => _} ->
+        MockNode.ok(%{"returned" => "1", "fee" => "0"})
+      end)
+
+      {:ok, btc} = Assets.from_denom("btc-btc")
+
+      assert {:ok, _} = Simulation.query("thor1pair", btc, 1000, height: @height)
+      assert {:ok, _} = Simulation.query("thor1pair", btc, 1000, height: @height)
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
+    test "the asset is keyed by its native denom, not by the struct it arrived in" do
+      MockNode.expect(fn %{"simulate" => _} ->
+        MockNode.ok(%{"returned" => "1", "fee" => "0"})
+      end)
+
+      {:ok, btc} = Assets.from_denom("btc-btc")
+
+      assert {:ok, _} = Simulation.query("thor1pair", btc, 1000, height: @height)
+
+      assert {:ok, _} =
+               Simulation.query("thor1pair", %{btc | metadata: :not_loaded}, 1000,
+                 height: @height
+               )
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
+    test "a simulation is only the simulation of its own height" do
+      MockNode.expect(fn %{"simulate" => _} ->
+        MockNode.ok(%{"returned" => "1", "fee" => "0"})
+      end)
+
+      {:ok, btc} = Assets.from_denom("btc-btc")
+
+      assert {:ok, _} = Simulation.query("thor1pair", btc, 1000, height: @height)
+      assert {:ok, _} = Simulation.query("thor1pair", btc, 1000, height: @height - 1)
+
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
+    end
+
+    test "an error is never cached, so the next read retries it" do
+      MockNode.expect(fn %{"simulate" => _} ->
+        {:error, %GRPC.RPCError{status: 13, message: "boom"}}
+      end)
+
+      {:ok, btc} = Assets.from_denom("btc-btc")
+
+      assert {:error, %GRPC.RPCError{}} =
+               Simulation.query("thor1pair", btc, 1000, height: @height)
+
+      MockNode.expect(fn %{"simulate" => _} ->
+        MockNode.ok(%{"returned" => "1", "fee" => "0"})
+      end)
+
+      assert {:ok, _} = Simulation.query("thor1pair", btc, 1000, height: @height)
+    end
+
+    test "a heightless read is at the head, and has none before the first advance" do
+      MockNode.expect(fn %{"simulate" => _} ->
+        MockNode.ok(%{"returned" => "1", "fee" => "0"})
+      end)
+
+      {:ok, btc} = Assets.from_denom("btc-btc")
+
+      assert {:ok, _} = Simulation.query("thor1pair", btc, 1000)
+
+      reset_cache()
+      assert {:error, :no_head} = Simulation.query("thor1pair", btc, 1000)
     end
   end
 

@@ -1,11 +1,18 @@
 defmodule Rujira.Fin.RangeTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  Every range read goes through `Rujira.Cache`, whose stores and head are
+  global, so this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Fin.Range
   alias Rujira.Fin.Range.Dynamic
   alias Rujira.Fin.Range.Dynamic.Params
   alias Rujira.Fin.Range.Fixed
   alias Rujira.Test.MockNode
+
+  @height 500
+  @metadata %{"x-cosmos-block-height" => "500"}
 
   @pair %{
     address: "thor1pair",
@@ -95,13 +102,6 @@ defmodule Rujira.Fin.RangeTest do
   end
 
   describe "list/3" do
-    setup do
-      # `query_ranges`/`query_dynamic_ranges` are memoized on (contract, owner).
-      Memoize.invalidate(Rujira.Fin.Range)
-      on_exit(fn -> Memoize.invalidate(Rujira.Fin.Range) end)
-      :ok
-    end
-
     test "returns both kinds when the contract has both" do
       MockNode.expect(fn
         %{"ranges" => %{"dynamic" => _}} -> MockNode.ok(%{"ranges" => [dynamic_response()]})
@@ -142,13 +142,6 @@ defmodule Rujira.Fin.RangeTest do
   end
 
   describe "load/2" do
-    setup do
-      # `query`/`query_dynamic` are memoized on (address, idx).
-      Memoize.invalidate(Rujira.Fin.Range)
-      on_exit(fn -> Memoize.invalidate(Rujira.Fin.Range) end)
-      :ok
-    end
-
     test "a bare index asks only the fixed query" do
       MockNode.expect(fn
         %{"range" => %{"dynamic" => _}} -> flunk("the dynamic query was issued for a bare index")
@@ -192,12 +185,6 @@ defmodule Rujira.Fin.RangeTest do
   end
 
   describe "from_id/1" do
-    setup do
-      Memoize.invalidate(Rujira.Fin.Range)
-      on_exit(fn -> Memoize.invalidate(Rujira.Fin.Range) end)
-      :ok
-    end
-
     test "a dynamic id round-trips to the dynamic query, reading the pair's config for nothing" do
       MockNode.expect(fn
         %{"config" => _} -> flunk("the pair's config was read to resolve a range id")
@@ -228,6 +215,90 @@ defmodule Rujira.Fin.RangeTest do
       for id <- ["thor1pair", "thor1pair/5/9", "thor1pair/fixed/5", "thor1pair/x"] do
         assert {:error, _} = Range.from_id(id)
       end
+    end
+  end
+
+  describe "query_ranges/3" do
+    test "a height read carries the block-height metadata into the ranges query" do
+      MockNode.expect(fn %{"ranges" => _} -> MockNode.ok(%{"ranges" => []}) end)
+
+      assert {:ok, []} = Range.query_ranges("thor1pair", nil, height: @height)
+      assert_received {:mock_node, _request, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"ranges" => _} -> MockNode.ok(%{"ranges" => []}) end)
+
+      assert {:ok, []} = Range.query_ranges("thor1pair", nil, height: @height)
+      assert {:ok, []} = Range.query_ranges("thor1pair", nil, height: @height)
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
+    test "another height is another fact, so it reaches the node again" do
+      MockNode.expect(fn %{"ranges" => _} -> MockNode.ok(%{"ranges" => []}) end)
+
+      assert {:ok, []} = Range.query_ranges("thor1pair", nil, height: @height)
+      assert {:ok, []} = Range.query_ranges("thor1pair", nil, height: @height - 1)
+
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
+    end
+
+    test "the owner filter is part of the key, not of the answer" do
+      MockNode.expect(fn %{"ranges" => _} -> MockNode.ok(%{"ranges" => []}) end)
+
+      assert {:ok, []} = Range.query_ranges("thor1pair", nil, height: @height)
+      assert {:ok, []} = Range.query_ranges("thor1pair", "thor1owner", height: @height)
+
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
+    end
+
+    test "an error is never cached, so the next read retries it" do
+      MockNode.expect(fn %{"ranges" => _} -> {:error, vm_error()} end)
+
+      assert {:error, %GRPC.RPCError{}} = Range.query_ranges("thor1pair", nil, height: @height)
+
+      MockNode.expect(fn %{"ranges" => _} -> MockNode.ok(%{"ranges" => []}) end)
+
+      assert {:ok, []} = Range.query_ranges("thor1pair", nil, height: @height)
+    end
+
+    test "a heightless read is at the head, and has none before the first advance" do
+      MockNode.expect(fn %{"ranges" => _} -> MockNode.ok(%{"ranges" => []}) end)
+
+      assert {:ok, []} = Range.query_ranges("thor1pair", nil)
+
+      reset_cache()
+      assert {:error, :no_head} = Range.query_ranges("thor1pair", nil)
+    end
+  end
+
+  describe "query/3" do
+    test "a single range is served from the cache on a second read" do
+      MockNode.expect(fn %{"range" => "5"} -> MockNode.ok(fixed_response()) end)
+
+      assert {:ok, _} = Range.query("thor1pair", 5, height: @height)
+      assert {:ok, _} = Range.query("thor1pair", 5, height: @height)
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
+    test "a dynamic range is a key of its own" do
+      MockNode.expect(fn
+        %{"range" => %{"dynamic" => "5"}} -> MockNode.ok(dynamic_response())
+        %{"range" => "5"} -> MockNode.ok(fixed_response())
+      end)
+
+      assert {:ok, _} = Range.query("thor1pair", 5, height: @height)
+      assert {:ok, _} = Range.query_dynamic("thor1pair", 5, height: @height)
+
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
     end
   end
 

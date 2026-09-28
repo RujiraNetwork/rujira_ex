@@ -5,20 +5,23 @@ defmodule Rujira.Fin.Order do
   Struct, construction, and queries. Use `Rujira.Fin` as the public API.
 
   The query boundary is typed: `side` is `:base | :quote` and `price` is a
-  `Rujira.Fin.Price.order/0`. Wire serialisation happens only at the gRPC edge,
-  so the same typed values used to query are used to invalidate:
+  `Rujira.Fin.Price.order/0`; the price reaches the cache and the wire in the
+  one form `Rujira.Fin.Price.to_query/1` builds.
 
-      Memoize.invalidate(Rujira.Fin.Order, :query, [pair, owner, side, price])
+  Every read here is cached per `Rujira.Cache`, resolved at `opts[:height]` or -
+  without one - at the head. A fixed-price order is the pair contract's own
+  state; an oracle-priced one moves with the oracle, which announces itself with
+  no event, so it is read per block. A page of orders may hold either, so it is
+  read per block too.
   """
 
   alias Rujira.Amount
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Fin.Pair
   alias Rujira.Fin.Price
   alias Rujira.Math
   alias Rujira.Node
-
-  use Memoize
 
   @max_limit 100
 
@@ -84,7 +87,8 @@ defmodule Rujira.Fin.Order do
   @spec list(Pair.t(), String.t() | nil, integer() | nil, Node.opts()) ::
           {:ok, [t()]} | {:error, term()}
   def list(pair, owner \\ nil, limit \\ nil, opts \\ []) do
-    with {:ok, orders} <- query_orders(pair.address, owner, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, orders} <- query_orders(pair.address, owner, opts) do
       orders
       |> take(limit)
       |> Rujira.Enum.reduce_while_ok(&new(pair, &1))
@@ -104,8 +108,9 @@ defmodule Rujira.Fin.Order do
   """
   @spec load(Pair.t(), side(), Price.order(), String.t(), Node.opts()) ::
           {:ok, t()} | {:error, term()}
-  def load(%{address: address}, side, price, owner, opts \\ []),
-    do: load_at(address, side, price, owner, opts)
+  def load(%{address: address}, side, price, owner, opts \\ []) do
+    with {:ok, opts} <- Cache.pin(opts), do: load_at(address, side, price, owner, opts)
+  end
 
   @doc """
   Lists every order an `address` holds, across every pair.
@@ -115,7 +120,8 @@ defmodule Rujira.Fin.Order do
   """
   @spec list_all_pairs(String.t(), Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def list_all_pairs(address, opts \\ []) do
-    with {:ok, pairs} <- Pair.list(opts),
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, pairs} <- Pair.list(opts),
          {:ok, orders} <-
            Rujira.Enum.reduce_async_while_ok(
              pairs,
@@ -136,7 +142,8 @@ defmodule Rujira.Fin.Order do
   @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def from_id(id, opts \\ []) do
     with [pair_address, side, price, owner] <- String.split(id, "/"),
-         {:ok, price} <- Price.parse_order(price) do
+         {:ok, price} <- Price.parse_order(price),
+         {:ok, opts} <- Cache.pin(opts) do
       load_at(pair_address, String.to_existing_atom(side), price, owner, opts)
     else
       {:error, _} = err -> err
@@ -205,57 +212,64 @@ defmodule Rujira.Fin.Order do
   defp deviation(%Price.Oracle{deviation: deviation}), do: deviation
   defp deviation(%Price.Fixed{}), do: nil
 
-  @doc """
-  Memoized fetch of a single order by `(owner, side, price)` on a contract.
-
-  Invalidate with `Memoize.invalidate(Rujira.Fin.Order, :query, [address, owner, side, price])`.
-  """
+  @doc "A single order by `(owner, side, price)` on a contract."
   @spec query(String.t(), String.t(), side(), Price.order()) ::
           {:ok, map()} | {:error, term()}
-  defmemo query(address, owner, side, price) do
-    fetch_order(address, owner, side, price, [])
-  end
+  def query(address, owner, side, price), do: query(address, owner, side, price, [])
 
   @doc """
-  As `query/4`, read at `opts[:height]` when one is given - a height read is
-  never cached. Without a `:height` this is `query/4`, so the other opts are not
-  applied.
+  As `query/4`, read at `opts[:height]` when given.
+
+  A fixed price is the contract's own state; an oracle price moves with the
+  oracle, so it is read per block - see `order_sources/2`.
   """
   @spec query(String.t(), String.t(), side(), Price.order(), Node.opts()) ::
           {:ok, map()} | {:error, term()}
   def query(address, owner, side, price, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_order(address, owner, side, price, opts) end,
-      fn -> query(address, owner, side, price) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :query, [address, owner, side, Price.to_query(price)]},
+        order_sources(address, price),
+        opts,
+        fn _height -> fetch_order(address, owner, side, price, opts) end
+      )
+    end
   end
 
   @doc """
-  Memoized full fetch of orders on a contract, optionally filtered by `owner`.
+  Every order on a contract, optionally filtered by `owner`.
 
   Returns the flat list of raw order maps from the chain, paginated internally.
-  Invalidate with `Memoize.invalidate(Rujira.Fin.Order, :query_orders, [contract, owner])`.
   """
   @spec query_orders(String.t(), String.t() | nil) :: {:ok, [map()]} | {:error, term()}
-  defmemo query_orders(contract, owner) do
-    query_orders_page(contract, owner, nil, [])
-  end
+  def query_orders(contract, owner), do: query_orders(contract, owner, [])
 
   @doc """
-  As `query_orders/2`, read at `opts[:height]` when one is given - a height read
-  is never cached. Without a `:height` this is `query_orders/2`, so the other
-  opts are not applied.
+  As `query_orders/2`, read at `opts[:height]` when given.
+
+  A page carries whatever orders the contract holds, so one oracle-priced order
+  on it moves the whole page: it is read per block rather than against the
+  contract alone.
   """
   @spec query_orders(String.t(), String.t() | nil, Node.opts()) ::
           {:ok, [map()]} | {:error, term()}
   def query_orders(contract, owner, opts) do
-    Node.at_height(
-      opts,
-      fn -> query_orders_page(contract, owner, nil, opts) end,
-      fn -> query_orders(contract, owner) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :query_orders, [contract, owner]},
+        [:per_block],
+        opts,
+        fn _height ->
+          query_orders_page(contract, owner, nil, opts)
+        end
+      )
+    end
   end
+
+  # An oracle price is wiped and rewritten each block with no event of its own,
+  # so such an order is only ever valid at the height it was read at.
+  defp order_sources(_address, %Price.Oracle{}), do: [:per_block]
+  defp order_sources(address, %Price.Fixed{}), do: [{:contract, address}]
 
   defp fetch_order(address, owner, side, price, opts) do
     Contracts.query_state_smart(

@@ -13,10 +13,11 @@ defmodule Rujira.Prices do
 
   Defaults to `Rujira.Prices.Default`.
 
-  ## Cache TTL
+  ## Caching
 
-  The default implementation memoizes prices using the global cache TTL.
-  See `Rujira.cache_ttl/0`.
+  This module dispatches; it caches nothing of its own. The built-in
+  `Rujira.Prices.Default` reads through `Rujira.Cache`, at `opts[:height]` or -
+  without one - at the head.
 
   ## Query options
 
@@ -63,10 +64,10 @@ defmodule Rujira.Prices do
   def get(ticker, opts) do
     impl = impl()
 
-    if exports?(impl, :get, 2) do
-      impl.get(ticker, opts)
-    else
-      Node.at_height(opts, fn -> {:error, :height_not_supported} end, fn -> impl.get(ticker) end)
+    cond do
+      exports?(impl, :get, 2) -> impl.get(ticker, opts)
+      Keyword.get(opts, :height) -> {:error, :height_not_supported}
+      true -> impl.get(ticker)
     end
   end
 
@@ -82,14 +83,10 @@ defmodule Rujira.Prices do
   def value_usd(ticker, amount, decimals \\ 8, opts \\ []) do
     impl = impl()
 
-    if exports?(impl, :value_usd, 4) do
-      impl.value_usd(ticker, amount, decimals, opts)
-    else
-      Node.at_height(
-        opts,
-        fn -> {:error, :height_not_supported} end,
-        fn -> impl.value_usd(ticker, amount, decimals) end
-      )
+    cond do
+      exports?(impl, :value_usd, 4) -> impl.value_usd(ticker, amount, decimals, opts)
+      Keyword.get(opts, :height) -> {:error, :height_not_supported}
+      true -> impl.value_usd(ticker, amount, decimals)
     end
   end
 

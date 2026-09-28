@@ -3,14 +3,18 @@ defmodule Rujira.Fin.Book do
   Order book for the FIN protocol.
 
   Struct, construction, and queries. Use `Rujira.Fin` as the public API.
+
+  A book is read per block - it moves with the oracle and with the market
+  makers it quotes, neither of which announces itself with an event of its own -
+  so `query/1,2` is cached per `Rujira.Cache` at its own height, resolved at
+  `opts[:height]` or - without one - at the head.
   """
 
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Fin.Pair
   alias Rujira.Math
   alias Rujira.Node
-
-  use Memoize
 
   @max_limit 255
 
@@ -90,7 +94,8 @@ defmodule Rujira.Fin.Book do
   @spec load(Pair.t(), non_neg_integer() | nil, Node.opts()) ::
           {:ok, Pair.t()} | {:error, term()}
   def load(pair, limit \\ nil, opts \\ []) do
-    with {:ok, res} <- query(pair.address, opts),
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, res} <- query(pair.address, opts),
          {:ok, book} <- new(pair.address, res) do
       {:ok, %{pair | book: take(book, limit)}}
     end
@@ -103,7 +108,8 @@ defmodule Rujira.Fin.Book do
   """
   @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def from_id(id, opts \\ []) do
-    with {:ok, res} <- query(id, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, res} <- query(id, opts) do
       new(id, res)
     end
   end
@@ -154,24 +160,18 @@ defmodule Rujira.Fin.Book do
     %{book | bids: Enum.take(bids, limit), asks: Enum.take(asks, limit)}
   end
 
-  @doc """
-  Memoized fetch of a contract's raw order book.
-
-  Invalidate with `Memoize.invalidate(Rujira.Fin.Book, :query, [contract])`.
-  """
+  @doc "A contract's raw order book."
   @spec query(String.t()) :: {:ok, map() | nil} | {:error, term()}
-  defmemo query(contract) do
-    fetch(contract, [])
-  end
+  def query(contract), do: query(contract, [])
 
-  @doc """
-  As `query/1`, read at `opts[:height]` when one is given - a height read is
-  never cached. Without a `:height` this is `query/1`, so the other opts are not
-  applied.
-  """
+  @doc "As `query/1`, read at `opts[:height]` when given."
   @spec query(String.t(), Node.opts()) :: {:ok, map() | nil} | {:error, term()}
   def query(contract, opts) do
-    Node.at_height(opts, fn -> fetch(contract, opts) end, fn -> query(contract) end)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :query, [contract]}, [:per_block], opts, fn _height ->
+        fetch(contract, opts)
+      end)
+    end
   end
 
   defp fetch(contract, opts) do

@@ -3,18 +3,23 @@ defmodule Rujira.Fin.Pair do
   Trading pair for the FIN protocol.
 
   Struct, construction, and queries. Use `Rujira.Fin` as the public API.
+
+  `list/0,1` is cached per `Rujira.Cache`, against the code registry and every
+  pair it resolved, and read at `opts[:height]` or - without one - at the head.
+  `denom_for_ticker`, `find_stable`, `find_default`, `find_by_denoms` and
+  `from_id` derive from that one list in memory, so they cost no node read of
+  their own.
   """
 
   alias Rujira.Assets
   alias Rujira.Assets.Asset
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Deployments
   alias Rujira.Fin.Book
   alias Rujira.Math
   alias Rujira.Node
   alias Rujira.Thorchain.Oracle
-
-  use Memoize
 
   # --- Struct ---
 
@@ -95,28 +100,33 @@ defmodule Rujira.Fin.Pair do
   # --- Queries ---
 
   @spec get(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
-  def get(address, opts \\ []), do: Contracts.get({__MODULE__, address}, opts)
-
-  @doc """
-  Memoized list of all configured FIN pairs.
-
-  Invalidate with `Memoize.invalidate(Rujira.Fin.Pair, :list)`.
-  """
-  @spec list() :: {:ok, [t()]} | {:error, term()}
-  defmemo list do
-    fetch_list([])
+  def get(address, opts \\ []) do
+    with {:ok, opts} <- Cache.pin(opts), do: Contracts.get({__MODULE__, address}, opts)
   end
 
+  @doc "Every configured FIN pair."
+  @spec list() :: {:ok, [t()]} | {:error, term()}
+  def list, do: list([])
+
   @doc """
-  As `list/0`, read at `opts[:height]` when one is given - a height read is never
-  cached. Without a `:height` this is `list/0`, so the other opts are not applied.
+  As `list/0`, read at `opts[:height]` when given.
+
+  Each pair is read concurrently; `opts[:fan_out]` sets the per-pair timeout
+  and how many run at once - see `Rujira.Enum`.
   """
   @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
-  def list(opts), do: Node.at_height(opts, fn -> fetch_list(opts) end, &list/0)
+  def list(opts) do
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :list, []}, &list_sources/1, opts, fn _height ->
+        fetch_list(opts)
+      end)
+    end
+  end
 
   @spec find_stable(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def find_stable(base_denom, opts \\ []) do
-    with {:ok, pairs} <- list(opts),
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, pairs} <- list(opts),
          %__MODULE__{} = pair <- Enum.find(pairs, &stable_pair?(&1, base_denom)) do
       {:ok, pair}
     else
@@ -131,7 +141,8 @@ defmodule Rujira.Fin.Pair do
   """
   @spec find_default(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def find_default(base_denom, opts \\ []) do
-    with {:ok, pairs} <- list(opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, pairs} <- list(opts) do
       pick_default(pairs, base_denom)
     end
   end
@@ -163,26 +174,17 @@ defmodule Rujira.Fin.Pair do
     do: Assets.to_native(asset_base) == {:ok, base_denom}
 
   @doc """
-  Memoized lookup of the preferred base denom for a ticker.
+  The preferred base denom for a ticker.
 
-  Invalidate with `Memoize.invalidate(Rujira.Fin.Pair, :denom_for_ticker, [ticker])`.
-  """
-  @spec denom_for_ticker(String.t()) :: {:ok, String.t()} | {:error, :not_found}
-  defmemo denom_for_ticker(ticker) do
-    fetch_denom_for_ticker(ticker, [])
-  end
-
-  @doc """
-  As `denom_for_ticker/1`, read at `opts[:height]` when one is given - a height
-  read is never cached.
+  Derived from `list/1` - the list is what is cached, not this lookup.
   """
   @spec denom_for_ticker(String.t(), Node.opts()) :: {:ok, String.t()} | {:error, :not_found}
-  def denom_for_ticker(ticker, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_denom_for_ticker(ticker, opts) end,
-      fn -> denom_for_ticker(ticker) end
-    )
+  def denom_for_ticker(ticker, opts \\ []) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, pairs} <- list(opts),
+         {:ok, denoms} <- Rujira.Enum.reduce_while_ok(pairs, &Assets.to_native(&1.asset_base)) do
+      pick_denom(denoms, ticker)
+    end
   end
 
   @doc false
@@ -204,26 +206,24 @@ defmodule Rujira.Fin.Pair do
   end
 
   @doc """
-  Memoized pair lookup by base + quote denom.
+  The pair quoting `base_denom` against `quote_denom`.
 
-  Invalidate with `Memoize.invalidate(Rujira.Fin.Pair, :find_by_denoms, [base, quote])`.
-  """
-  @spec find_by_denoms(String.t(), String.t()) :: {:ok, t()} | {:error, term()}
-  defmemo find_by_denoms(base_denom, quote_denom) do
-    fetch_find_by_denoms(base_denom, quote_denom, [])
-  end
-
-  @doc """
-  As `find_by_denoms/2`, read at `opts[:height]` when one is given - a height
-  read is never cached.
+  Derived from `list/1` - the list is what is cached, not this lookup.
   """
   @spec find_by_denoms(String.t(), String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
-  def find_by_denoms(base_denom, quote_denom, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_find_by_denoms(base_denom, quote_denom, opts) end,
-      fn -> find_by_denoms(base_denom, quote_denom) end
-    )
+  def find_by_denoms(base_denom, quote_denom, opts \\ []) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, pairs} <- list(opts),
+         %__MODULE__{} = pair <-
+           Enum.find(
+             pairs,
+             &(base_denom?(&1, base_denom) and quote_denom?(&1, quote_denom))
+           ) do
+      {:ok, pair}
+    else
+      nil -> {:error, :not_found}
+      err -> err
+    end
   end
 
   @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
@@ -232,7 +232,8 @@ defmodule Rujira.Fin.Pair do
   def from_id("thor" <> _ = address, opts), do: get(address, opts)
 
   def from_id(assets, opts) do
-    with {:ok, pair} <- lookup(assets, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, pair} <- lookup(assets, opts) do
       {:ok, %{pair | id: assets}}
     end
   end
@@ -256,28 +257,10 @@ defmodule Rujira.Fin.Pair do
   defp fetch_target(%{module: module, address: address}, opts),
     do: Contracts.get({module, address}, opts)
 
-  defp fetch_denom_for_ticker(ticker, opts) do
-    with {:ok, pairs} <- list(opts),
-         {:ok, denoms} <-
-           Rujira.Enum.reduce_while_ok(pairs, fn pair ->
-             Assets.to_native(pair.asset_base)
-           end) do
-      pick_denom(denoms, ticker)
-    end
-  end
-
-  defp fetch_find_by_denoms(base_denom, quote_denom, opts) do
-    with {:ok, pairs} <- list(opts),
-         %__MODULE__{} = pair <-
-           Enum.find(
-             pairs,
-             &(base_denom?(&1, base_denom) and quote_denom?(&1, quote_denom))
-           ) do
-      {:ok, pair}
-    else
-      nil -> {:error, :not_found}
-      err -> err
-    end
+  # The list is only as valid as the registry it was read from and the pairs it
+  # resolved, so one pair's own event invalidates the whole list.
+  defp list_sources(pairs) do
+    [:contract_registry | for(%{address: a} <- pairs, is_binary(a), do: {:contract, a})]
   end
 
   defp quote_denom?(%__MODULE__{asset_quote: asset_quote}, quote_denom),

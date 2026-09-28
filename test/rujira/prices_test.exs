@@ -8,6 +8,9 @@ defmodule Rujira.PricesTest do
   A position read at a height has to be valued at that height, so every price
   lookup carries `opts` down to the node. An implementation that cannot serve a
   height says so - it never answers with today's price.
+
+  `Rujira.Prices.Default` reads through `Rujira.Cache`, whose stores and head
+  are global, so this case runs sync and starts from an empty cache.
   """
   use Rujira.Test.CacheCase, async: false
 
@@ -61,10 +64,8 @@ defmodule Rujira.PricesTest do
     on_exit(fn ->
       Application.put_env(:rujira_ex, :prices, prices)
       Application.put_env(:rujira_ex, :node, node)
-      Memoize.invalidate()
     end)
 
-    Memoize.invalidate()
     :ok
   end
 
@@ -245,6 +246,48 @@ defmodule Rujira.PricesTest do
       MockNode.expect(fn %QueryOraclePriceRequest{} -> {:error, @unavailable} end)
 
       assert {:error, @unavailable} = Prices.value_usd("ATOM", 100)
+    end
+
+    test "a second lookup at the same height is served from the cache" do
+      MockNode.expect(fn %QueryOraclePriceRequest{symbol: "ATOM"} ->
+        {:ok, %{price: %{price: "1.5"}}}
+      end)
+
+      assert {:ok, _} = Prices.get("ATOM", height: @height)
+      assert {:ok, _} = Prices.get("ATOM", height: @height)
+
+      assert [@metadata] = metadata_of_every_call()
+    end
+
+    test "a price is only the price of its own height" do
+      MockNode.expect(fn %QueryOraclePriceRequest{symbol: "ATOM"} ->
+        {:ok, %{price: %{price: "1.5"}}}
+      end)
+
+      assert {:ok, _} = Prices.get("ATOM", height: @height)
+      assert {:ok, _} = Prices.get("ATOM", height: @height - 1)
+
+      assert [_, _] = metadata_of_every_call()
+    end
+
+    test "an error is never cached, so the next lookup retries it" do
+      MockNode.expect(fn %QueryOraclePriceRequest{} -> {:error, @unavailable} end)
+
+      assert {:error, @unavailable} = Prices.get("ATOM", height: @height)
+
+      MockNode.expect(fn %QueryOraclePriceRequest{} -> {:ok, %{price: %{price: "1.5"}}} end)
+
+      assert {:ok, price} = Prices.get("ATOM", height: @height)
+      assert Decimal.equal?(price, Decimal.new("1.5"))
+    end
+
+    test "a heightless lookup is at the head, and has none before the first advance" do
+      MockNode.expect(fn %QueryOraclePriceRequest{} -> {:ok, %{price: %{price: "1.5"}}} end)
+
+      assert {:ok, _} = Prices.get("ATOM")
+
+      reset_cache()
+      assert {:error, :no_head} = Prices.get("ATOM")
     end
   end
 
