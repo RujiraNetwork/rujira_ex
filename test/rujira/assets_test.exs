@@ -1,5 +1,9 @@
 defmodule Rujira.AssetsTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  Denom metadata is cached as an identity fact and the cache is global, so this
+  case runs sync and starts from an empty one.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Cosmos.Bank.V1beta1.DenomUnit
   alias Cosmos.Bank.V1beta1.Metadata, as: DenomMetadata
@@ -610,14 +614,7 @@ defmodule Rujira.AssetsTest do
   end
 
   describe "Metadata.load_metadata/1" do
-    @denom "x/memoized-metadata-test"
-
-    setup do
-      invalidate = fn -> Memoize.invalidate(Metadata, :do_load_metadata, [@denom]) end
-      invalidate.()
-      on_exit(invalidate)
-      :ok
-    end
+    @denom "x/cached-metadata-test"
 
     test "queries the node once per denom, and again after the documented invalidation" do
       {:ok, calls} = Agent.start_link(fn -> 0 end)
@@ -642,10 +639,23 @@ defmodule Rujira.AssetsTest do
       assert {:ok, %Metadata{symbol: "MEMO"}} = Metadata.load_metadata(@denom)
       assert Agent.get(calls, & &1) == 1
 
-      Memoize.invalidate(Metadata, :do_load_metadata, [@denom])
+      Rujira.Cache.invalidate_all()
 
       assert {:ok, %Metadata{symbol: "MEMO"}} = Metadata.load_metadata(@denom)
       assert Agent.get(calls, & &1) == 2
+    end
+
+    test "the node holding no metadata for a denom is a cached fact" do
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: @denom} ->
+        Agent.update(calls, &(&1 + 1))
+        no_denom_metadata(@denom)
+      end)
+
+      assert {:error, :not_found} = Metadata.load_metadata(@denom)
+      assert {:error, :not_found} = Metadata.load_metadata(@denom)
+      assert Agent.get(calls, & &1) == 1
     end
 
     test "returns the node's error unchanged when the query fails" do
@@ -654,7 +664,7 @@ defmodule Rujira.AssetsTest do
       assert {:error, :not_found} = Metadata.load_metadata(@denom)
     end
 
-    test "a failed query is not memoized, so a later call retries and succeeds" do
+    test "a failed query is not cached, so a later call retries and succeeds" do
       {:ok, calls} = Agent.start_link(fn -> 0 end)
 
       MockNode.expect(fn %QueryDenomMetadataRequest{denom: @denom} ->
@@ -700,7 +710,7 @@ defmodule Rujira.AssetsTest do
       refute Keyword.has_key?(opts, :metadata)
     end
 
-    test "Metadata.load_metadata/2 reuses the memo across a plain read and a height read" do
+    test "Metadata.load_metadata/2 reuses the cached fact across a plain and a height read" do
       expect_metadata_once("BRUNE")
 
       assert {:ok, %Metadata{symbol: "BRUNE"}} = Metadata.load_metadata("x/height-test-memo")

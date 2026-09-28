@@ -8,9 +8,9 @@ defmodule Rujira.Assets.ChainAssetsTest do
   that broke. Refresh it with `scripts/refresh_chain_assets.exs`.
   """
 
-  # Not async: the metadata memo is global, and this reads the whole chain
+  # Not async: the metadata cache is global, and this reads the whole chain
   # through it.
-  use ExUnit.Case, async: false
+  use Rujira.Test.CacheCase, async: false
 
   alias Cosmos.Bank.V1beta1.DenomUnit
   alias Cosmos.Bank.V1beta1.Metadata, as: DenomMetadata
@@ -27,8 +27,6 @@ defmodule Rujira.Assets.ChainAssetsTest do
   @pools @chain["pools"]
 
   setup do
-    invalidate()
-    on_exit(&invalidate/0)
     serve_chain_metadata()
   end
 
@@ -230,6 +228,4 @@ defmodule Rujira.Assets.ChainAssetsTest do
        }
      }}
   end
-
-  defp invalidate, do: Memoize.invalidate(Metadata, :do_load_metadata)
 end

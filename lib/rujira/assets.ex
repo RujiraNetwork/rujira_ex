@@ -12,11 +12,11 @@ defmodule Rujira.Assets do
 
   Denom metadata is token identity, not chain state, so `load_metadata/2` (and
   anything built on it, like `from_denom/2` and `from_id/2`) always reads it at
-  latest and memoized, even when the caller passes `:height` for the rest of the
-  read. See "Tokens" in `guides/conventions.md`.
+  latest - cached per `Rujira.Cache` as an identity fact - even when the caller
+  passes `:height` for the rest of the read. See "Tokens" in
+  `guides/conventions.md`.
   """
 
-  alias GRPC.RPCError
   alias Rujira.Assets.Asset
   alias Rujira.Assets.Metadata
   alias Rujira.Node
@@ -275,8 +275,8 @@ defmodule Rujira.Assets do
 
   1. the denom metadata THORChain holds for it — its symbol is the asset's
      symbol and ticker, and the asset carries the metadata, decimals included.
-     The read is always at latest and memoized, so `opts[:height]` is ignored
-     (see `Rujira.Assets.Metadata`);
+     The read is always at latest and cached as an identity fact, so
+     `opts[:height]` is ignored (see `Rujira.Assets.Metadata`);
   2. when the node answers that it has no metadata for the denom, the denoms
      Rujira mints itself are named here: `x/brune` is `bRUNE`, and a staking
      receipt `x/staking-<bond denom>` takes its bond denom's ticker prefixed
@@ -381,7 +381,7 @@ defmodule Rujira.Assets do
       {:ok, %Metadata{}} ->
         without_metadata(denom, opts)
 
-      {:error, %RPCError{status: 5, message: "client metadata for denom" <> _}} ->
+      {:error, :not_found} ->
         without_metadata(denom, opts)
 
       {:error, error} ->

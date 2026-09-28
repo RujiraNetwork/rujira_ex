@@ -44,6 +44,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed (breaking)
 
+- `Rujira.Contracts`, `Rujira.Deployments`, `Rujira.Assets.Metadata` and
+  `Rujira.Thorchain.Block` read through `Rujira.Cache` instead of memoizing:
+  every read resolves at `opts[:height]` or, without one, at the head the
+  consumer moves with `Rujira.Node.advance/1` - so a heightless read before the
+  first `advance/1` is `{:error, :no_head}`, and a height read is now cached
+  rather than always reaching the node. Blocks invalidate what they changed;
+  `Rujira.Cache.invalidate_all/0` is the only fallback. With it:
+  - `Rujira.Contracts.code/1,2` is removed - it was `code_info/1,2` under
+    another name.
+  - `Rujira.Deployments.invalidate/0` is removed. `get_target`, `from_address`,
+    `from_id`, `list_all_targets` and `list_targets` derive from the one cached
+    `contract_infos/0,1` read, so there is nothing of their own to invalidate.
+  - `Rujira.Contracts.code_info/1,2` is `{:error, :not_found}` for a code id
+    the node holds no code under, cached as the fact it is, rather than the
+    node's gRPC error.
+  - `Rujira.Assets.Metadata.load_metadata/2` is `{:error, :not_found}` where it
+    returned the node's "no metadata for denom" error, and caches that fact.
+    `Rujira.Assets.from_denom/2` and `from_id/2` are unchanged: a denom the
+    node holds no metadata for is still named here.
+  - `Rujira.Thorchain.Block.get/2` no longer expires a cached block on the
+    `block_cache_ttl` window; a block is held at its own height, and how many
+    are held is the cache's `retention`.
 - A token-factory (`x/…`) denom takes its symbol, ticker and decimals from the
   denom metadata THORChain holds for it, and the `Asset` carries that metadata.
   A denom the node holds no metadata for is still named here: `x/brune` is

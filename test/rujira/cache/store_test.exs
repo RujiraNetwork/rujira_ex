@@ -20,6 +20,7 @@ defmodule Rujira.Cache.StoreTest do
 
   setup do
     Cache.reset!()
+    on_exit(&Rujira.Test.CacheCase.reset!/0)
     :ok
   end
 

@@ -1,5 +1,10 @@
 defmodule Rujira.DeploymentsTest do
-  use ExUnit.Case, async: false
+  @moduledoc """
+  `contract_infos/1` is the module's one node read and is cached per
+  `Rujira.Cache`; every other lookup derives from it. The cache is global, so
+  this case runs sync and starts from an empty one.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Deployments
   alias Rujira.Fin.Pair
@@ -22,8 +27,6 @@ defmodule Rujira.DeploymentsTest do
       else
         Application.delete_env(:rujira_ex, :protocol_modules)
       end
-
-      Deployments.invalidate()
     end)
 
     :ok
@@ -34,8 +37,6 @@ defmodule Rujira.DeploymentsTest do
       Application.put_env(:rujira_ex, :protocol_modules, %{
         "rujira-thorchain-swap" => CustomStrategy
       })
-
-      Deployments.invalidate()
 
       MockNode.expect(fn %QueryContractInfosRequest{} ->
         {:ok,
@@ -51,8 +52,6 @@ defmodule Rujira.DeploymentsTest do
     end
 
     test "built-in defaults still resolve without a consumer override" do
-      Deployments.invalidate()
-
       MockNode.expect(fn %QueryContractInfosRequest{} ->
         {:ok,
          %{
@@ -74,8 +73,6 @@ defmodule Rujira.DeploymentsTest do
     end
 
     test "rujira-revenue resolves to Rujira.Revenue.Converter by default" do
-      Deployments.invalidate()
-
       MockNode.expect(fn %QueryContractInfosRequest{} ->
         {:ok,
          %{
@@ -90,8 +87,6 @@ defmodule Rujira.DeploymentsTest do
     end
 
     test "rujira-ghost-credit resolves to Rujira.Ghost.Credit by default" do
-      Deployments.invalidate()
-
       MockNode.expect(fn %QueryContractInfosRequest{} ->
         {:ok,
          %{
@@ -112,8 +107,6 @@ defmodule Rujira.DeploymentsTest do
 
   describe "get_target/1 and list_targets/1" do
     test "get_target/1 returns {:error, :not_found} for an unmatched module" do
-      Deployments.invalidate()
-
       MockNode.expect(fn %QueryContractInfosRequest{} ->
         {:ok, %{infos: []}}
       end)
@@ -122,8 +115,6 @@ defmodule Rujira.DeploymentsTest do
     end
 
     test "get_target/1 returns {:ok, target} for a matched module" do
-      Deployments.invalidate()
-
       MockNode.expect(fn %QueryContractInfosRequest{} ->
         {:ok,
          %{infos: [%ContractInfo{address: "thor1fin", contract: "rujira-fin", version: "1"}]}}
@@ -133,8 +124,6 @@ defmodule Rujira.DeploymentsTest do
     end
 
     test "from_id/1 returns the same target as the one it was resolved from" do
-      Deployments.invalidate()
-
       MockNode.expect(fn %QueryContractInfosRequest{} ->
         {:ok,
          %{infos: [%ContractInfo{address: "thor1fin", contract: "rujira-fin", version: "1"}]}}
@@ -145,16 +134,12 @@ defmodule Rujira.DeploymentsTest do
     end
 
     test "get_target/1 propagates an underlying query error rather than :not_found" do
-      Deployments.invalidate()
-
       MockNode.expect(fn %QueryContractInfosRequest{} -> {:error, :boom} end)
 
       assert {:error, :boom} = Deployments.get_target(Pair)
     end
 
     test "list_targets/1 returns {:ok, []} when legitimately none match" do
-      Deployments.invalidate()
-
       MockNode.expect(fn %QueryContractInfosRequest{} ->
         {:ok,
          %{infos: [%ContractInfo{address: "thor1fin", contract: "rujira-fin", version: "1"}]}}
@@ -164,8 +149,6 @@ defmodule Rujira.DeploymentsTest do
     end
 
     test "list_targets/1 propagates an underlying query error rather than []" do
-      Deployments.invalidate()
-
       MockNode.expect(fn %QueryContractInfosRequest{} -> {:error, :boom} end)
 
       assert {:error, :boom} = Deployments.list_targets(Strategy)
@@ -197,9 +180,28 @@ defmodule Rujira.DeploymentsTest do
       assert Keyword.get(opts, :metadata) == @metadata
     end
 
-    test "a height read is never cached, so two calls reach the node twice" do
+    test "the second read at a height is served from the cache" do
       assert {:ok, _} = Deployments.list_all_targets(height: @height)
       assert {:ok, _} = Deployments.list_all_targets(height: @height)
+
+      assert_received {:mock_node, %QueryContractInfosRequest{}, _}
+      refute_received {:mock_node, %QueryContractInfosRequest{}, _}
+    end
+
+    test "every derived lookup shares the one cached contract_infos read" do
+      assert {:ok, _} = Deployments.contract_infos(height: @height)
+      assert {:ok, _} = Deployments.list_all_targets(height: @height)
+      assert {:ok, _} = Deployments.list_targets(Pair, height: @height)
+      assert {:ok, _} = Deployments.get_target(Pair, height: @height)
+      assert {:ok, _} = Deployments.from_address("thor1fin", height: @height)
+
+      assert_received {:mock_node, %QueryContractInfosRequest{}, _}
+      refute_received {:mock_node, %QueryContractInfosRequest{}, _}
+    end
+
+    test "another height reaches the node again" do
+      assert {:ok, _} = Deployments.list_all_targets(height: @height)
+      assert {:ok, _} = Deployments.list_all_targets(height: @height - 1)
 
       assert_received {:mock_node, %QueryContractInfosRequest{}, _}
       assert_received {:mock_node, %QueryContractInfosRequest{}, _}
@@ -225,6 +227,19 @@ defmodule Rujira.DeploymentsTest do
 
       assert_received {:mock_node, %QueryContractInfosRequest{}, opts}
       assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "a heightless read is at the head, and has none before the first advance" do
+      assert {:ok, [%{address: "thor1fin"}]} = Deployments.list_all_targets()
+
+      assert_received {:mock_node, %QueryContractInfosRequest{}, opts}
+
+      assert Keyword.get(opts, :metadata) == %{
+               "x-cosmos-block-height" => Integer.to_string(default_head())
+             }
+
+      reset_cache()
+      assert {:error, :no_head} = Deployments.list_all_targets()
     end
 
     test "contract_infos/1 forwards the height" do

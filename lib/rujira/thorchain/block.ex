@@ -41,24 +41,16 @@ defmodule Rujira.Thorchain.Block do
   ## Caching
 
   A block at a height never changes, so unlike the live queries here an integer
-  height *is* cached - it is the one read of the past that cannot go stale. The
-  TTL therefore bounds memory, not staleness, and is configured on its own:
+  height *is* cached - it is the one read of the past that cannot go stale. It
+  is held in `Rujira.Cache`'s exact store at the height it is: a block is large,
+  so it is never carried over to another height and never kept as an identity
+  fact, and how many are held at once is the cache's `retention`.
 
-      config :rujira_ex, block_cache_ttl: 60_000
-
-  `:latest` is never cached, and a failed read is never cached - the entry is
-  invalidated so the next call retries. A cached read applies no other `opts`:
-  the cache key is the height alone, so
-  `Memoize.invalidate(Rujira.Thorchain.Block, :do_get, [height])` drops one
-  block.
-
-  When an expired entry's memory is released depends on the configured Memoize
-  strategy. Under `Memoize.CacheStrategy.Eviction` any read clears every
-  expired entry. Under the default strategy a read only clears the key being
-  read, so a run of one-off height reads is released by
-  `Memoize.garbage_collect/0`.
+  `:latest` is the clock a consumer reads new heights from, so it is never
+  cached, and a failed read is never cached either - the next call retries.
   """
 
+  alias Rujira.Cache
   alias Rujira.Events
   alias Rujira.Logger
   alias Rujira.Node
@@ -70,8 +62,6 @@ defmodule Rujira.Thorchain.Block do
   alias Thorchain.Types.QueryBlockRequest
   alias Thorchain.Types.QueryBlockResponse
   alias Thorchain.Types.QueryBlockTx
-
-  use Memoize
 
   # --- Struct ---
 
@@ -134,7 +124,7 @@ defmodule Rujira.Thorchain.Block do
   @doc """
   The block at `height`, or the latest block.
 
-  An integer height is memoized (see the moduledoc on caching); `:latest` reads
+  An integer height is cached (see the moduledoc on caching); `:latest` reads
   the node every time. A height outside `1..9_223_372_036_854_775_807` is
   `{:error, :invalid_height}` without reaching the node, and a height the node
   cannot serve is `{:error, {:height_unavailable, height}}`.
@@ -144,29 +134,19 @@ defmodule Rujira.Thorchain.Block do
 
   def get(:latest, opts), do: fetch(:latest, opts)
 
-  def get(height, _opts)
+  def get(height, opts)
       when is_integer(height) and height >= @min_height and height <= @max_height do
-    cached(height)
+    # The height asked for *is* this read's height, so it needs no head: a
+    # block can be read before the first `Rujira.Node.advance/1`, which is what
+    # advancing the head is built on.
+    opts = Keyword.put(opts, :height, height)
+
+    Cache.fetch({__MODULE__, :get, [height]}, [:per_block], opts, fn h -> fetch(h, opts) end)
   end
 
   def get(_height, _opts), do: {:error, :invalid_height}
 
   # --- Private ---
-
-  defmemop do_get(height), expires_in: Rujira.block_cache_ttl() do
-    fetch(height, [])
-  end
-
-  defp cached(height) do
-    case do_get(height) do
-      {:ok, block} ->
-        {:ok, block}
-
-      {:error, _} = err ->
-        Memoize.invalidate(__MODULE__, :do_get, [height])
-        err
-    end
-  end
 
   defp fetch(height, opts) do
     request = %QueryBlockRequest{height: request_height(height)}

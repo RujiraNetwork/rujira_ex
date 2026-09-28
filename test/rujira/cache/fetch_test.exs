@@ -21,7 +21,7 @@ defmodule Rujira.Cache.FetchTest do
 
   setup do
     Cache.reset!()
-    on_exit(fn -> Memoize.invalidate(Block) end)
+    on_exit(&Rujira.Test.CacheCase.reset!/0)
     :ok
   end
 
@@ -47,6 +47,24 @@ defmodule Rujira.Cache.FetchTest do
       assert :ok = Node.advance(100)
       assert {:ok, 100} = Cache.fetch(:key, @contract, [], fn height -> {:ok, height} end)
       assert {:ok, 42} = Cache.fetch(:other, @contract, [height: 42], fn h -> {:ok, h} end)
+    end
+  end
+
+  describe "pin/1" do
+    test "it puts the resolved height back into opts, and is a no-op on pinned opts" do
+      assert :ok = Node.advance(100)
+
+      assert {:ok, opts} = Cache.pin(fan_out: [timeout: 10])
+      assert Keyword.get(opts, :height) == 100
+      assert Keyword.get(opts, :fan_out) == [timeout: 10]
+
+      assert Cache.pin(opts) == {:ok, opts}
+      assert Cache.pin(height: 42) == {:ok, [height: 42]}
+    end
+
+    test "it fails exactly where scope/1 does" do
+      assert Cache.pin([]) == {:error, :no_head}
+      assert Cache.pin(height: "42") == {:error, :invalid_height}
     end
   end
 

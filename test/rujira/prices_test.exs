@@ -9,7 +9,7 @@ defmodule Rujira.PricesTest do
   lookup carries `opts` down to the node. An implementation that cannot serve a
   height says so - it never answers with today's price.
   """
-  use ExUnit.Case, async: false
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Prices
   alias Rujira.Test.MockNode

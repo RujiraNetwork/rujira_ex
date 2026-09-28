@@ -1,9 +1,9 @@
 defmodule Rujira.Thorchain.BlockTest do
   @moduledoc """
-  The block cache is global and the expiry test rewrites the TTL, so this case
-  runs sync and every cached read uses a height of its own.
+  The cache is global, so this case runs sync and every cached read uses a
+  height of its own.
   """
-  use ExUnit.Case, async: false
+  use Rujira.Test.CacheCase, async: false
 
   import ExUnit.CaptureLog
 
@@ -25,11 +25,6 @@ defmodule Rujira.Thorchain.BlockTest do
     message: "failed to load state at height 100004: version does not exist"
   }
   @other %GRPC.RPCError{status: 2, message: "boom"}
-
-  setup do
-    on_exit(fn -> Memoize.invalidate(Block) end)
-    :ok
-  end
 
   describe "new/1" do
     test "keeps the header's nanosecond time at microsecond precision" do
@@ -265,24 +260,27 @@ defmodule Rujira.Thorchain.BlockTest do
       assert [_, _] = drain()
     end
 
-    test "a cached block expires" do
+    test "a block is read at its own height, and needs no head" do
       height = 100_011
-      original = Application.get_env(:rujira_ex, :block_cache_ttl)
-      Application.put_env(:rujira_ex, :block_cache_ttl, 1)
 
-      on_exit(fn ->
-        case original do
-          nil -> Application.delete_env(:rujira_ex, :block_cache_ttl)
-          ttl -> Application.put_env(:rujira_ex, :block_cache_ttl, ttl)
-        end
-      end)
+      reset_cache()
+      MockNode.expect(fn %QueryBlockRequest{} -> {:ok, response(height)} end)
+
+      assert {:ok, %Block{height: ^height}} = Block.get(height)
+      assert [_] = drain()
+      assert {:ok, %Block{height: ^height}} = Block.get(height)
+      assert [] = drain()
+    end
+
+    test "invalidate_all drops a cached block" do
+      height = 100_012
 
       MockNode.expect(fn %QueryBlockRequest{} -> {:ok, response(height)} end)
 
       assert {:ok, _} = Block.get(height)
       assert [_] = drain()
 
-      Process.sleep(20)
+      Rujira.Cache.invalidate_all()
 
       assert {:ok, _} = Block.get(height)
       assert [_] = drain()

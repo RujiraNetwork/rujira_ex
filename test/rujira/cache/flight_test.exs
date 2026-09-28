@@ -15,6 +15,7 @@ defmodule Rujira.Cache.FlightTest do
 
   setup do
     Cache.reset!()
+    on_exit(&Rujira.Test.CacheCase.reset!/0)
     :ok
   end
 

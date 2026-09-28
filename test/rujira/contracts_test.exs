@@ -1,11 +1,16 @@
 defmodule Rujira.ContractsTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  Every read here goes through `Rujira.Cache`, whose stores and head are
+  global, so this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Cosmwasm.Wasm.V1.CodeInfoResponse
   alias Cosmwasm.Wasm.V1.QueryBuildAddressRequest
   alias Cosmwasm.Wasm.V1.QueryBuildAddressResponse
   alias Cosmwasm.Wasm.V1.QueryCodeRequest
   alias Cosmwasm.Wasm.V1.QueryCodeResponse
+  alias Cosmwasm.Wasm.V1.QueryContractsByCodeRequest
   alias Cosmwasm.Wasm.V1.QueryRawContractStateRequest
   alias Cosmwasm.Wasm.V1.QueryRawContractStateResponse
   alias Cosmwasm.Wasm.V1.QuerySmartContractStateRequest
@@ -41,14 +46,54 @@ defmodule Rujira.ContractsTest do
       assert Keyword.get(opts, :metadata) == @metadata
     end
 
-    test "two height reads are never cached, so both reach the node" do
+    test "a second read at the same height is served from the cache" do
       MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(%{"owner" => "thor1owner"}) end)
 
       assert {:ok, %Protocol{}} = Contracts.get({Protocol, "thor1contract"}, height: @height)
       assert {:ok, %Protocol{}} = Contracts.get({Protocol, "thor1contract"}, height: @height)
 
       assert_received {:mock_node, %QuerySmartContractStateRequest{}, _}
+      refute_received {:mock_node, %QuerySmartContractStateRequest{}, _}
+    end
+
+    test "another height is another fact, so it reaches the node again" do
+      MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(%{"owner" => "thor1owner"}) end)
+
+      assert {:ok, %Protocol{}} = Contracts.get({Protocol, "thor1contract"}, height: @height)
+      assert {:ok, %Protocol{}} = Contracts.get({Protocol, "thor1contract"}, height: @height - 1)
+
       assert_received {:mock_node, %QuerySmartContractStateRequest{}, _}
+      assert_received {:mock_node, %QuerySmartContractStateRequest{}, _}
+    end
+
+    test "an error is never cached, so the next read retries it" do
+      MockNode.expect(fn %{"config" => %{}} ->
+        case Process.get(:calls, 0) do
+          0 ->
+            Process.put(:calls, 1)
+            {:error, %GRPC.RPCError{status: 13, message: "boom"}}
+
+          _ ->
+            MockNode.ok(%{"owner" => "thor1owner"})
+        end
+      end)
+
+      assert {:error, %GRPC.RPCError{status: 13}} =
+               Contracts.get({Protocol, "thor1contract"}, height: @height)
+
+      assert {:ok, %Protocol{}} = Contracts.get({Protocol, "thor1contract"}, height: @height)
+    end
+
+    test "a heightless read is at the head, and has none before the first advance" do
+      MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(%{"owner" => "thor1owner"}) end)
+
+      assert {:ok, %Protocol{}} = Contracts.get({Protocol, "thor1contract"})
+
+      assert_received {:mock_node, %QuerySmartContractStateRequest{}, opts}
+      assert Keyword.get(opts, :metadata) == head_metadata()
+
+      reset_cache()
+      assert {:error, :no_head} = Contracts.get({Protocol, "thor1contract"})
     end
 
     test "a contract struct resolves to the same height read" do
@@ -94,6 +139,73 @@ defmodule Rujira.ContractsTest do
 
       assert_received {:mock_node, %QueryBuildAddressRequest{}, build_opts}
       assert Keyword.get(build_opts, :metadata) == @metadata
+    end
+
+    test "the built address is an identity fact, read once for both arities" do
+      MockNode.expect(fn
+        %QueryCodeRequest{code_id: 7} ->
+          {:ok, %QueryCodeResponse{code_info: %CodeInfoResponse{data_hash: <<1, 2>>}}}
+
+        %QueryBuildAddressRequest{code_hash: "0102"} ->
+          {:ok, %QueryBuildAddressResponse{address: "thor1built"}}
+      end)
+
+      assert {:ok, "thor1built"} =
+               Contracts.build_address("salt", "thor1creator", 7, height: @height)
+
+      assert "thor1built" = Contracts.build_address!("salt", "thor1creator", "0102")
+      assert "thor1built" = Contracts.build_address!("salt", "thor1creator", "0102", [])
+
+      assert_received {:mock_node, %QueryCodeRequest{}, _}
+      assert_received {:mock_node, %QueryBuildAddressRequest{}, _}
+      refute_received {:mock_node, %QueryBuildAddressRequest{}, _}
+    end
+  end
+
+  describe "code_info/2" do
+    test "a code the node holds is an identity fact, read once" do
+      MockNode.expect(fn %QueryCodeRequest{code_id: 7} ->
+        {:ok, %QueryCodeResponse{code_info: %CodeInfoResponse{data_hash: <<1, 2>>}}}
+      end)
+
+      assert {:ok, %CodeInfoResponse{}} = Contracts.code_info(7, height: @height)
+      assert {:ok, %CodeInfoResponse{}} = Contracts.code_info(7, height: @height)
+
+      assert_received {:mock_node, %QueryCodeRequest{}, _}
+      refute_received {:mock_node, %QueryCodeRequest{}, _}
+    end
+
+    test "a code id the node holds nothing under is a cached not_found" do
+      MockNode.expect(fn %QueryCodeRequest{code_id: 8} ->
+        {:error, %GRPC.RPCError{status: 5, message: "not found"}}
+      end)
+
+      assert {:error, :not_found} = Contracts.code_info(8, height: @height)
+      assert {:error, :not_found} = Contracts.code_info(8, height: @height)
+
+      assert_received {:mock_node, %QueryCodeRequest{}, _}
+      refute_received {:mock_node, %QueryCodeRequest{}, _}
+    end
+  end
+
+  describe "list/3" do
+    test "the list is cached against the registry and each contract it resolved" do
+      MockNode.expect(fn
+        %QueryContractsByCodeRequest{code_id: 7} ->
+          {:ok, %{contracts: ["thor1a"], pagination: %{next_key: ""}}}
+
+        %{"config" => %{}} ->
+          MockNode.ok(%{"owner" => "thor1owner"})
+      end)
+
+      assert {:ok, [%Protocol{address: "thor1a"}]} =
+               Contracts.list(Protocol, [7], height: @height)
+
+      assert {:ok, [%Protocol{address: "thor1a"}]} =
+               Contracts.list(Protocol, [7], height: @height)
+
+      assert_received {:mock_node, %QueryContractsByCodeRequest{}, _}
+      refute_received {:mock_node, %QueryContractsByCodeRequest{}, _}
     end
   end
 
@@ -224,6 +336,10 @@ defmodule Rujira.ContractsTest do
     test "an upstream error passes through unchanged" do
       assert {:error, :boom} = Contracts.paginate({:error, :boom}, "items", 2, &{:ok, &1})
     end
+  end
+
+  defp head_metadata do
+    %{"x-cosmos-block-height" => Integer.to_string(default_head())}
   end
 
   defp wasm_error(contract_error) do

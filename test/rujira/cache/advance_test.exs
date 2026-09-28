@@ -25,7 +25,7 @@ defmodule Rujira.Cache.AdvanceTest do
 
   setup do
     Cache.reset!()
-    on_exit(fn -> Memoize.invalidate(Block) end)
+    on_exit(&Rujira.Test.CacheCase.reset!/0)
     :ok
   end
 

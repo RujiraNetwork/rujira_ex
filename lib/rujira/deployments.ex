@@ -20,25 +20,22 @@ defmodule Rujira.Deployments do
         # or unmaintained deployments).
         deployments_omit: []
 
-  Consumers wire up cache invalidation themselves by calling
-  `invalidate/0` whenever a `MsgInstantiateContract`, `MsgInstantiateContract2`
-  or `MsgMigrateContract` is observed.
-
   ## Query options
 
-  Every lookup keeps its memoized arity and gains a sibling one arity higher
-  that takes `opts`: with a `:height` it resolves the whole chain of lookups
-  uncached at that height - a height read is never cached - and without one it
-  is the memoized function itself, so the other opts are not applied.
+  `contract_infos/0,1` is cached per `Rujira.Cache`, against the contract
+  registry, and resolved at `opts[:height]` or - without one - at the head.
+  Every other lookup here derives from it in memory, so it costs no node read
+  and is not cached on its own. The blocks a consumer feeds
+  `Rujira.Node.advance/1` invalidate it; `Rujira.Cache.invalidate_all/0` is the
+  fallback for a change no block announces.
   """
 
+  alias Rujira.Cache
   alias Rujira.Deployments.Target
   alias Rujira.Node
   alias Thorchain.Types.ContractInfo
   alias Thorchain.Types.Query.Stub
   alias Thorchain.Types.QueryContractInfosRequest
-
-  use Memoize
 
   @default_protocol_modules %{
     "rujira-brune" => Rujira.Brune.Pool,
@@ -51,38 +48,44 @@ defmodule Rujira.Deployments do
   }
 
   @spec contract_infos() :: {:ok, [ContractInfo.t()]} | {:error, term()}
-  defmemo(contract_infos, do: fetch_contract_infos([]))
+  def contract_infos, do: contract_infos([])
 
   @doc "As `contract_infos/0`, read at `opts[:height]` when given."
   @spec contract_infos(Node.opts()) :: {:ok, [ContractInfo.t()]} | {:error, term()}
   def contract_infos(opts) do
-    Node.at_height(opts, fn -> fetch_contract_infos(opts) end, &contract_infos/0)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :contract_infos, []}, [:contract_registry], opts, fn _height ->
+        fetch_contract_infos(opts)
+      end)
+    end
   end
 
   @spec get_target(module()) :: {:ok, Target.t()} | {:error, :not_found | term()}
-  defmemo(get_target(module), do: fetch_get_target_result(module, []))
+  def get_target(module), do: get_target(module, [])
 
   @doc "As `get_target/1`, resolved at `opts[:height]` when given."
   @spec get_target(module(), Node.opts()) :: {:ok, Target.t()} | {:error, :not_found | term()}
   def get_target(module, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_get_target_result(module, opts) end,
-      fn -> get_target(module) end
-    )
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, targets} <- list_all_targets(opts) do
+      targets
+      |> Enum.find(&(&1.module === module))
+      |> ok_or_not_found()
+    end
   end
 
   @spec from_address(String.t()) :: {:ok, Target.t()} | {:error, term()}
-  defmemo(from_address(address), do: fetch_from_address(address, []))
+  def from_address(address), do: from_address(address, [])
 
   @doc "As `from_address/1`, resolved at `opts[:height]` when given."
   @spec from_address(String.t(), Node.opts()) :: {:ok, Target.t()} | {:error, term()}
   def from_address(address, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_from_address(address, opts) end,
-      fn -> from_address(address) end
-    )
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, targets} <- list_all_targets(opts) do
+      targets
+      |> Enum.find(&(&1.address == address))
+      |> ok_or_not_found()
+    end
   end
 
   @doc """
@@ -97,37 +100,28 @@ defmodule Rujira.Deployments do
   def from_id(id, opts), do: from_address(id, opts)
 
   @spec list_all_targets() :: {:ok, [Target.t()]} | {:error, term()}
-  defmemo(list_all_targets, do: fetch_list_all_targets([]))
+  def list_all_targets, do: list_all_targets([])
 
   @doc "As `list_all_targets/0`, resolved at `opts[:height]` when given."
   @spec list_all_targets(Node.opts()) :: {:ok, [Target.t()]} | {:error, term()}
   def list_all_targets(opts) do
-    Node.at_height(opts, fn -> fetch_list_all_targets(opts) end, &list_all_targets/0)
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, infos} <- contract_infos(opts) do
+      Rujira.Enum.reduce_while_ok(infos, [], &target/1)
+    end
   end
 
   @doc "List all targets for a given module."
   @spec list_targets(module()) :: {:ok, [Target.t()]} | {:error, term()}
-  defmemo(list_targets(module), do: fetch_list_targets_result(module, []))
+  def list_targets(module), do: list_targets(module, [])
 
   @doc "As `list_targets/1`, resolved at `opts[:height]` when given."
   @spec list_targets(module(), Node.opts()) :: {:ok, [Target.t()]} | {:error, term()}
   def list_targets(module, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_list_targets_result(module, opts) end,
-      fn -> list_targets(module) end
-    )
-  end
-
-  @doc "Invalidate all memoized deployment metadata."
-  @spec invalidate() :: :ok
-  def invalidate do
-    Memoize.invalidate(__MODULE__, :contract_infos)
-    Memoize.invalidate(__MODULE__, :get_target)
-    Memoize.invalidate(__MODULE__, :from_address)
-    Memoize.invalidate(__MODULE__, :list_all_targets)
-    Memoize.invalidate(__MODULE__, :list_targets)
-    :ok
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, targets} <- list_all_targets(opts) do
+      {:ok, Enum.filter(targets, &(&1.module === module))}
+    end
   end
 
   # --- Private ---
@@ -139,37 +133,8 @@ defmodule Rujira.Deployments do
     end
   end
 
-  defp fetch_get_target_result(module, opts) do
-    with {:ok, targets} <- list_all_targets(opts) do
-      targets
-      |> Enum.find(&(&1.module === module))
-      |> ok_or_not_found()
-    end
-  end
-
   defp ok_or_not_found(nil), do: {:error, :not_found}
   defp ok_or_not_found(target), do: {:ok, target}
-
-  defp fetch_from_address(address, opts) do
-    with {:ok, targets} <- list_all_targets(opts) do
-      case Enum.find(targets, &(&1.address == address)) do
-        nil -> {:error, :not_found}
-        target -> {:ok, target}
-      end
-    end
-  end
-
-  defp fetch_list_all_targets(opts) do
-    with {:ok, infos} <- contract_infos(opts) do
-      Rujira.Enum.reduce_while_ok(infos, [], &target/1)
-    end
-  end
-
-  defp fetch_list_targets_result(module, opts) do
-    with {:ok, targets} <- list_all_targets(opts) do
-      {:ok, Enum.filter(targets, &(&1.module === module))}
-    end
-  end
 
   defp target(%{contract: name, version: version, address: address} = info) do
     case module_from(info) do

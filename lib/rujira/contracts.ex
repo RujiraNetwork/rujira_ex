@@ -7,10 +7,12 @@ defmodule Rujira.Contracts do
   Every query takes a trailing `opts`, forwarded to `Rujira.Node.query/3`, so a
   caller can read a whole composite at one `height:`.
 
-  A memoized query keeps its name, arity and cache key, and gains a sibling one
-  arity higher that takes `opts`: with a `:height` that sibling reads the node
-  uncached - a height read is never cached - and without one it is the memoized
-  function itself, so the other opts are not applied.
+  Every lookup here is cached per `Rujira.Cache`, resolved at `opts[:height]`
+  or - without one - at the head. The no-opts arity is the opts arity with
+  `[]`, so it reads at the head. The primitives (`query_state_raw/3`,
+  `query_state_smart/3`, `query_state_smart_with_retry/3`,
+  `stream_state_all/2`) are the raw node reads every cached lookup is built on
+  and are never cached themselves.
   """
   alias Cosmos.Base.Query.V1beta1.PageRequest
   alias Cosmwasm.Wasm.V1.CodeInfoResponse
@@ -20,16 +22,14 @@ defmodule Rujira.Contracts do
   alias Cosmwasm.Wasm.V1.QueryAllContractStateRequest
   alias Cosmwasm.Wasm.V1.QueryBuildAddressRequest
   alias Cosmwasm.Wasm.V1.QueryCodeRequest
-  alias Cosmwasm.Wasm.V1.QueryCodeResponse
   alias Cosmwasm.Wasm.V1.QueryCodesRequest
   alias Cosmwasm.Wasm.V1.QueryContractInfoRequest
   alias Cosmwasm.Wasm.V1.QueryContractsByCodeRequest
   alias Cosmwasm.Wasm.V1.QueryRawContractStateRequest
   alias Cosmwasm.Wasm.V1.QuerySmartContractStateRequest
+  alias Rujira.Cache
   alias Rujira.Logger
   alias Rujira.Node
-
-  use Memoize
 
   # The node's suffix on every contract error raised while answering a wasm query.
   @wasm_query_failed ": query wasm contract failed"
@@ -43,15 +43,30 @@ defmodule Rujira.Contracts do
     {:ok, %__MODULE__{id: id, address: id}}
   end
 
+  @doc """
+  The code stored under `code_id`.
+
+  A `code_id` the node holds no code for is `{:error, :not_found}`, cached as
+  the fact it is until the code registry changes.
+  """
   @spec code_info(non_neg_integer()) ::
-          {:ok, CodeInfoResponse.t()} | {:error, Node.rpc_error()}
-  defmemo(code_info(code_id), do: fetch_code_info(code_id, []))
+          {:ok, CodeInfoResponse.t()} | {:error, :not_found} | {:error, Node.rpc_error()}
+  def code_info(code_id), do: code_info(code_id, [])
 
   @doc "As `code_info/1`, read at `opts[:height]` when given."
   @spec code_info(non_neg_integer(), Node.opts()) ::
-          {:ok, CodeInfoResponse.t()} | {:error, Node.rpc_error()}
+          {:ok, CodeInfoResponse.t()} | {:error, :not_found} | {:error, Node.rpc_error()}
   def code_info(code_id, opts) do
-    Node.at_height(opts, fn -> fetch_code_info(code_id, opts) end, fn -> code_info(code_id) end)
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, value} <-
+           Cache.fetch(
+             {__MODULE__, :code_info, [code_id]},
+             &code_info_sources/1,
+             opts,
+             fn _height -> fetch_code_info(code_id, opts) end
+           ) do
+      found(value)
+    end
   end
 
   @doc """
@@ -66,7 +81,7 @@ defmodule Rujira.Contracts do
           {:ok, %{contract: String.t(), version: String.t()}}
           | {:error, :not_found}
           | {:error, term()}
-  defmemo(version(address), do: fetch_version(address, []))
+  def version(address), do: version(address, [])
 
   @doc "As `version/1`, read at `opts[:height]` when given."
   @spec version(String.t(), Node.opts()) ::
@@ -74,100 +89,109 @@ defmodule Rujira.Contracts do
           | {:error, :not_found}
           | {:error, term()}
   def version(address, opts) do
-    Node.at_height(opts, fn -> fetch_version(address, opts) end, fn -> version(address) end)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :version, [address]},
+        [{:contract, address}],
+        opts,
+        fn _height -> fetch_version(address, opts) end
+      )
+    end
   end
 
   @spec build_address(binary(), String.t(), non_neg_integer() | String.t()) ::
           {:ok, String.t()} | {:error, term()}
-  defmemo build_address(salt, creator, id) when is_integer(id) do
-    with {:ok, %{data_hash: data_hash}} <- code_info(id) do
-      build_address(salt, creator, Base.encode16(data_hash))
+  def build_address(salt, creator, id), do: build_address(salt, creator, id, [])
+
+  @doc """
+  As `build_address/3`, read at `opts[:height]` when given.
+
+  A code id is resolved to its data hash through `code_info/2`, at that height;
+  the address the hash builds depends on nothing else, so it is an identity
+  fact and both forms share one cached row.
+  """
+  @spec build_address(binary(), String.t(), non_neg_integer() | String.t(), Node.opts()) ::
+          {:ok, String.t()} | {:error, term()}
+  def build_address(salt, creator, id, opts) when is_integer(id) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, %{data_hash: data_hash}} <- code_info(id, opts) do
+      build_address(salt, creator, Base.encode16(data_hash), opts)
     end
   end
 
-  defmemo build_address(salt, creator, hash) do
-    fetch_build_address(salt, creator, hash, [])
-  end
-
-  @doc "As `build_address/3`, read at `opts[:height]` when given."
-  @spec build_address(binary(), String.t(), non_neg_integer() | String.t(), Node.opts()) ::
-          {:ok, String.t()} | {:error, term()}
-  def build_address(salt, creator, id, opts) do
-    Node.at_height(
+  def build_address(salt, creator, hash, opts) do
+    Cache.fetch(
+      {__MODULE__, :build_address, [salt, creator, hash]},
+      :identity,
       opts,
-      fn -> fetch_build_address(salt, creator, id, opts) end,
-      fn -> build_address(salt, creator, id) end
+      fn _height -> fetch_build_address(salt, creator, hash, opts) end
     )
   end
 
   @spec build_address!(binary(), String.t(), non_neg_integer() | String.t()) :: String.t()
-  defmemo build_address!(salt, deployer, code_id) do
-    {:ok, address} = build_address(salt, deployer, code_id)
-    address
-  end
+  def build_address!(salt, deployer, code_id), do: build_address!(salt, deployer, code_id, [])
 
   @doc "As `build_address!/3`, read at `opts[:height]` when given."
   @spec build_address!(binary(), String.t(), non_neg_integer() | String.t(), Node.opts()) ::
           String.t()
   def build_address!(salt, deployer, code_id, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_build_address!(salt, deployer, code_id, opts) end,
-      fn -> build_address!(salt, deployer, code_id) end
-    )
+    {:ok, address} = build_address(salt, deployer, code_id, opts)
+    address
   end
 
   @spec info(String.t()) ::
           {:ok, ContractInfo.t()} | {:error, Node.rpc_error()}
-  defmemo(info(address), do: fetch_info(address, []))
+  def info(address), do: info(address, [])
 
   @doc "As `info/1`, read at `opts[:height]` when given."
   @spec info(String.t(), Node.opts()) :: {:ok, ContractInfo.t()} | {:error, Node.rpc_error()}
   def info(address, opts) do
-    Node.at_height(opts, fn -> fetch_info(address, opts) end, fn -> info(address) end)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :info, [address]},
+        [{:contract, address}],
+        opts,
+        fn _height -> fetch_info(address, opts) end
+      )
+    end
   end
 
   @spec codes() :: {:ok, list(CodeInfoResponse.t())} | {:error, Node.rpc_error()}
-  defmemo(codes(), do: codes_page(nil, []))
+  def codes, do: codes([])
 
   @doc "As `codes/0`, read at `opts[:height]` when given."
   @spec codes(Node.opts()) :: {:ok, list(CodeInfoResponse.t())} | {:error, Node.rpc_error()}
   def codes(opts) do
-    Node.at_height(opts, fn -> codes_page(nil, opts) end, &codes/0)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :codes, []}, [:contract_registry], opts, fn _height ->
+        codes_page(nil, opts)
+      end)
+    end
   end
 
   @spec by_code(integer()) ::
           {:ok, list(t())} | {:error, Node.rpc_error()}
-  defmemo(by_code(code_id), do: fetch_by_code(code_id, []))
+  def by_code(code_id), do: by_code(code_id, [])
 
   @doc "As `by_code/1`, read at `opts[:height]` when given."
   @spec by_code(integer(), Node.opts()) :: {:ok, list(t())} | {:error, Node.rpc_error()}
   def by_code(code_id, opts) do
-    Node.at_height(opts, fn -> fetch_by_code(code_id, opts) end, fn -> by_code(code_id) end)
-  end
-
-  @spec code(integer()) :: {:ok, QueryCodeResponse} | {:error, Node.rpc_error()}
-  defmemo(code(id), do: fetch_code_info(id, []))
-
-  @doc "As `code/1`, read at `opts[:height]` when given."
-  @spec code(integer(), Node.opts()) :: {:ok, QueryCodeResponse} | {:error, Node.rpc_error()}
-  def code(id, opts) do
-    Node.at_height(opts, fn -> fetch_code_info(id, opts) end, fn -> code(id) end)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :by_code, [code_id]},
+        [:contract_registry],
+        opts,
+        fn _height -> fetch_by_code(code_id, opts) end
+      )
+    end
   end
 
   @spec by_codes(list(integer()), Node.opts()) ::
           {:ok, list(t())} | {:error, Node.rpc_error()}
   def by_codes(code_ids, opts \\ []) do
-    Enum.reduce(code_ids, {:ok, []}, fn
-      el, {:ok, agg} ->
-        case by_code(el, opts) do
-          {:ok, contracts} -> {:ok, agg ++ contracts}
-          err -> err
-        end
-
-      _, err ->
-        err
-    end)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Enum.reduce(code_ids, {:ok, []}, &append_by_code(&1, &2, opts))
+    end
   end
 
   @doc """
@@ -178,12 +202,7 @@ defmodule Rujira.Contracts do
   """
   @spec get({module(), String.t() | __MODULE__.t()} | struct()) ::
           {:ok, struct()} | {:error, :not_found} | {:error, any()}
-
-  defmemo(get({module, %__MODULE__{address: address}}), do: get({module, address}))
-
-  defmemo get({module, address}) do
-    fetch_get(module, address, [])
-  end
+  def get(target), do: get(target, [])
 
   @doc "As `get/1`, read at `opts[:height]` when given."
   @spec get({module(), String.t() | t()} | struct(), Node.opts()) ::
@@ -191,11 +210,14 @@ defmodule Rujira.Contracts do
   def get({module, %__MODULE__{address: address}}, opts), do: get({module, address}, opts)
 
   def get({module, address}, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_get(module, address, opts) end,
-      fn -> get({module, address}) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :get, [module, address]},
+        [{:contract, address}],
+        opts,
+        fn _height -> fetch_get(module, address, opts) end
+      )
+    end
   end
 
   # TODO: remove the `from_config/2` fallback once rujira-api has migrated every
@@ -218,26 +240,27 @@ defmodule Rujira.Contracts do
 
   @spec list(module(), list(integer())) ::
           {:ok, list(struct())} | {:error, Node.rpc_error()}
-  defmemo list(module, code_ids) when is_list(code_ids) do
-    fetch_list(module, code_ids, [])
-  end
+  def list(module, code_ids) when is_list(code_ids), do: list(module, code_ids, [])
 
   @doc """
   As `list/2`, read at `opts[:height]` when given.
 
   Each contract is read concurrently; `opts[:fan_out]` sets the per-contract
-  timeout and how many run at once - see `Rujira.Enum`. Without a `:height`
-  this is the memoized `list/2`, so a per-call `:fan_out` only applies to an
-  uncached read.
+  timeout and how many run at once - see `Rujira.Enum`. The list is cached
+  against the code registry and against every contract it resolved, so one
+  contract's event invalidates it.
   """
   @spec list(module(), list(integer()), Node.opts()) ::
           {:ok, list(struct())} | {:error, Node.rpc_error()}
   def list(module, code_ids, opts) when is_list(code_ids) do
-    Node.at_height(
-      opts,
-      fn -> fetch_list(module, code_ids, opts) end,
-      fn -> list(module, code_ids) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :list, [module, code_ids]},
+        &list_sources/1,
+        opts,
+        fn _height -> fetch_list(module, code_ids, opts) end
+      )
+    end
   end
 
   @doc """
@@ -338,21 +361,23 @@ defmodule Rujira.Contracts do
 
   defp paginate_page(items, _limit, _next_fn), do: {:ok, items}
 
-  @doc "Queries the full, raw contract state at an address"
+  @doc """
+  Queries the full, raw contract state at an address.
+
+  A whole contract's state is too large to hold, so this is the one read here
+  that is never cached. It still resolves its height like every other: at
+  `opts[:height]`, or at the head.
+  """
   @spec query_state_all(String.t()) ::
           {:ok, map()} | {:error, Node.rpc_error()}
-  defmemo query_state_all(address) do
-    query_state_all_page(address, nil, [])
-  end
+  def query_state_all(address), do: query_state_all(address, [])
 
   @doc "As `query_state_all/1`, read at `opts[:height]` when given."
   @spec query_state_all(String.t(), Node.opts()) :: {:ok, map()} | {:error, Node.rpc_error()}
   def query_state_all(address, opts) do
-    Node.at_height(
-      opts,
-      fn -> query_state_all_page(address, nil, opts) end,
-      fn -> query_state_all(address) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      query_state_all_page(address, nil, opts)
+    end
   end
 
   defp query_state_all_page(address, page, opts) do
@@ -442,10 +467,22 @@ defmodule Rujira.Contracts do
   defp not_found_error?("NotFound"), do: true
   defp not_found_error?(message), do: String.ends_with?(message, " not found")
 
+  # The code a stored id holds never changes, so a found code is only ever
+  # invalidated by a reset; whether an id resolves at all is the code
+  # registry's business.
+  defp code_info_sources(:none), do: [:contract_registry]
+  defp code_info_sources(_code_info), do: []
+
+  defp found(:none), do: {:error, :not_found}
+  defp found(value), do: {:ok, value}
+
+  # gRPC `NOT_FOUND` is the node saying it holds no code under the id - a fact
+  # about the registry, not a failed read.
   defp fetch_code_info(code_id, opts) do
-    with {:ok, %{code_info: code_info}} <-
-           Node.query(&Stub.code/3, %QueryCodeRequest{code_id: code_id}, opts) do
-      {:ok, code_info}
+    case Node.query(&Stub.code/3, %QueryCodeRequest{code_id: code_id}, opts) do
+      {:ok, %{code_info: code_info}} -> {:ok, code_info}
+      {:error, %GRPC.RPCError{status: 5}} -> {:ok, :none}
+      other -> other
     end
   end
 
@@ -462,12 +499,6 @@ defmodule Rujira.Contracts do
     end
   end
 
-  defp fetch_build_address(salt, creator, id, opts) when is_integer(id) do
-    with {:ok, %{data_hash: data_hash}} <- code_info(id, opts) do
-      fetch_build_address(salt, creator, Base.encode16(data_hash), opts)
-    end
-  end
-
   defp fetch_build_address(salt, creator, hash, opts) do
     with {:ok, %{address: address}} <-
            Node.query(
@@ -481,11 +512,6 @@ defmodule Rujira.Contracts do
            ) do
       {:ok, address}
     end
-  end
-
-  defp fetch_build_address!(salt, deployer, code_id, opts) do
-    {:ok, address} = build_address(salt, deployer, code_id, opts)
-    address
   end
 
   defp fetch_info(address, opts) do
@@ -545,11 +571,23 @@ defmodule Rujira.Contracts do
 
   defp no_contract?(_), do: false
 
+  # A list is only as valid as the registry it was read from and the contracts
+  # it resolved; a contract that has none is not a source of its own.
+  defp list_sources(contracts) do
+    [:contract_registry | for(%{address: a} <- contracts, is_binary(a), do: {:contract, a})]
+  end
+
   defp fetch_list(module, code_ids, opts) do
     with {:ok, contracts} <- by_codes(code_ids, opts) do
       Rujira.Enum.reduce_async_while_ok(contracts, &get({module, &1}, opts), opts, __MODULE__)
     end
   end
+
+  defp append_by_code(code_id, {:ok, agg}, opts) do
+    with {:ok, contracts} <- by_code(code_id, opts), do: {:ok, agg ++ contracts}
+  end
+
+  defp append_by_code(_code_id, err, _opts), do: err
 
   defp page_request(nil), do: nil
   defp page_request(key), do: %PageRequest{key: key}

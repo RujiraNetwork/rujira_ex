@@ -1,7 +1,6 @@
 defmodule Rujira.Revenue.ConverterTest do
-  use ExUnit.Case, async: true
+  use Rujira.Test.CacheCase, async: false
 
-  alias Rujira.Deployments
   alias Rujira.Revenue.Converter
   alias Rujira.Revenue.Converter.Action
   alias Rujira.Revenue.Converter.TargetAddress
@@ -163,11 +162,9 @@ defmodule Rujira.Revenue.ConverterTest do
     end
 
     test "resolves one v1.1.0 and one v2.x target" do
-      Deployments.invalidate()
       Memoize.invalidate(Converter)
 
       on_exit(fn ->
-        Deployments.invalidate()
         Memoize.invalidate(Converter)
       end)
 

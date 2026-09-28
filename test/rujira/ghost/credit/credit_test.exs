@@ -1,5 +1,8 @@
 defmodule Rujira.Ghost.CreditTest do
-  use ExUnit.Case, async: true
+  # The Group A reads underneath (Deployments, Contracts) are cached per
+  # `Rujira.Cache`, whose stores are global, so this case runs sync and starts
+  # from an empty cache.
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Ghost.Credit
   alias Rujira.Ghost.Credit.CollateralRatio

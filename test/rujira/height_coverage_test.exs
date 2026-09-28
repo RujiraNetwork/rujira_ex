@@ -11,7 +11,7 @@ defmodule Rujira.HeightCoverageTest do
   every public function of the facade, so a new one fails here until it is
   classified.
   """
-  use ExUnit.Case, async: true
+  use Rujira.Test.CacheCase, async: false
 
   alias Cosmos.Bank.V1beta1.QueryAllBalancesRequest
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest

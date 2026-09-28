@@ -9,7 +9,7 @@ defmodule Rujira.HeightErrorsTest do
   the error is handed back whatever it was; the rest still keep their default
   for an error that is not about the height.
   """
-  use ExUnit.Case, async: false
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Assets
   alias Rujira.Deployments

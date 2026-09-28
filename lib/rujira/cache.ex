@@ -44,8 +44,8 @@ defmodule Rujira.Cache do
 
   ## Height
 
-  `scope/1` resolves the height once, at the public entry point, and the
-  caller puts it back into `opts` as `height: h`. It travels down through
+  `pin/1` resolves the height once, at the public entry point, and puts it
+  back into `opts` as `height: h`. It travels down through
   `opts` and never through the process dictionary, so a nested read and a
   `Rujira.Enum` fan-out inherit it and the whole composite is read at one
   height, even if the head moves underneath it.
@@ -140,6 +140,18 @@ defmodule Rujira.Cache do
       height when is_integer(height) and height >= 1 -> {:ok, height}
       _height -> {:error, :invalid_height}
     end
+  end
+
+  @doc """
+  Resolves `opts`' height once and puts it back as `height: h`.
+
+  The pinned opts travel down through every nested read, so a whole composite
+  is read at one height even if the head moves underneath it. Pinning opts that
+  already carry a height is a no-op, so a nested entry point may pin again.
+  """
+  @spec pin(Node.opts()) :: {:ok, Node.opts()} | {:error, :no_head | :invalid_height}
+  def pin(opts) do
+    with {:ok, h} <- scope(opts), do: {:ok, Keyword.put(opts, :height, h)}
   end
 
   @doc """

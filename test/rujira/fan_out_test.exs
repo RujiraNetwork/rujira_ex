@@ -10,7 +10,7 @@ defmodule Rujira.FanOutTest do
   fan-out - is governed by the same `:fan_out`, while `Rujira.Node.query/3`
   drops the key before the node implementation sees it.
   """
-  use ExUnit.Case, async: false
+  use Rujira.Test.CacheCase, async: false
 
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Rujira.Ghost

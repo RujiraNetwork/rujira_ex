@@ -3,17 +3,18 @@ defmodule Rujira.Assets.Metadata do
   Module for handling asset metadata.
 
   Denom metadata (symbol, name, display) is token identity, not chain state -
-  it is always read at latest and memoized, even for a caller passing
-  `:height`. See "Tokens" in `guides/conventions.md`.
+  it is always read at latest, even for a caller passing `:height`, and cached
+  per `Rujira.Cache` as an identity fact. See "Tokens" in
+  `guides/conventions.md`.
   """
 
   alias Cosmos.Bank.V1beta1.Metadata, as: DenomMetadata
   alias Cosmos.Bank.V1beta1.Query.Stub
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataResponse
+  alias GRPC.RPCError
+  alias Rujira.Cache
   alias Rujira.Node
-
-  use Memoize
 
   defstruct decimals: nil,
             description: nil,
@@ -44,40 +45,33 @@ defmodule Rujira.Assets.Metadata do
   denom whose metadata declares no unit at all has no decimals, so `decimals`
   is `nil`.
 
-  A denom's metadata is set when the denom is created and does
-  not change afterwards, so a successful node response is memoized (privately,
-  as `do_load_metadata/1`) without expiry. A failed query returns the node's
-  error unchanged and is not memoized, so a later call retries it.
-
-  Invalidate with
-  `Memoize.invalidate(Rujira.Assets.Metadata, :do_load_metadata, [denom])`.
+  A denom's metadata is set when the denom is created and does not change
+  afterwards, so it is cached per `Rujira.Cache` as an identity fact - and so
+  is the node answering that it holds none, which is
+  `{:error, :not_found}` here. A failed query returns the node's error
+  unchanged and is never cached, so a later call retries it.
 
   Denom metadata is token identity, not chain state (see `guides/conventions.md`),
-  so it is always read at latest and memoized - `opts` is accepted for arity
-  parity with the rest of the node-reading API, but a `:height` in it is
-  ignored. The one consequence: an admin metadata change shows the current
-  symbol even in a historical read.
+  so it is always read at latest - `opts` is accepted for arity parity with the
+  rest of the node-reading API, but a `:height` in it is ignored. The one
+  consequence: an admin metadata change shows the current symbol even in a
+  historical read; `Rujira.Cache.invalidate_all/0` is the lever for it.
   """
-  @spec load_metadata(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
-  def load_metadata(denom, _opts \\ []) do
-    cached_metadata(denom)
+  @spec load_metadata(String.t(), Node.opts()) ::
+          {:ok, t()} | {:error, :not_found} | {:error, term()}
+  def load_metadata(denom, opts \\ []) do
+    case Cache.fetch({__MODULE__, :load_metadata, [denom]}, :identity, opts, fn _height ->
+           fetch_metadata(denom)
+         end) do
+      {:ok, :none} -> {:error, :not_found}
+      other -> other
+    end
   end
 
   # --- Private ---
 
-  defmemop(do_load_metadata(denom), do: fetch_metadata(denom))
-
-  defp cached_metadata(denom) do
-    case do_load_metadata(denom) do
-      {:ok, metadata} ->
-        {:ok, metadata}
-
-      {:error, reason} ->
-        Memoize.invalidate(__MODULE__, :do_load_metadata, [denom])
-        {:error, reason}
-    end
-  end
-
+  # The node holding no metadata for a denom is a fact about the denom, not a
+  # failed read, so it is cached as one.
   defp fetch_metadata(denom) do
     q = %QueryDenomMetadataRequest{denom: denom}
 
@@ -93,6 +87,9 @@ defmodule Rujira.Assets.Metadata do
            uri: metadata.uri,
            uri_hash: metadata.uri_hash
          }}
+
+      {:error, %RPCError{status: 5, message: "client metadata for denom" <> _}} ->
+        {:ok, :none}
 
       {:error, reason} ->
         {:error, reason}
