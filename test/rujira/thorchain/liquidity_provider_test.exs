@@ -1,5 +1,5 @@
 defmodule Rujira.Thorchain.LiquidityProviderTest do
-  use ExUnit.Case, async: true
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Thorchain.LiquidityProvider
   alias Rujira.Test.MockNode
@@ -99,12 +99,12 @@ defmodule Rujira.Thorchain.LiquidityProviderTest do
       assert Keyword.get(opts, :metadata) == @metadata
     end
 
-    test "a height read is never cached, so two calls reach the node twice" do
+    test "a second read at the same height is served from the cache" do
       assert {:ok, _} = LiquidityProvider.query("BTC.BTC", "thor1abc", height: @height)
       assert {:ok, _} = LiquidityProvider.query("BTC.BTC", "thor1abc", height: @height)
 
       assert_received {:mock_node, %QueryLiquidityProviderRequest{}, _}
-      assert_received {:mock_node, %QueryLiquidityProviderRequest{}, _}
+      refute_received {:mock_node, %QueryLiquidityProviderRequest{}, _}
     end
 
     test "get/3 forwards the height to the query it reads" do

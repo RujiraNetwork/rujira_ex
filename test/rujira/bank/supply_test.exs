@@ -1,5 +1,5 @@
 defmodule Rujira.Bank.SupplyTest do
-  use ExUnit.Case, async: true
+  use Rujira.Test.CacheCase, async: false
 
   alias Cosmos.Bank.V1beta1.QuerySupplyOfRequest
   alias Cosmos.Bank.V1beta1.QuerySupplyOfResponse
@@ -121,7 +121,7 @@ defmodule Rujira.Bank.SupplyTest do
       assert Keyword.get(opts, :metadata) == @metadata
     end
 
-    test "two height reads both reach the node" do
+    test "a second read at the same height is served from the cache" do
       MockNode.expect(fn %QuerySupplyOfRequest{} ->
         {:ok, %QuerySupplyOfResponse{amount: %ChainCoin{denom: "rune", amount: "1000"}}}
       end)
@@ -130,7 +130,7 @@ defmodule Rujira.Bank.SupplyTest do
       assert {:ok, _} = Supply.get(@rune, height: @height)
 
       assert_received {:mock_node, %QuerySupplyOfRequest{}, _}
-      assert_received {:mock_node, %QuerySupplyOfRequest{}, _}
+      refute_received {:mock_node, %QuerySupplyOfRequest{}, _}
     end
 
     test "list/1 forwards the height to every page" do

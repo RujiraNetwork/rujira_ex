@@ -1,5 +1,5 @@
 defmodule Rujira.Thorchain.NetworkTest do
-  use ExUnit.Case, async: true
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Thorchain.Network
   alias Rujira.Test.MockNode
@@ -63,12 +63,12 @@ defmodule Rujira.Thorchain.NetworkTest do
       assert Keyword.get(opts, :metadata) == @metadata
     end
 
-    test "a height read is never cached, so two calls reach the node twice" do
+    test "a second read at the same height is served from the cache" do
       assert {:ok, _} = Network.get(height: @height)
       assert {:ok, _} = Network.get(height: @height)
 
       assert_received {:mock_node, %QueryNetworkRequest{}, _}
-      assert_received {:mock_node, %QueryNetworkRequest{}, _}
+      refute_received {:mock_node, %QueryNetworkRequest{}, _}
     end
 
     test "the Rujira.Thorchain facade exposes the opts arity" do

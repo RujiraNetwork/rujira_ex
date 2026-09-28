@@ -8,28 +8,54 @@ defmodule Rujira.Bank.Supply do
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Assets.Asset
+  alias Rujira.Cache
   alias Rujira.Coin
   alias Rujira.Node
 
   # --- Queries ---
 
-  @doc "Fetches the total supply of a single asset, at `opts[:height]` when one is given."
+  @doc """
+  Fetches the total supply of a single asset. Cached per `Rujira.Cache`,
+  resolved at `opts[:height]` or, without one, at the head.
+  """
   @spec get(Asset.t(), Node.opts()) :: {:ok, Coin.t()} | {:error, term()}
   def get(%Asset{} = asset, opts \\ []) do
     with {:ok, denom} <- Assets.to_native(asset),
-         {:ok, response} <-
+         {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :get, [denom]},
+        [{:denom_transfers, denom}],
+        opts,
+        fn _height -> fetch_get(denom, asset, opts) end
+      )
+    end
+  end
+
+  @doc """
+  Fetches the total supply of every denom. Cached per `Rujira.Cache` against
+  `:per_block`, resolved at `opts[:height]` or, without one, at the head - no
+  single tag covers every denom's supply changing, so this reads fresh every
+  block rather than carrying over.
+  """
+  @spec list(Node.opts()) :: {:ok, [Coin.t()]} | {:error, term()}
+  def list(opts \\ []) do
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :list, []}, [:per_block], opts, fn _height ->
+        total_supply(nil, opts)
+      end)
+    end
+  end
+
+  # --- Private ---
+
+  defp fetch_get(denom, asset, opts) do
+    with {:ok, response} <-
            Node.query(&Stub.supply_of/3, %QuerySupplyOfRequest{denom: denom}, opts),
          {:ok, chain_amount} <- supply_amount(response),
          {:ok, amount} <- Amount.new(chain_amount) do
       {:ok, Coin.new(asset, amount)}
     end
   end
-
-  @doc "Fetches the total supply of every denom, at `opts[:height]` when one is given."
-  @spec list(Node.opts()) :: {:ok, [Coin.t()]} | {:error, term()}
-  def list(opts \\ []), do: total_supply(nil, opts)
-
-  # --- Private ---
 
   # The node always populates `amount` for a valid `denom` - a genuinely
   # unminted asset still comes back as a `Coin` with amount `"0"`. A `nil`

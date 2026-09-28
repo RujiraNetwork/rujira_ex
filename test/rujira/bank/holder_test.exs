@@ -1,5 +1,5 @@
 defmodule Rujira.Bank.HolderTest do
-  use ExUnit.Case, async: true
+  use Rujira.Test.CacheCase, async: false
 
   alias Cosmos.Bank.V1beta1.DenomOwner
   alias Cosmos.Bank.V1beta1.QueryDenomOwnersRequest
@@ -27,12 +27,6 @@ defmodule Rujira.Bank.HolderTest do
   end
 
   describe "holders/1" do
-    setup do
-      Memoize.invalidate(Holder)
-      on_exit(fn -> Memoize.invalidate(Holder) end)
-      :ok
-    end
-
     test "returns owners in node order, unsorted and unlimited" do
       MockNode.expect(fn %QueryDenomOwnersRequest{denom: "rune"} ->
         {:ok,
@@ -127,12 +121,12 @@ defmodule Rujira.Bank.HolderTest do
       assert Keyword.get(opts, :metadata) == @metadata
     end
 
-    test "a height read is never cached, so two calls reach the node twice" do
+    test "a second read at the same height is served from the cache" do
       assert {:ok, _} = Holder.holders(@rune, height: @height)
       assert {:ok, _} = Holder.holders(@rune, height: @height)
 
       assert_received {:mock_node, %QueryDenomOwnersRequest{}, _}
-      assert_received {:mock_node, %QueryDenomOwnersRequest{}, _}
+      refute_received {:mock_node, %QueryDenomOwnersRequest{}, _}
     end
 
     test "the Rujira.Bank facade exposes the opts arity" do

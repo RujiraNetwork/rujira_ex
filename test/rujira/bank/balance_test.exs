@@ -1,5 +1,5 @@
 defmodule Rujira.Bank.BalanceTest do
-  use ExUnit.Case, async: true
+  use Rujira.Test.CacheCase, async: false
 
   alias Cosmos.Bank.V1beta1.QueryAllBalancesRequest
   alias Cosmos.Bank.V1beta1.QueryAllBalancesResponse
@@ -133,7 +133,7 @@ defmodule Rujira.Bank.BalanceTest do
       assert Keyword.get(opts, :metadata) == @metadata
     end
 
-    test "two height reads both reach the node" do
+    test "a second read at the same height is served from the cache" do
       MockNode.expect(fn %QueryBalanceRequest{} ->
         {:ok, %QueryBalanceResponse{balance: %ChainCoin{denom: "rune", amount: "1000"}}}
       end)
@@ -142,7 +142,7 @@ defmodule Rujira.Bank.BalanceTest do
       assert {:ok, _} = Balance.get("thor1abc", @rune, height: @height)
 
       assert_received {:mock_node, %QueryBalanceRequest{}, _}
-      assert_received {:mock_node, %QueryBalanceRequest{}, _}
+      refute_received {:mock_node, %QueryBalanceRequest{}, _}
     end
 
     test "list/2 forwards the height to every page" do

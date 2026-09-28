@@ -10,14 +10,13 @@ defmodule Rujira.Thorchain.LiquidityProvider do
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Assets.Asset
+  alias Rujira.Cache
   alias Rujira.Math
   alias Rujira.Node
   alias Rujira.String
   alias Thorchain.Types.Query.Stub
   alias Thorchain.Types.QueryLiquidityProviderRequest
   alias Thorchain.Types.QueryLiquidityProviderResponse
-
-  use Memoize
 
   # --- Struct ---
 
@@ -113,30 +112,23 @@ defmodule Rujira.Thorchain.LiquidityProvider do
     end
   end
 
-  @doc """
-  Memoized fetch of a liquidity provider's raw position.
-
-  Invalidate with `Memoize.invalidate(Rujira.Thorchain.LiquidityProvider, :query, [asset, address])`.
-  """
+  @doc "A liquidity provider's raw position, cached per `Rujira.Cache`."
   @spec query(String.t(), String.t()) ::
           {:ok, QueryLiquidityProviderResponse.t()} | {:error, term()}
-  defmemo query(asset, address) do
-    fetch(asset, address, [])
-  end
+  def query(asset, address), do: query(asset, address, [])
 
-  @doc """
-  As `query/2`, read at `opts[:height]` when one is given - a height read is
-  never cached. Without a `:height` this is `query/2`, so the other opts are not
-  applied.
-  """
+  @doc "As `query/2`, read at `opts[:height]` or, without one, at the head."
   @spec query(String.t(), String.t(), Node.opts()) ::
           {:ok, QueryLiquidityProviderResponse.t()} | {:error, term()}
   def query(asset, address, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch(asset, address, opts) end,
-      fn -> query(asset, address) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :query, [asset, address]},
+        [:per_block],
+        opts,
+        fn _height -> fetch(asset, address, opts) end
+      )
+    end
   end
 
   # --- Private ---

@@ -6,8 +6,9 @@ defmodule Rujira.Thorchain do
   and queries. Invalidate cache on the resource module, not here.
 
   Every query takes a trailing `opts`, forwarded to `Rujira.Node.query/3`, so a
-  caller can read at a `height:`. A memoized query's opts arity reads the node
-  uncached when given a `:height` - see the resource module.
+  caller can read at a `height:`. Every lookup here is cached per
+  `Rujira.Cache`, resolved at `opts[:height]` or, without one, at the head -
+  see the resource module.
   """
 
   alias Rujira.Thorchain.Address

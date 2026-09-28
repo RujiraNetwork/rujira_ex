@@ -6,13 +6,12 @@ defmodule Rujira.Thorchain.Network do
   """
 
   alias Rujira.Amount
+  alias Rujira.Cache
   alias Rujira.Math
   alias Rujira.Node
   alias Thorchain.Types.Query.Stub
   alias Thorchain.Types.QueryNetworkRequest
   alias Thorchain.Types.QueryNetworkResponse
-
-  use Memoize
 
   # --- Struct ---
 
@@ -82,22 +81,17 @@ defmodule Rujira.Thorchain.Network do
 
   # --- Queries ---
 
-  @doc """
-  Memoized fetch of the network economics.
-
-  Invalidate with `Memoize.invalidate(Rujira.Thorchain.Network, :get)`.
-  """
+  @doc "The network economics, cached per `Rujira.Cache`."
   @spec get() :: {:ok, t()} | {:error, term()}
-  defmemo get, expires_in: Rujira.cache_ttl() do
-    fetch([])
-  end
+  def get, do: get([])
 
-  @doc """
-  As `get/0`, read at `opts[:height]` when one is given - a height read is never
-  cached. Without a `:height` this is `get/0`, so the other opts are not applied.
-  """
+  @doc "As `get/0`, read at `opts[:height]` or, without one, at the head."
   @spec get(Node.opts()) :: {:ok, t()} | {:error, term()}
-  def get(opts), do: Node.at_height(opts, fn -> fetch(opts) end, &get/0)
+  def get(opts) do
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :get, []}, [:per_block], opts, fn _height -> fetch(opts) end)
+    end
+  end
 
   # --- Private ---
 

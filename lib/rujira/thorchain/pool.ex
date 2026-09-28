@@ -8,14 +8,13 @@ defmodule Rujira.Thorchain.Pool do
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Assets.Asset
+  alias Rujira.Cache
   alias Rujira.Math
   alias Rujira.Node
   alias Thorchain.Types.Query.Stub
   alias Thorchain.Types.QueryPoolResponse
   alias Thorchain.Types.QueryPoolsRequest
   alias Thorchain.Types.QueryPoolsResponse
-
-  use Memoize
 
   # --- Struct ---
 
@@ -104,22 +103,17 @@ defmodule Rujira.Thorchain.Pool do
 
   # --- Queries ---
 
-  @doc """
-  Memoized list of all pools.
-
-  Invalidate with `Memoize.invalidate(Rujira.Thorchain.Pool, :list)`.
-  """
+  @doc "All pools, cached per `Rujira.Cache`."
   @spec list() :: {:ok, [t()]} | {:error, term()}
-  defmemo list, expires_in: Rujira.cache_ttl() do
-    fetch([])
-  end
+  def list, do: list([])
 
-  @doc """
-  As `list/0`, read at `opts[:height]` when one is given - a height read is never
-  cached. Without a `:height` this is `list/0`, so the other opts are not applied.
-  """
+  @doc "As `list/0`, read at `opts[:height]` or, without one, at the head."
   @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
-  def list(opts), do: Node.at_height(opts, fn -> fetch(opts) end, &list/0)
+  def list(opts) do
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :list, []}, [:per_block], opts, fn _height -> fetch(opts) end)
+    end
+  end
 
   @spec get(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def get(asset, opts \\ []) do

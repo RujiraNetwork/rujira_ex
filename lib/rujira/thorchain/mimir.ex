@@ -5,13 +5,12 @@ defmodule Rujira.Thorchain.Mimir do
   Struct, construction, and queries. Use `Rujira.Thorchain` as the public API.
   """
 
+  alias Rujira.Cache
   alias Rujira.Node
   alias Thorchain.Types.Mimir, as: TcMimir
   alias Thorchain.Types.Query.Stub
   alias Thorchain.Types.QueryMimirValuesRequest
   alias Thorchain.Types.QueryMimirValuesResponse
-
-  use Memoize
 
   # --- Struct ---
 
@@ -33,22 +32,17 @@ defmodule Rujira.Thorchain.Mimir do
 
   # --- Queries ---
 
-  @doc """
-  Memoized list of all mimir values.
-
-  Invalidate with `Memoize.invalidate(Rujira.Thorchain.Mimir, :list)`.
-  """
+  @doc "All mimir values, cached per `Rujira.Cache`."
   @spec list() :: {:ok, [t()]} | {:error, term()}
-  defmemo list, expires_in: Rujira.cache_ttl() do
-    fetch([])
-  end
+  def list, do: list([])
 
-  @doc """
-  As `list/0`, read at `opts[:height]` when one is given - a height read is never
-  cached. Without a `:height` this is `list/0`, so the other opts are not applied.
-  """
+  @doc "As `list/0`, read at `opts[:height]` or, without one, at the head."
   @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
-  def list(opts), do: Node.at_height(opts, fn -> fetch(opts) end, &list/0)
+  def list(opts) do
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :list, []}, [:per_block], opts, fn _height -> fetch(opts) end)
+    end
+  end
 
   @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def from_id(key, opts \\ []) do

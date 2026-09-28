@@ -6,10 +6,9 @@ defmodule Rujira.Bank.Holder do
   alias Cosmos.Base.Query.V1beta1.PageRequest
   alias Rujira.Assets
   alias Rujira.Assets.Asset
+  alias Rujira.Cache
   alias Rujira.Coin
   alias Rujira.Node
-
-  use Memoize
 
   # --- Struct ---
 
@@ -30,35 +29,28 @@ defmodule Rujira.Bank.Holder do
 
   # --- Queries ---
 
-  @doc """
-  Memoized list of every holder of an asset, in node order.
-
-  Invalidate with `Memoize.invalidate(Rujira.Bank.Holder, :holders, [asset])`.
-  """
+  @doc "Every holder of an asset, in node order, cached per `Rujira.Cache`."
   @spec holders(Asset.t()) :: {:ok, [t()]} | {:error, term()}
-  defmemo holders(asset), expires_in: :timer.hours(1) do
-    fetch_holders(asset, [])
-  end
+  def holders(asset), do: holders(asset, [])
 
-  @doc """
-  As `holders/1`, read at `opts[:height]` when one is given - a height read is
-  never cached. Without a `:height` this is `holders/1`, so the other opts are
-  not applied.
-  """
+  @doc "As `holders/1`, read at `opts[:height]` or, without one, at the head."
   @spec holders(Asset.t(), Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def holders(asset, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_holders(asset, opts) end,
-      fn -> holders(asset) end
-    )
+    with {:ok, denom} <- Assets.to_native(asset),
+         {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :holders, [denom]},
+        [{:denom_transfers, denom}],
+        opts,
+        fn _height -> fetch_holders(denom, opts) end
+      )
+    end
   end
 
   # --- Private ---
 
-  defp fetch_holders(asset, opts) do
-    with {:ok, denom} <- Assets.to_native(asset),
-         {:ok, owners} <- denom_owners(denom, nil, opts) do
+  defp fetch_holders(denom, opts) do
+    with {:ok, owners} <- denom_owners(denom, nil, opts) do
       Rujira.Enum.reduce_while_ok(owners, &new/1)
     end
   end

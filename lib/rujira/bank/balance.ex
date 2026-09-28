@@ -9,6 +9,7 @@ defmodule Rujira.Bank.Balance do
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Assets.Asset
+  alias Rujira.Cache
   alias Rujira.Coin
   alias Rujira.Node
 
@@ -16,13 +17,59 @@ defmodule Rujira.Bank.Balance do
 
   @doc """
   Fetches an account's balance of a single asset. Amount is 0 when the chain
-  reports a real zero balance (a `Coin` with amount `"0"`). Read at
-  `opts[:height]` when one is given.
+  reports a real zero balance (a `Coin` with amount `"0"`). Cached per
+  `Rujira.Cache`, resolved at `opts[:height]` or, without one, at the head.
   """
   @spec get(String.t(), Asset.t(), Node.opts()) :: {:ok, Coin.t()} | {:error, term()}
   def get(address, %Asset{} = asset, opts \\ []) do
     with {:ok, denom} <- Assets.to_native(asset),
-         {:ok, response} <-
+         {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :get, [address, denom]},
+        [{:balance, address}],
+        opts,
+        fn _height -> fetch_get(address, denom, asset, opts) end
+      )
+    end
+  end
+
+  @doc """
+  Fetches all of an account's balances. Cached per `Rujira.Cache`, resolved at
+  `opts[:height]` or, without one, at the head.
+  """
+  @spec list(String.t(), Node.opts()) :: {:ok, [Coin.t()]} | {:error, term()}
+  def list(address, opts \\ []) do
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :list, [address]},
+        [{:balance, address}],
+        opts,
+        fn _height -> all_balances(address, nil, opts) end
+      )
+    end
+  end
+
+  @doc """
+  Fetches an account's spendable balances (excluding locked/vesting amounts).
+  Cached per `Rujira.Cache`, resolved at `opts[:height]` or, without one, at
+  the head.
+  """
+  @spec list_spendable(String.t(), Node.opts()) :: {:ok, [Coin.t()]} | {:error, term()}
+  def list_spendable(address, opts \\ []) do
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :list_spendable, [address]},
+        [{:balance, address}, :per_block],
+        opts,
+        fn _height -> spendable_balances(address, nil, opts) end
+      )
+    end
+  end
+
+  # --- Private ---
+
+  defp fetch_get(address, denom, asset, opts) do
+    with {:ok, response} <-
            Node.query(
              &Stub.balance/3,
              %QueryBalanceRequest{address: address, denom: denom},
@@ -33,19 +80,6 @@ defmodule Rujira.Bank.Balance do
       {:ok, Coin.new(asset, amount)}
     end
   end
-
-  @doc "Fetches all of an account's balances, at `opts[:height]` when one is given."
-  @spec list(String.t(), Node.opts()) :: {:ok, [Coin.t()]} | {:error, term()}
-  def list(address, opts \\ []), do: all_balances(address, nil, opts)
-
-  @doc """
-  Fetches an account's spendable balances (excluding locked/vesting amounts), at
-  `opts[:height]` when one is given.
-  """
-  @spec list_spendable(String.t(), Node.opts()) :: {:ok, [Coin.t()]} | {:error, term()}
-  def list_spendable(address, opts \\ []), do: spendable_balances(address, nil, opts)
-
-  # --- Private ---
 
   # The node always populates `balance` for a valid `denom` - a real zero
   # balance still comes back as a `Coin` with amount `"0"`. A `nil` balance is

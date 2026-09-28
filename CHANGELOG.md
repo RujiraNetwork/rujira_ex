@@ -93,6 +93,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `Rujira.Thorchain.Block.get/2` no longer expires a cached block on the
     `block_cache_ttl` window; a block is held at its own height, and how many
     are held is the cache's `retention`.
+  - Caching - group D: `Rujira.Thorchain.Network`, `Mimir`, `Pool`,
+    `InboundAddress`, `OutboundFee` and `LiquidityProvider`, and
+    `Rujira.Bank.Balance`, `Supply` and `Holder`, read through `Rujira.Cache`
+    instead of memoizing or reading the node raw. `Bank.Balance.get/3, list/2,
+    list_spendable/2` and `Bank.Supply.get/2` are newly cached (previously
+    uncached node reads); `Bank.Holder.holders/1,2` drops its 1-hour TTL.
+    `Bank.Supply.list/1` (every denom's supply) has no single invalidation tag,
+    so it is cached against `:per_block` rather than carried over.
 - A token-factory (`x/…`) denom takes its symbol, ticker and decimals from the
   denom metadata THORChain holds for it, and the `Asset` carries that metadata.
   A denom the node holds no metadata for is still named here: `x/brune` is
