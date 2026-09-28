@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.7.0
 
 ### Added
 
@@ -242,6 +242,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Rujira.Fin.Range.list_all/3` now resolves the pairs it was given by name
   concurrently too, via `Rujira.Enum.reduce_async_while_ok/4` - the ranges of
   those pairs already were.
+- `Rujira.Fin.Order` computes `filled_value` by dividing by the rate rather
+  than multiplying by its reciprocal, so a value can differ by one in the last
+  unit, in the more precise direction.
 
 ## 0.6.1
 

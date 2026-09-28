@@ -11,7 +11,7 @@ Add `rujira_ex` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:rujira_ex, "~> 0.1.0"}
+    {:rujira_ex, "~> 0.7.0"}
   ]
 end
 ```
