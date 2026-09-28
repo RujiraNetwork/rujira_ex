@@ -1,5 +1,9 @@
 defmodule Rujira.Brune.StateTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  `query/2` reads through `Rujira.Cache`, whose stores and head are global, so
+  this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Brune.Node
   alias Rujira.Brune.Pool
@@ -104,12 +108,6 @@ defmodule Rujira.Brune.StateTest do
   end
 
   describe "load/1" do
-    setup do
-      Memoize.invalidate(State)
-      on_exit(fn -> Memoize.invalidate(State) end)
-      :ok
-    end
-
     test "fills state from the scripted query" do
       MockNode.expect(fn %{"state" => %{}} -> MockNode.ok(state_attrs()) end)
 
@@ -121,6 +119,18 @@ defmodule Rujira.Brune.StateTest do
       MockNode.expect(fn _ -> {:error, %GRPC.RPCError{status: 2, message: "boom"}} end)
 
       assert {:error, %GRPC.RPCError{}} = State.load(%Pool{address: "thor1pool"})
+    end
+  end
+
+  describe "query/2" do
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"state" => %{}} -> MockNode.ok(state_attrs()) end)
+
+      assert {:ok, %{}} = State.query("thor1pool", height: default_head())
+      assert {:ok, %{}} = State.query("thor1pool", height: default_head())
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
     end
   end
 end

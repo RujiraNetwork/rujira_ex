@@ -6,12 +6,11 @@ defmodule Rujira.Ghost.Vault.Status do
   """
 
   alias Rujira.Amount
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Ghost.Vault
   alias Rujira.Math
   alias Rujira.Node
-
-  use Memoize
 
   defmodule DebtPool do
     @moduledoc "Share pool that accounts for accrued debt interest (`shares` is a `Decimal`)."
@@ -88,24 +87,21 @@ defmodule Rujira.Ghost.Vault.Status do
     end
   end
 
-  @doc """
-  Memoized fetch of a vault's live status.
-
-  Invalidate with `Memoize.invalidate(Rujira.Ghost.Vault.Status, :query, [address])`.
-  """
+  @doc "A vault's live status, cached per `Rujira.Cache`."
   @spec query(String.t()) :: {:ok, map()} | {:error, term()}
-  defmemo query(address) do
-    fetch(address, [])
-  end
+  def query(address), do: query(address, [])
 
   @doc """
-  As `query/1`, read at `opts[:height]` when one is given - a height read is
-  never cached. Without a `:height` this is `query/1`, so the other opts are not
-  applied.
+  As `query/1`, cached per `Rujira.Cache`; resolved at `opts[:height]` or the
+  head.
   """
   @spec query(String.t(), Node.opts()) :: {:ok, map()} | {:error, term()}
   def query(address, opts) do
-    Node.at_height(opts, fn -> fetch(address, opts) end, fn -> query(address) end)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :query, [address]}, [:per_block], opts, fn _height ->
+        fetch(address, opts)
+      end)
+    end
   end
 
   # --- Private ---

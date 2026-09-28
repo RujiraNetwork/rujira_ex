@@ -1,5 +1,9 @@
 defmodule Rujira.Staking.Pool.StatusTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  `query/2` reads through `Rujira.Cache`, whose stores and head are global, so
+  this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Staking.Pool
   alias Rujira.Staking.Pool.Status
@@ -33,12 +37,6 @@ defmodule Rujira.Staking.Pool.StatusTest do
   end
 
   describe "load/1" do
-    setup do
-      Memoize.invalidate(Status)
-      on_exit(fn -> Memoize.invalidate(Status) end)
-      :ok
-    end
-
     test "fills the pool's status from a scripted query" do
       MockNode.expect(fn %{"status" => %{}} -> MockNode.ok(status_map()) end)
 
@@ -50,6 +48,18 @@ defmodule Rujira.Staking.Pool.StatusTest do
       MockNode.expect(fn _ -> {:error, %GRPC.RPCError{status: 2, message: "boom"}} end)
 
       assert {:error, %GRPC.RPCError{}} = Status.load(%Pool{address: "thor1pool"})
+    end
+  end
+
+  describe "query/2" do
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"status" => %{}} -> MockNode.ok(status_map()) end)
+
+      assert {:ok, %{}} = Status.query("thor1pool", height: default_head())
+      assert {:ok, %{}} = Status.query("thor1pool", height: default_head())
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
     end
   end
 end

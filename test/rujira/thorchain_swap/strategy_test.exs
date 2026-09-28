@@ -1,5 +1,10 @@
 defmodule Rujira.ThorchainSwap.StrategyTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  `query_markets/2` and `query_vaults/2` read through `Rujira.Cache`, whose
+  stores and head are global, so this case runs sync and starts from an empty
+  cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.ThorchainSwap.Strategy
   alias Rujira.ThorchainSwap.Strategy.Vault
@@ -74,12 +79,6 @@ defmodule Rujira.ThorchainSwap.StrategyTest do
   end
 
   describe "load/1" do
-    setup do
-      Memoize.invalidate(Strategy)
-      on_exit(fn -> Memoize.invalidate(Strategy) end)
-      :ok
-    end
-
     test "resolves secured denoms in vaults" do
       MockNode.expect(fn
         %{"markets" => %{}} ->
@@ -134,6 +133,42 @@ defmodule Rujira.ThorchainSwap.StrategyTest do
       MockNode.expect(fn _ -> {:error, %GRPC.RPCError{status: 2, message: "boom"}} end)
 
       assert {:error, %GRPC.RPCError{}} = Strategy.load(%Strategy{address: "thor1strategy"})
+    end
+
+    test "a reply missing 'markets' is invalid_response, not a raw success" do
+      MockNode.expect(fn
+        %{"markets" => %{}} -> MockNode.ok(%{})
+        %{"vaults" => %{}} -> MockNode.ok(%{"vaults" => []})
+      end)
+
+      assert {:error, :invalid_response} = Strategy.load(%Strategy{address: "thor1strategy"})
+    end
+
+    test "a reply missing 'vaults' is invalid_response, not a raw success" do
+      MockNode.expect(fn
+        %{"markets" => %{}} -> MockNode.ok(%{"markets" => []})
+        %{"vaults" => %{}} -> MockNode.ok(%{})
+      end)
+
+      assert {:error, :invalid_response} = Strategy.load(%Strategy{address: "thor1strategy"})
+    end
+  end
+
+  describe "query_markets/2 and query_vaults/2" do
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn
+        %{"markets" => %{}} -> MockNode.ok(%{"markets" => []})
+        %{"vaults" => %{}} -> MockNode.ok(%{"vaults" => []})
+      end)
+
+      assert {:ok, []} = Strategy.query_markets("thor1strategy", height: default_head())
+      assert {:ok, []} = Strategy.query_markets("thor1strategy", height: default_head())
+      assert {:ok, []} = Strategy.query_vaults("thor1strategy", height: default_head())
+      assert {:ok, []} = Strategy.query_vaults("thor1strategy", height: default_head())
+
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
     end
   end
 end

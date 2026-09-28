@@ -6,11 +6,10 @@ defmodule Rujira.Staking.Pool.Status do
   """
 
   alias Rujira.Amount
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Node
   alias Rujira.Staking.Pool
-
-  use Memoize
 
   # --- Struct ---
 
@@ -67,24 +66,24 @@ defmodule Rujira.Staking.Pool.Status do
     end
   end
 
-  @doc """
-  Memoized fetch of a pool's live status.
-
-  Invalidate with `Memoize.invalidate(Rujira.Staking.Pool.Status, :query, [address])`.
-  """
+  @doc "A pool's live status, cached per `Rujira.Cache`."
   @spec query(String.t()) :: {:ok, map()} | {:error, term()}
-  defmemo query(address) do
-    fetch(address, [])
-  end
+  def query(address), do: query(address, [])
 
   @doc """
-  As `query/1`, read at `opts[:height]` when one is given - a height read is
-  never cached. Without a `:height` this is `query/1`, so the other opts are not
-  applied.
+  As `query/1`, cached per `Rujira.Cache`; resolved at `opts[:height]` or the
+  head.
   """
   @spec query(String.t(), Node.opts()) :: {:ok, map()} | {:error, term()}
   def query(address, opts) do
-    Node.at_height(opts, fn -> fetch(address, opts) end, fn -> query(address) end)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :query, [address]},
+        [{:contract, address}, {:balance, address}],
+        opts,
+        fn _height -> fetch(address, opts) end
+      )
+    end
   end
 
   # --- Private ---

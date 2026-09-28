@@ -1,7 +1,12 @@
 defmodule Rujira.Ghost.Vault.BorrowerTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  `query/3` and `query_borrowers/2` read through `Rujira.Cache`, whose stores
+  and head are global, so this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Ghost.Vault.Borrower
+  alias Rujira.Test.MockNode
 
   describe "new/1" do
     test "parses a borrower response" do
@@ -41,6 +46,30 @@ defmodule Rujira.Ghost.Vault.BorrowerTest do
                  "shares" => "100.5",
                  "available" => "400"
                })
+    end
+  end
+
+  describe "query/3" do
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"borrower" => %{"addr" => "thor1b"}} -> MockNode.ok(%{"a" => 1}) end)
+
+      assert {:ok, %{"a" => 1}} = Borrower.query("thor1v", "thor1b", height: default_head())
+      assert {:ok, %{"a" => 1}} = Borrower.query("thor1v", "thor1b", height: default_head())
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+  end
+
+  describe "query_borrowers/2" do
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"borrowers" => _} -> MockNode.ok(%{"borrowers" => []}) end)
+
+      assert {:ok, []} = Borrower.query_borrowers("thor1v", height: default_head())
+      assert {:ok, []} = Borrower.query_borrowers("thor1v", height: default_head())
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
     end
   end
 end

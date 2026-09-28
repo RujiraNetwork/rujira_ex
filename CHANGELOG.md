@@ -110,6 +110,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Rujira.Ghost.Credit.Account`.
 - `Rujira.Contracts.query_state_smart/3` success is typed as any decoded JSON
   value (`term()`), not `map() | nil`.
+- **Caching - group C**
+  - `Rujira.Ghost.Vault.Status`, `.Borrower`, `.Delegate`, `Rujira.Ghost.Credit`
+    (`query_borrows`), `Rujira.Ghost.Credit.Account` (`query_account`,
+    `query_accounts_by_owner`, `query_all_accounts`), `Rujira.Staking.Pool.Status`,
+    `Rujira.Staking.Pool.Account`, `Rujira.Brune.State`, `Rujira.Revenue.Converter`
+    (`query_actions`, `query_status`) and `Rujira.ThorchainSwap.Strategy`
+    (`query_markets`, `query_vaults`) read through `Rujira.Cache` instead of
+    memoizing - a height read is now cached rather than always reaching the node,
+    and blocks invalidate what they changed.
+  - `Rujira.Ghost.Credit.Account.predict/4` and `Rujira.Brune.LoggedEvent.list/4`
+    are now cached, against `{:contract, address}`.
+  - `Rujira.Revenue.Converter.query_actions/1,2` and `query_status/1,2`, and
+    `Rujira.ThorchainSwap.Strategy.query_markets/1,2` and `query_vaults/1,2`, are
+    `{:error, :invalid_response}` for a reply missing its expected key, rather
+    than caching the raw, malformed map as a success.
 
 ### Fixed
 

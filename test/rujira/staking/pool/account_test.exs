@@ -1,5 +1,9 @@
 defmodule Rujira.Staking.Pool.AccountTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  `load/2` reads through `Rujira.Cache`, whose stores and head are global, so
+  this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Assets.Asset
   alias Rujira.Staking.Pool
@@ -23,12 +27,6 @@ defmodule Rujira.Staking.Pool.AccountTest do
 
   defp pool do
     %Pool{address: "thor1pool", receipt_asset: %Asset{id: "x/staking-rune"}}
-  end
-
-  setup do
-    Memoize.invalidate(Account)
-    on_exit(fn -> Memoize.invalidate(Account) end)
-    :ok
   end
 
   describe "load/2" do
@@ -76,6 +74,18 @@ defmodule Rujira.Staking.Pool.AccountTest do
       end)
 
       assert {:error, %GRPC.RPCError{status: 3}} = Account.load(pool(), "thor1owner")
+    end
+
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"account" => %{"addr" => "thor1owner"}} ->
+        MockNode.ok(%{"addr" => "thor1owner", "bonded" => "200", "pending_revenue" => "5"})
+      end)
+
+      assert {:ok, %Account{}} = Account.load(pool(), "thor1owner", height: default_head())
+      assert {:ok, %Account{}} = Account.load(pool(), "thor1owner", height: default_head())
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
     end
   end
 

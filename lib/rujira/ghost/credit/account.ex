@@ -10,6 +10,7 @@ defmodule Rujira.Ghost.Credit.Account do
   Struct, construction, and queries. Use `Rujira.Ghost` as the public API.
   """
 
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Ghost.Credit.Collateral
   alias Rujira.Ghost.Credit.Debt
@@ -17,8 +18,6 @@ defmodule Rujira.Ghost.Credit.Account do
   alias Rujira.Math
   alias Rujira.Node
   alias Rujira.String
-
-  use Memoize
 
   @max_limit 100
 
@@ -94,7 +93,8 @@ defmodule Rujira.Ghost.Credit.Account do
   """
   @spec get(String.t(), String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def get(credit, account, opts \\ []) do
-    with {:ok, res} <- account(credit, account, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, res} <- account(credit, account, opts) do
       new(credit, res)
     end
   end
@@ -105,7 +105,8 @@ defmodule Rujira.Ghost.Credit.Account do
   """
   @spec list(String.t(), Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def list(credit, opts \\ []) do
-    with {:ok, accounts} <- all_accounts(credit, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, accounts} <- all_accounts(credit, opts) do
       Rujira.Enum.reduce_while_ok(accounts, [], &new(credit, &1))
     end
   end
@@ -117,7 +118,8 @@ defmodule Rujira.Ghost.Credit.Account do
   @spec list_by_owner(String.t(), String.t(), String.t() | nil, Node.opts()) ::
           {:ok, [t()]} | {:error, term()}
   def list_by_owner(credit, owner, tag \\ nil, opts \\ []) do
-    with {:ok, accounts} <- accounts_by_owner(credit, owner, tag, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, accounts} <- accounts_by_owner(credit, owner, tag, opts) do
       Rujira.Enum.reduce_while_ok(accounts, [], &new(credit, &1))
     end
   end
@@ -139,15 +141,26 @@ defmodule Rujira.Ghost.Credit.Account do
   @doc """
   The address the credit contract would open an owner's next account at, for the
   given `salt` - the raw salt bytes, base64-encoded on the wire.
+
+  Deterministic given the credit contract's `code_id`, so it is cached per
+  `Rujira.Cache` against `{:contract, credit}`.
   """
   @spec predict(String.t(), String.t(), binary(), Node.opts()) ::
           {:ok, String.t()} | {:error, term()}
   def predict(credit, owner, salt, opts \\ []) when is_binary(salt) do
-    with {:ok, address} <-
-           Contracts.query_state_smart(
-             credit,
-             %{predict: %{owner: owner, salt: Base.encode64(salt)}},
-             opts
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, address} <-
+           Cache.fetch(
+             {__MODULE__, :predict, [credit, owner, salt]},
+             [{:contract, credit}],
+             opts,
+             fn _height ->
+               Contracts.query_state_smart(
+                 credit,
+                 %{predict: %{owner: owner, salt: Base.encode64(salt)}},
+                 opts
+               )
+             end
            ) do
       predicted(address)
     end
@@ -161,40 +174,27 @@ defmodule Rujira.Ghost.Credit.Account do
   defp predicted(address) when is_binary(address), do: {:ok, address}
   defp predicted(_), do: {:error, :invalid_response}
 
-  defmemop query_account(credit, account) do
-    fetch_account(credit, account, [])
-  end
-
-  defmemop query_accounts_by_owner(credit, owner, tag) do
-    fetch_accounts_by_owner(credit, owner, tag, [])
-  end
-
-  defmemop query_all_accounts(credit) do
-    fetch_all_accounts_page(credit, nil, [])
-  end
-
   defp account(credit, account, opts) do
-    opts
-    |> Node.at_height(
-      fn -> fetch_account(credit, account, opts) end,
-      fn -> query_account(credit, account) end
-    )
+    {__MODULE__, :query_account, [credit, account]}
+    |> Cache.fetch([:per_block], opts, fn _height -> fetch_account(credit, account, opts) end)
     |> not_found()
   end
 
   defp accounts_by_owner(credit, owner, tag, opts) do
-    Node.at_height(
+    Cache.fetch(
+      {__MODULE__, :query_accounts_by_owner, [credit, owner, tag]},
+      [:per_block],
       opts,
-      fn -> fetch_accounts_by_owner(credit, owner, tag, opts) end,
-      fn -> query_accounts_by_owner(credit, owner, tag) end
+      fn _height -> fetch_accounts_by_owner(credit, owner, tag, opts) end
     )
   end
 
   defp all_accounts(credit, opts) do
-    Node.at_height(
+    Cache.fetch(
+      {__MODULE__, :query_all_accounts, [credit]},
+      [:per_block],
       opts,
-      fn -> fetch_all_accounts_page(credit, nil, opts) end,
-      fn -> query_all_accounts(credit) end
+      fn _height -> fetch_all_accounts_page(credit, nil, opts) end
     )
   end
 

@@ -8,12 +8,11 @@ defmodule Rujira.ThorchainSwap.Strategy do
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Assets.Asset
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Deployments
   alias Rujira.Math
   alias Rujira.Node
-
-  use Memoize
 
   defmodule Vault do
     @moduledoc "A token's borrow vault, as returned by the strategy's `vaults` query."
@@ -115,14 +114,7 @@ defmodule Rujira.ThorchainSwap.Strategy do
   @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def from_id(address, opts \\ []), do: get(address, opts)
 
-  @doc """
-  Loads the strategy's live `markets` and `vaults` into its fields.
-
-  Both are memoized on `address`. Invalidate with:
-
-      Memoize.invalidate(Rujira.ThorchainSwap.Strategy, :query_markets, [address])
-      Memoize.invalidate(Rujira.ThorchainSwap.Strategy, :query_vaults, [address])
-  """
+  @doc "Loads the strategy's live `markets` and `vaults` into its fields."
   @spec load(t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def load(%__MODULE__{address: address} = strategy, opts \\ []) do
     with {:ok, markets} <- query_markets(address, opts),
@@ -131,49 +123,65 @@ defmodule Rujira.ThorchainSwap.Strategy do
     end
   end
 
+  @doc "The strategy's live markets, cached per `Rujira.Cache`."
   @spec query_markets(String.t()) :: {:ok, [String.t()]} | {:error, term()}
-  defmemo query_markets(address) do
-    fetch_markets(address, [])
-  end
+  def query_markets(address), do: query_markets(address, [])
 
   @doc """
-  As `query_markets/1`, read at `opts[:height]` when one is given - a height read
-  is never cached. Without a `:height` this is `query_markets/1`, so the other
-  opts are not applied.
+  As `query_markets/1`, cached per `Rujira.Cache`; resolved at `opts[:height]`
+  or the head.
   """
   @spec query_markets(String.t(), Node.opts()) :: {:ok, [String.t()]} | {:error, term()}
   def query_markets(address, opts) do
-    Node.at_height(opts, fn -> fetch_markets(address, opts) end, fn -> query_markets(address) end)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :query_markets, [address]},
+        [{:contract, address}],
+        opts,
+        fn _height ->
+          fetch_markets(address, opts)
+        end
+      )
+    end
   end
 
+  @doc "The strategy's live vaults, cached per `Rujira.Cache`."
   @spec query_vaults(String.t()) :: {:ok, [Vault.t()]} | {:error, term()}
-  defmemo query_vaults(address) do
-    fetch_vaults(address, [])
-  end
+  def query_vaults(address), do: query_vaults(address, [])
 
   @doc """
-  As `query_vaults/1`, read at `opts[:height]` when one is given - a height read
-  is never cached. Without a `:height` this is `query_vaults/1`, so the other
-  opts are not applied.
+  As `query_vaults/1`, cached per `Rujira.Cache`; resolved at `opts[:height]`
+  or the head.
   """
   @spec query_vaults(String.t(), Node.opts()) :: {:ok, [Vault.t()]} | {:error, term()}
   def query_vaults(address, opts) do
-    Node.at_height(opts, fn -> fetch_vaults(address, opts) end, fn -> query_vaults(address) end)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :query_vaults, [address]},
+        [{:contract, address}],
+        opts,
+        fn _height ->
+          fetch_vaults(address, opts)
+        end
+      )
+    end
   end
 
   # --- Private ---
 
   defp fetch_markets(address, opts) do
-    with {:ok, %{"markets" => markets}} <-
-           Contracts.query_state_smart(address, %{markets: %{}}, opts) do
-      {:ok, markets}
+    case Contracts.query_state_smart(address, %{markets: %{}}, opts) do
+      {:ok, %{"markets" => markets}} -> {:ok, markets}
+      {:ok, _} -> {:error, :invalid_response}
+      {:error, _} = err -> err
     end
   end
 
   defp fetch_vaults(address, opts) do
-    with {:ok, %{"vaults" => vaults}} <-
-           Contracts.query_state_smart(address, %{vaults: %{}}, opts) do
-      Rujira.Enum.reduce_while_ok(vaults, [], &vault/1)
+    case Contracts.query_state_smart(address, %{vaults: %{}}, opts) do
+      {:ok, %{"vaults" => vaults}} -> Rujira.Enum.reduce_while_ok(vaults, [], &vault/1)
+      {:ok, _} -> {:error, :invalid_response}
+      {:error, _} = err -> err
     end
   end
 

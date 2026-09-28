@@ -15,12 +15,11 @@ defmodule Rujira.Revenue.Converter do
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Assets.Asset
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Deployments
   alias Rujira.Math
   alias Rujira.Node
-
-  use Memoize
 
   defmodule TargetDenom do
     @moduledoc "A target denom distributed to target_addresses each run, capped at max_per_second times the seconds elapsed since last_executed. `max_per_second` is nil on a v1.1.0 converter, which has no per-denom cap."
@@ -162,14 +161,7 @@ defmodule Rujira.Revenue.Converter do
   @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def from_id(address, opts \\ []), do: get(address, opts)
 
-  @doc """
-  Loads the converter's live `actions` and `last_action` into its fields.
-
-  Both are memoized on `address`. Invalidate with:
-
-      Memoize.invalidate(Rujira.Revenue.Converter, :query_actions, [address])
-      Memoize.invalidate(Rujira.Revenue.Converter, :query_status, [address])
-  """
+  @doc "Loads the converter's live `actions` and `last_action` into its fields."
   @spec load(t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def load(%__MODULE__{address: address} = converter, opts \\ []) do
     with {:ok, actions} <- query_actions(address, opts),
@@ -178,57 +170,65 @@ defmodule Rujira.Revenue.Converter do
     end
   end
 
+  @doc "The converter's live actions, cached per `Rujira.Cache`."
   @spec query_actions(String.t()) :: {:ok, [Action.t()]} | {:error, term()}
-  defmemo query_actions(address) do
-    fetch_actions(address, [])
-  end
+  def query_actions(address), do: query_actions(address, [])
 
   @doc """
-  As `query_actions/1`, read at `opts[:height]` when one is given - a height
-  read is never cached. Without a `:height` this is `query_actions/1`, so the
-  other opts are not applied.
+  As `query_actions/1`, cached per `Rujira.Cache`; resolved at `opts[:height]`
+  or the head.
   """
   @spec query_actions(String.t(), Node.opts()) :: {:ok, [Action.t()]} | {:error, term()}
   def query_actions(address, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_actions(address, opts) end,
-      fn -> query_actions(address) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :query_actions, [address]},
+        [{:contract, address}],
+        opts,
+        fn _height ->
+          fetch_actions(address, opts)
+        end
+      )
+    end
   end
 
+  @doc "The converter's current `last_action` denom, cached per `Rujira.Cache`."
   @spec query_status(String.t()) :: {:ok, Asset.t() | nil} | {:error, term()}
-  defmemo query_status(address) do
-    fetch_status(address, [])
-  end
+  def query_status(address), do: query_status(address, [])
 
   @doc """
-  As `query_status/1`, read at `opts[:height]` when one is given - a height
-  read is never cached. Without a `:height` this is `query_status/1`, so the
-  other opts are not applied.
+  As `query_status/1`, cached per `Rujira.Cache`; resolved at `opts[:height]`
+  or the head.
   """
   @spec query_status(String.t(), Node.opts()) :: {:ok, Asset.t() | nil} | {:error, term()}
   def query_status(address, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_status(address, opts) end,
-      fn -> query_status(address) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :query_status, [address]},
+        [{:contract, address}],
+        opts,
+        fn _height ->
+          fetch_status(address, opts)
+        end
+      )
+    end
   end
 
   # --- Private ---
 
   defp fetch_actions(address, opts) do
-    with {:ok, %{"actions" => actions}} <-
-           Contracts.query_state_smart(address, %{actions: %{}}, opts) do
-      Rujira.Enum.reduce_while_ok(actions, [], &action/1)
+    case Contracts.query_state_smart(address, %{actions: %{}}, opts) do
+      {:ok, %{"actions" => actions}} -> Rujira.Enum.reduce_while_ok(actions, [], &action/1)
+      {:ok, _} -> {:error, :invalid_response}
+      {:error, _} = err -> err
     end
   end
 
   defp fetch_status(address, opts) do
-    with {:ok, %{"last" => last}} <-
-           Contracts.query_state_smart(address, %{status: %{}}, opts) do
-      status(last)
+    case Contracts.query_state_smart(address, %{status: %{}}, opts) do
+      {:ok, %{"last" => last}} -> status(last)
+      {:ok, _} -> {:error, :invalid_response}
+      {:error, _} = err -> err
     end
   end
 

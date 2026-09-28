@@ -8,11 +8,10 @@ defmodule Rujira.Ghost.Vault.Borrower do
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Assets.Asset
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Math
   alias Rujira.Node
-
-  use Memoize
 
   @max_limit 100
 
@@ -80,48 +79,38 @@ defmodule Rujira.Ghost.Vault.Borrower do
     end
   end
 
-  @doc """
-  Memoized fetch of a borrower's raw position on a vault.
-
-  Invalidate with `Memoize.invalidate(Rujira.Ghost.Vault.Borrower, :query, [vault, address])`.
-  """
+  @doc "A borrower's raw position on a vault, cached per `Rujira.Cache`."
   @spec query(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
-  defmemo query(vault, address) do
-    fetch(vault, address, [])
-  end
+  def query(vault, address), do: query(vault, address, [])
 
   @doc """
-  As `query/2`, read at `opts[:height]` when one is given - a height read is
-  never cached. Without a `:height` this is `query/2`, so the other opts are not
-  applied.
+  As `query/2`, cached per `Rujira.Cache`; resolved at `opts[:height]` or the
+  head.
   """
   @spec query(String.t(), String.t(), Node.opts()) :: {:ok, map()} | {:error, term()}
   def query(vault, address, opts) do
-    Node.at_height(opts, fn -> fetch(vault, address, opts) end, fn -> query(vault, address) end)
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :query, [vault, address]}, [:per_block], opts, fn _height ->
+        fetch(vault, address, opts)
+      end)
+    end
   end
 
-  @doc """
-  Memoized fetch of all raw borrower positions on a vault, paginated internally.
-
-  Invalidate with `Memoize.invalidate(Rujira.Ghost.Vault.Borrower, :query_borrowers, [vault])`.
-  """
+  @doc "Every raw borrower position on a vault, paginated internally, cached per `Rujira.Cache`."
   @spec query_borrowers(String.t()) :: {:ok, [map()]} | {:error, term()}
-  defmemo query_borrowers(vault) do
-    query_borrowers_page(vault, nil, [])
-  end
+  def query_borrowers(vault), do: query_borrowers(vault, [])
 
   @doc """
-  As `query_borrowers/1`, read at `opts[:height]` when one is given - a height
-  read is never cached. Without a `:height` this is `query_borrowers/1`, so the
-  other opts are not applied.
+  As `query_borrowers/1`, cached per `Rujira.Cache`; resolved at `opts[:height]`
+  or the head.
   """
   @spec query_borrowers(String.t(), Node.opts()) :: {:ok, [map()]} | {:error, term()}
   def query_borrowers(vault, opts) do
-    Node.at_height(
-      opts,
-      fn -> query_borrowers_page(vault, nil, opts) end,
-      fn -> query_borrowers(vault) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch({__MODULE__, :query_borrowers, [vault]}, [:per_block], opts, fn _height ->
+        query_borrowers_page(vault, nil, opts)
+      end)
+    end
   end
 
   # --- Private ---

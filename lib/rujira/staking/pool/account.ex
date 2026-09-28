@@ -14,13 +14,12 @@ defmodule Rujira.Staking.Pool.Account do
   """
 
   alias Rujira.Amount
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Math
   alias Rujira.Node
   alias Rujira.Staking.Pool
   alias Rujira.Staking.Pool.Status
-
-  use Memoize
 
   # --- Struct ---
 
@@ -59,7 +58,8 @@ defmodule Rujira.Staking.Pool.Account do
   """
   @spec load(Pool.t(), String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def load(%Pool{} = pool, owner, opts \\ []) do
-    with {:ok, res} <- account(pool.address, owner, opts),
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, res} <- account(pool.address, owner, opts),
          {:ok, bonded} <- Amount.new(Map.get(res, "bonded")),
          {:ok, pending_revenue} <- Amount.new(Map.get(res, "pending_revenue")) do
       {:ok, new(pool, owner, bonded, pending_revenue)}
@@ -124,17 +124,13 @@ defmodule Rujira.Staking.Pool.Account do
 
   # --- Private ---
 
-  defmemop query(address, owner) do
-    fetch(address, owner, [])
-  end
-
   defp fetch(address, owner, opts) do
     Contracts.query_state_smart(address, %{account: %{addr: owner}}, opts)
   end
 
   defp account(address, owner, opts) do
-    opts
-    |> Node.at_height(fn -> fetch(address, owner, opts) end, fn -> query(address, owner) end)
+    {__MODULE__, :query, [address, owner]}
+    |> Cache.fetch([{:contract, address}], opts, fn _height -> fetch(address, owner, opts) end)
     |> not_found()
   end
 

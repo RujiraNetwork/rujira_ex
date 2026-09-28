@@ -1,7 +1,12 @@
 defmodule Rujira.Ghost.Vault.StatusTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  `query/2` reads through `Rujira.Cache`, whose stores and head are global, so
+  this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Ghost.Vault.Status
+  alias Rujira.Test.MockNode
 
   describe "new/1" do
     test "parses status with nested debt/deposit pools and a ns timestamp" do
@@ -24,6 +29,46 @@ defmodule Rujira.Ghost.Vault.StatusTest do
 
     test "errors on missing fields" do
       assert {:error, :invalid_attrs} = Status.new(%{})
+    end
+  end
+
+  describe "query/2" do
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"status" => %{}} -> MockNode.ok(%{"a" => 1}) end)
+
+      assert {:ok, %{"a" => 1}} = Status.query("thor1vault", height: default_head())
+      assert {:ok, %{"a" => 1}} = Status.query("thor1vault", height: default_head())
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
+    test "a different height fetches again" do
+      MockNode.expect(fn %{"status" => %{}} -> MockNode.ok(%{"a" => 1}) end)
+
+      assert {:ok, %{"a" => 1}} = Status.query("thor1vault", height: default_head())
+      assert {:ok, %{"a" => 1}} = Status.query("thor1vault", height: default_head() + 1)
+
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
+    end
+
+    test "an error is never cached, so the next read retries it" do
+      MockNode.expect(fn %{"status" => %{}} ->
+        case Process.get(:calls, 0) do
+          0 ->
+            Process.put(:calls, 1)
+            {:error, %GRPC.RPCError{status: 13, message: "boom"}}
+
+          _ ->
+            MockNode.ok(%{"a" => 1})
+        end
+      end)
+
+      assert {:error, %GRPC.RPCError{status: 13}} =
+               Status.query("thor1vault", height: default_head())
+
+      assert {:ok, %{"a" => 1}} = Status.query("thor1vault", height: default_head())
     end
   end
 end

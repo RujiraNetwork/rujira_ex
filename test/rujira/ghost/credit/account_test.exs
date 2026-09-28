@@ -1,5 +1,9 @@
 defmodule Rujira.Ghost.Credit.AccountTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  Every query here reads through `Rujira.Cache`, whose stores and head are
+  global, so this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Ghost.Credit.Account
   alias Rujira.Ghost.Credit.Collateral
@@ -167,6 +171,16 @@ defmodule Rujira.Ghost.Credit.AccountTest do
       assert {:error, :invalid_id} = Account.from_id("thor1credit")
       assert {:error, :invalid_id} = Account.from_id("thor1credit/thor1account/extra")
     end
+
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"account" => "thor1account"} -> MockNode.ok(response()) end)
+
+      assert {:ok, %Account{}} = Account.get("thor1credit", "thor1account", height: @height)
+      assert {:ok, %Account{}} = Account.get("thor1credit", "thor1account", height: @height)
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
   end
 
   describe "list/2" do
@@ -235,6 +249,19 @@ defmodule Rujira.Ghost.Credit.AccountTest do
 
       assert {:error, :invalid_response} =
                Account.predict("thor1credit", "thor1owner", <<1, 2, 3>>, height: @height)
+    end
+
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"predict" => _} -> MockNode.ok("thor1predicted") end)
+
+      assert {:ok, "thor1predicted"} =
+               Account.predict("thor1credit", "thor1owner", <<1, 2, 3>>, height: @height)
+
+      assert {:ok, "thor1predicted"} =
+               Account.predict("thor1credit", "thor1owner", <<1, 2, 3>>, height: @height)
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
     end
   end
 
