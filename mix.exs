@@ -75,7 +75,9 @@ defmodule RujiraEx.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: [:test], runtime: false},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      # dev-only: the gRPC client adapter scripts/refresh_chain_assets.exs needs; not a runtime or Hex dependency
+      {:gun, "~> 2.4.0", only: :dev}
     ]
   end
 end

@@ -1,10 +1,15 @@
 defmodule Rujira.Staking.PoolTest do
   use ExUnit.Case, async: true
 
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Rujira.Assets.Asset
   alias Rujira.Staking.Pool
   alias Rujira.Staking.Pool.RevenueConverter
   alias Rujira.Test.MockNode
+
+  setup do
+    MockNode.expect(fn %QueryDenomMetadataRequest{denom: denom} -> no_denom_metadata(denom) end)
+  end
 
   defp config(extra \\ %{}) do
     Map.merge(
@@ -69,4 +74,10 @@ defmodule Rujira.Staking.PoolTest do
       assert {:error, :not_found} = Pool.from_id("thor1missing")
     end
   end
+
+  # A vault/pool receipt is a token-factory denom, so building one reads the
+  # chain's metadata for it. These fixtures are denoms the node holds none for,
+  # which is what names them here.
+  defp no_denom_metadata(denom),
+    do: {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom #{denom}"}}
 end

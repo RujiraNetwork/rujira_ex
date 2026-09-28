@@ -38,6 +38,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed (breaking)
 
+- A token-factory (`x/…`) denom takes its symbol, ticker and decimals from the
+  denom metadata THORChain holds for it, and the `Asset` carries that metadata.
+  A denom the node holds no metadata for is still named here: `x/brune` is
+  `bRUNE` and `x/staking-<bond denom>` is `s` + the bond's ticker; anything else
+  is the denom with `x/` stripped, as the chain spells it, rather than upcased.
+  Any other node error is returned unchanged from `Rujira.Assets.from_denom/2`
+  rather than falling back to a derived name. Tickers consumers see change with
+  it, among them:
+  - `x/staking-x/brune` — `sbRUNE` -> `ybRUNE`
+  - `x/staking-x/ruji` — `sRUJI` (unchanged), `x/staking-tcy` — `sTCY`
+    (unchanged)
+  - ghost-vault receipts — `GHOST-VAULT/BTC-BTC` -> `LEND-BTC.BTC`
+  - BOW LP shares — `BOW-XYK-…` -> `LP-BTC.BTC/ETH.USDC-XYK`
+  - a generic denom — `x/foo` -> `foo`, not `FOO`
+- `Rujira.Assets.from_id/2` takes `Rujira.Node.opts()` and resolves an `x/…` id
+  exactly as `from_denom/2` does, so one id always yields one asset — which
+  means it reads the node for those ids, and can return a node error.
+  `Rujira.Assets.from_string/1` stays pure and names an `x/…` id after the id.
+- `Rujira.Assets.Metadata.decimals` is the chain's own: the exponent of the
+  display unit in `denom_units`, or the largest exponent declared, and `nil`
+  when the metadata declares no unit (it was `0`, always overwritten by the
+  per-chain default). `Rujira.Assets.decimals/1` uses an asset's metadata
+  decimals when it carries them, so `x/…/hans` is 6, not 8, and
+  `Rujira.Assets.load_metadata/2` returns the chain's decimals for an `x/`
+  denom rather than the per-chain default.
 - Token identity fields that held a raw denom string now hold an
   `Rujira.Assets.Asset.t()`, resolved with `Rujira.Assets.from_denom/1` (an
   unrecognised denom is now `{:error, :invalid_denom}` from construction,
@@ -57,6 +82,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Rujira.Ghost.Credit.Account`.
 - `Rujira.Contracts.query_state_smart/3` success is typed as any decoded JSON
   value (`term()`), not `map() | nil`.
+
+### Fixed
+
+- `tor` resolves to `THOR.TOR` (it was read as a token with no chain), and
+  `Rujira.Assets.to_native/1` of it is `tor` rather than `thor.tor`.
+- `Rujira.Fin.pair_from_id/2` resolves an asset-form id whose ticker the token
+  spells in mixed case (`THOR.bRUNE/THOR.RUNE`, `sRUJI`, `yRUNE`): the ticker is
+  compared case-insensitively, the chain still exactly. Those pairs were
+  `{:error, :not_found}`.
 
 ## 0.6.1
 

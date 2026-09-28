@@ -1,9 +1,21 @@
 defmodule Rujira.Brune.PoolTest do
   use ExUnit.Case, async: true
 
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Rujira.Brune.Pool
   alias Rujira.Brune.Pool.Range
   alias Rujira.Test.MockNode
+
+  setup do
+    MockNode.expect(fn %QueryDenomMetadataRequest{denom: denom} -> no_denom_metadata(denom) end)
+  end
+
+  defp expect_config do
+    MockNode.expect(fn
+      %{"config" => %{}} -> MockNode.ok(config())
+      %QueryDenomMetadataRequest{denom: denom} -> no_denom_metadata(denom)
+    end)
+  end
 
   defp config(extra \\ %{}) do
     Map.merge(
@@ -73,7 +85,7 @@ defmodule Rujira.Brune.PoolTest do
 
   describe "get/1" do
     test "queries config and constructs the pool" do
-      MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(config()) end)
+      expect_config()
 
       assert {:ok, %Pool{address: "thor1pool"}} = Pool.get("thor1pool")
     end
@@ -81,11 +93,11 @@ defmodule Rujira.Brune.PoolTest do
 
   describe "from_id/2" do
     test "round-trips on the pool's id" do
-      MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(config()) end)
+      expect_config()
 
       assert {:ok, %Pool{id: "thor1pool"} = pool} = Pool.get("thor1pool")
 
-      MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(config()) end)
+      expect_config()
 
       assert {:ok, ^pool} = Pool.from_id(pool.id)
     end
@@ -98,4 +110,9 @@ defmodule Rujira.Brune.PoolTest do
       assert {:error, :not_found} = Pool.from_id("thor1missing")
     end
   end
+
+  # A token-factory denom's asset comes from the chain's metadata for it. These
+  # fixtures are denoms the node holds none for, which is what names them here.
+  defp no_denom_metadata(denom),
+    do: {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom #{denom}"}}
 end

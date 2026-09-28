@@ -5,12 +5,18 @@ defmodule Rujira.Assets do
   Merges base-layer asset handling (chain/symbol/denom parsing) with
   app-layer token support (x/ruji, x/staking-*, etc.).
 
+  A token-factory (`x/`) denom takes its identity from the chain: its symbol,
+  ticker and decimals come from the denom metadata THORChain holds for it, and
+  the asset carries that metadata. A denom the node has no metadata for falls
+  back to a name derived here - see `from_denom/2`.
+
   Denom metadata is token identity, not chain state, so `load_metadata/2` (and
-  anything built on it, like `from_denom/2`) always reads it at latest and
-  memoized, even when the caller passes `:height` for the rest of the read.
-  See "Tokens" in `guides/conventions.md`.
+  anything built on it, like `from_denom/2` and `from_id/2`) always reads it at
+  latest and memoized, even when the caller passes `:height` for the rest of the
+  read. See "Tokens" in `guides/conventions.md`.
   """
 
+  alias GRPC.RPCError
   alias Rujira.Assets.Asset
   alias Rujira.Assets.Metadata
   alias Rujira.Node
@@ -31,16 +37,13 @@ defmodule Rujira.Assets do
   An asset's metadata. Token-factory (`x/`) denoms carry theirs on chain, so
   those are read from the node - always at latest, since denom metadata is
   token identity and ignores `opts[:height]` (see `Rujira.Assets.Metadata`).
-  Every other asset's metadata is derived from the asset itself.
+  The chain's own `decimals` is returned, so a denom whose metadata declares no
+  unit has none. Every other asset's metadata is derived from the asset itself.
   """
-  @spec load_metadata(Asset.t(), Node.opts()) :: {:ok, map()} | {:error, term()}
+  @spec load_metadata(Asset.t(), Node.opts()) :: {:ok, Metadata.t() | map()} | {:error, term()}
   def load_metadata(asset, opts \\ [])
 
-  def load_metadata(%Asset{id: "x/" <> _ = denom} = asset, opts) do
-    with {:ok, metadata} <- Metadata.load_metadata(denom, opts) do
-      {:ok, %{metadata | decimals: decimals(asset)}}
-    end
-  end
+  def load_metadata(%Asset{id: "x/" <> _ = denom}, opts), do: Metadata.load_metadata(denom, opts)
 
   def load_metadata(%Asset{ticker: ticker} = asset, _opts) do
     {:ok, %{symbol: ticker, decimals: decimals(asset)}}
@@ -56,7 +59,12 @@ defmodule Rujira.Assets do
   names them, so `eth.eth` and `ETH.ETH` build the same asset. `x/…` ids are
   case-sensitive token-factory denoms and are kept as given.
 
-  Trusts its input and raises on an id with no delimiter. Use `from_id/1` to
+  This is pure: an `x/…` id is named after the denom and carries no chain
+  metadata, so its symbol and ticker are the id with `x/` stripped rather than
+  the symbol THORChain holds for it. Use `from_id/2` for the asset the chain
+  names.
+
+  Trusts its input and raises on an id with no delimiter. Use `from_id/2` to
   validate an id from an untrusted source.
   """
   @spec from_string(String.t()) :: Asset.t()
@@ -71,10 +79,17 @@ defmodule Rujira.Assets do
   synth, `~` trade) and an alphanumeric symbol with at most one `-<id>` suffix,
   in any case; or a non-empty `x/…` token-factory id. Anything else returns
   `{:error, :invalid_asset_id}`.
+
+  An `x/…` id is a bank denom, and resolves exactly as `from_denom/2` does, so
+  one id always yields one asset. That **reads the denom's metadata from the
+  node** - at latest and memoized, ignoring `opts[:height]` - and returns the
+  node's error unchanged when the read fails for any reason other than the
+  denom having no metadata.
   """
-  @spec from_id(String.t()) :: {:ok, Asset.t()} | {:error, :invalid_asset_id}
-  def from_id("x/" <> rest = id) when rest != "", do: {:ok, from_string(id)}
-  def from_id(id), do: validate_id(String.match?(id, @asset_id_regex), id)
+  @spec from_id(String.t(), Node.opts()) :: {:ok, Asset.t()} | {:error, term()}
+  def from_id(id, opts \\ [])
+  def from_id("x/" <> rest = id, opts) when rest != "", do: from_denom(id, opts)
+  def from_id(id, _opts), do: validate_id(String.match?(id, @asset_id_regex), id)
 
   # --- from_shortcode ---
 
@@ -121,7 +136,14 @@ defmodule Rujira.Assets do
 
   # --- decimals ---
 
+  @doc """
+  An asset's decimals: the chain's own, for an asset carrying denom metadata
+  that declares them, and otherwise the decimals THORChain gives that chain.
+  """
   @spec decimals(Asset.t() | map()) :: non_neg_integer()
+  def decimals(%{metadata: %Metadata{decimals: decimals}}) when is_integer(decimals),
+    do: decimals
+
   def decimals(%{type: :layer_1, chain: "AVAX", ticker: "USDC"}), do: 6
   def decimals(%{type: :layer_1, chain: "AVAX", ticker: "USDT"}), do: 6
   def decimals(%{type: :layer_1, chain: "AVAX"}), do: 18
@@ -167,7 +189,8 @@ defmodule Rujira.Assets do
   @doc """
   The bank denom an asset is held under on THORChain.
 
-  Secured assets, THOR layer-1 assets and token-factory (`x/`) denoms have one.
+  Secured assets, THOR layer-1 assets (`rune`, `tcy`, `tor`, `thor.<symbol>`)
+  and token-factory (`x/`) denoms have one.
   A layer-1 asset on any other chain, a synth and a trade asset do not — they are
   never bank denoms, so they return `{:error, :no_native_denom}` rather than being
   silently converted to their secured form.
@@ -184,6 +207,7 @@ defmodule Rujira.Assets do
   def to_native(%{id: "THOR.RUNE"}), do: {:ok, "rune"}
   def to_native(%{id: "THOR.RUJI"}), do: {:ok, "x/ruji"}
   def to_native(%{id: "THOR.TCY"}), do: {:ok, "tcy"}
+  def to_native(%{id: "THOR.TOR"}), do: {:ok, "tor"}
   def to_native(%{id: "THOR." <> _ = id}), do: {:ok, String.downcase(id)}
   def to_native(%{id: _}), do: {:error, :no_native_denom}
 
@@ -240,60 +264,38 @@ defmodule Rujira.Assets do
   @doc """
   Resolves a bank denom into an `Asset`.
 
-  Token-factory (`x/`) denoms and the THOR layer-1 denoms (`rune`, `tcy`,
-  `thor.<symbol>`) are recognised by name. Everything else must be a lowercase
-  `<chain><delimiter><symbol>` string — `-` secured, `/` synth, `~` trade — where
-  the chain is alphabetic and the symbol alphanumeric with at most one `-<id>`
-  suffix. That validation is what keeps `x/btc-btc` a token-factory denom rather
-  than a secured asset.
+  The THOR layer-1 denoms (`rune`, `tcy`, `tor`, `thor.<symbol>`) and `x/ruji`,
+  which THORChain names `THOR.RUJI`, are recognised by name. Everything else must
+  be a token-factory (`x/…`) denom, or a lowercase `<chain><delimiter><symbol>`
+  string — `-` secured, `/` synth, `~` trade — where the chain is alphabetic and
+  the symbol alphanumeric with at most one `-<id>` suffix. That validation is
+  what keeps `x/btc-btc` a token-factory denom rather than a secured asset.
 
-  A staking receipt `x/staking-<bond denom>` takes its symbol from the bond denom
-  (`sRUNE`); when the bond denom is not recognised it resolves as a plain
-  token-factory denom rather than failing.
+  A token-factory denom resolves in this order:
 
-  Asset ids such as `BTC.BTC` are not denoms; use `from_string/1` for those.
+  1. the denom metadata THORChain holds for it — its symbol is the asset's
+     symbol and ticker, and the asset carries the metadata, decimals included.
+     The read is always at latest and memoized, so `opts[:height]` is ignored
+     (see `Rujira.Assets.Metadata`);
+  2. when the node answers that it has no metadata for the denom, the denoms
+     Rujira mints itself are named here: `x/brune` is `bRUNE`, and a staking
+     receipt `x/staking-<bond denom>` takes its bond denom's ticker prefixed
+     with `s` (`sRUNE`);
+  3. otherwise the denom with `x/` stripped, as the chain spells it.
 
-  The denoms whose asset comes from on-chain metadata (`x/nami-index-…`,
-  `x/brune`) always read it at latest - denom metadata ignores `opts[:height]`
-  (see `Rujira.Assets.Metadata`).
+  Any other node error is returned unchanged — a denom is never named from a
+  read that failed.
+
+  Asset ids such as `BTC.BTC` are not denoms; use `from_id/2` for those.
   """
-  @spec from_denom(String.t(), Node.opts()) :: {:ok, Asset.t()} | {:error, :invalid_denom}
+  @spec from_denom(String.t(), Node.opts()) :: {:ok, Asset.t()} | {:error, term()}
   def from_denom(denom, opts \\ [])
 
   def from_denom("x/ruji", _opts) do
     {:ok, %Asset{id: "THOR.RUJI", type: :native, chain: "THOR", symbol: "RUJI", ticker: "RUJI"}}
   end
 
-  def from_denom("x/staking-" <> id = denom, opts),
-    do: build_staking(from_denom(id, opts), denom)
-
-  def from_denom("x/nami-index-" <> _ = denom, opts) do
-    with {:ok, metadata} <- load_metadata(%Asset{id: denom}, opts) do
-      {:ok,
-       %Asset{
-         id: denom,
-         type: :native,
-         chain: "THOR",
-         symbol: metadata.symbol,
-         ticker: metadata.symbol
-       }}
-    end
-  end
-
-  def from_denom("x/brune" = denom, opts) do
-    with {:ok, metadata} <- load_metadata(%Asset{id: denom}, opts) do
-      {:ok,
-       %Asset{
-         id: denom,
-         type: :native,
-         chain: "THOR",
-         symbol: metadata.symbol,
-         ticker: metadata.symbol
-       }}
-    end
-  end
-
-  def from_denom("x/" <> _ = denom, _opts), do: {:ok, token_factory(denom)}
+  def from_denom("x/" <> _ = denom, opts), do: from_metadata(denom, opts)
 
   def from_denom("rune", _opts) do
     {:ok, %Asset{id: "THOR.RUNE", type: :native, chain: "THOR", symbol: "RUNE", ticker: "RUNE"}}
@@ -301,6 +303,10 @@ defmodule Rujira.Assets do
 
   def from_denom("tcy", _opts) do
     {:ok, %Asset{id: "THOR.TCY", type: :native, chain: "THOR", symbol: "TCY", ticker: "TCY"}}
+  end
+
+  def from_denom("tor", _opts) do
+    {:ok, %Asset{id: "THOR.TOR", type: :native, chain: "THOR", symbol: "TOR", ticker: "TOR"}}
   end
 
   def from_denom("thor." <> symbol, _opts) do
@@ -364,28 +370,53 @@ defmodule Rujira.Assets do
      }}
   end
 
-  defp build_staking({:ok, staked}, denom) do
-    {:ok,
-     %Asset{
-       id: denom,
-       type: :native,
-       chain: "THOR",
-       symbol: "s" <> staked.symbol,
-       ticker: "s" <> staked.ticker
-     }}
+  # A token-factory denom is whatever the chain says it is. Only the node
+  # answering that it holds no metadata for the denom falls back to a name
+  # derived here; any other error is the caller's to see.
+  defp from_metadata(denom, opts) do
+    case Metadata.load_metadata(denom, opts) do
+      {:ok, %Metadata{symbol: symbol} = metadata} when is_binary(symbol) and symbol != "" ->
+        {:ok, token_factory(denom, symbol, metadata)}
+
+      {:ok, %Metadata{}} ->
+        without_metadata(denom, opts)
+
+      {:error, %RPCError{status: 5, message: "client metadata for denom" <> _}} ->
+        without_metadata(denom, opts)
+
+      {:error, error} ->
+        {:error, error}
+    end
   end
 
-  # The staking contract mints `x/staking-{bond_denom}` for any bond denom, so an
-  # unrecognised bond denom falls back to a plain token-factory asset.
-  defp build_staking({:error, _}, denom), do: {:ok, token_factory(denom)}
+  # The denoms Rujira mints itself, for a node that holds no metadata for them.
+  defp without_metadata("x/brune" = denom, _opts), do: {:ok, derived(denom, "bRUNE")}
 
-  defp token_factory("x/" <> id = denom) do
+  defp without_metadata("x/staking-" <> bond = denom, opts),
+    do: build_staking(from_denom(bond, opts), denom)
+
+  defp without_metadata("x/" <> id = denom, _opts), do: {:ok, derived(denom, id)}
+
+  defp build_staking({:ok, %Asset{ticker: ticker}}, denom),
+    do: {:ok, derived(denom, "s" <> ticker)}
+
+  # The staking contract mints `x/staking-{bond_denom}` for any bond denom, so a
+  # bond denom that is not a denom at all falls back to the receipt's own name.
+  defp build_staking({:error, :invalid_denom}, "x/" <> id = denom),
+    do: {:ok, derived(denom, id)}
+
+  defp build_staking({:error, _} = error, _denom), do: error
+
+  defp derived(denom, symbol), do: token_factory(denom, symbol, %Metadata{symbol: symbol})
+
+  defp token_factory(denom, symbol, metadata) do
     %Asset{
       id: denom,
       type: :native,
       chain: "THOR",
-      symbol: String.upcase(id),
-      ticker: String.upcase(id)
+      symbol: symbol,
+      ticker: symbol,
+      metadata: metadata
     }
   end
 end

@@ -315,8 +315,11 @@ defmodule Rujira.Fin.Pair do
     end
   end
 
-  defp same_asset?(%Asset{chain: chain, ticker: ticker}, %Asset{chain: chain, ticker: ticker}),
-    do: true
+  # The chain is THORChain's own uppercase name, but a ticker is spelled as the
+  # token spells it (`bRUNE`, `sRUJI`, `yRUNE`), and an asset-form id is typed by
+  # hand - so the chain matches exactly and the ticker case-insensitively.
+  defp same_asset?(%Asset{chain: chain, ticker: a}, %Asset{chain: chain, ticker: b}),
+    do: String.downcase(a) == String.downcase(b)
 
   defp same_asset?(_, _), do: false
 end

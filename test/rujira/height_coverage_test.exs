@@ -14,6 +14,7 @@ defmodule Rujira.HeightCoverageTest do
   use ExUnit.Case, async: true
 
   alias Cosmos.Bank.V1beta1.QueryAllBalancesRequest
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Cosmos.Base.Query.V1beta1.PageRequest
   alias Rujira.Assets
   alias Rujira.Brune
@@ -82,8 +83,14 @@ defmodule Rujira.HeightCoverageTest do
 
     test "Brune reads a pool's config and its state at the height" do
       MockNode.expect(fn
-        %{"config" => _} -> MockNode.ok(brune_config())
-        %{"state" => _} -> MockNode.ok(brune_state())
+        %{"config" => _} ->
+          MockNode.ok(brune_config())
+
+        %{"state" => _} ->
+          MockNode.ok(brune_state())
+
+        %QueryDenomMetadataRequest{denom: denom} ->
+          {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom #{denom}"}}
       end)
 
       assert {:ok, brune_pool} = Brune.get_pool("thor1brune", height: @height)
@@ -302,11 +309,18 @@ defmodule Rujira.HeightCoverageTest do
     end
   end
 
+  # Denom metadata is token identity, read at latest and memoized - it is the
+  # one query a height read does not carry the height on (see @excluded), so it
+  # is not one of the composite's height legs.
   defp assert_all_calls_at_height do
-    calls = drain()
+    calls =
+      Enum.reject(drain(), fn {request, _opts} ->
+        match?(%QueryDenomMetadataRequest{}, request)
+      end)
+
     assert calls != [], "the composite made no node call at height: #{@height}"
 
-    for opts <- calls do
+    for {_request, opts} <- calls do
       assert Keyword.get(opts, :metadata) == @metadata
     end
 
@@ -333,7 +347,7 @@ defmodule Rujira.HeightCoverageTest do
 
   defp drain(acc \\ []) do
     receive do
-      {:mock_node, _request, opts} -> drain([opts | acc])
+      {:mock_node, request, opts} -> drain([{request, opts} | acc])
     after
       0 -> Enum.reverse(acc)
     end
@@ -370,7 +384,10 @@ defmodule Rujira.HeightCoverageTest do
   end
 
   defp vault do
-    {:ok, receipt_asset} = Assets.from_denom("x/ghost-vault/rune")
+    # `from_string/1` rather than `from_denom/1`: a receipt denom's asset is
+    # named by the chain's metadata for it, and this fixture needs the denom,
+    # not a node read.
+    receipt_asset = Assets.from_string("x/ghost-vault/rune")
 
     %Ghost.Vault{
       id: "thor1vault",
@@ -381,7 +398,7 @@ defmodule Rujira.HeightCoverageTest do
   end
 
   defp pool do
-    {:ok, receipt_asset} = Assets.from_denom("x/staking-rune")
+    receipt_asset = Assets.from_string("x/staking-rune")
 
     %Staking.Pool{
       id: "thor1staking",

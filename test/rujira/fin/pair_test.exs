@@ -1,9 +1,19 @@
 defmodule Rujira.Fin.PairTest do
   use ExUnit.Case, async: true
 
+  alias Cosmos.Bank.V1beta1.Metadata, as: DenomMetadata
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataResponse
   alias Rujira.Assets
   alias Rujira.Fin.Pair
+  alias Rujira.Test.MockNode
   alias Rujira.Thorchain.Oracle
+  alias Thorchain.Types.ContractInfo
+  alias Thorchain.Types.QueryContractInfosRequest
+
+  # A height read is never cached, so the pair list these tests script is the
+  # one they get, whatever else has been memoized.
+  @height 500
 
   defp asset(denom) do
     {:ok, asset} = Assets.from_denom(denom)
@@ -238,5 +248,61 @@ defmodule Rujira.Fin.PairTest do
 
       assert {:ok, %Pair{oracle_base: nil, oracle_quote: nil}} = Pair.new(config)
     end
+  end
+
+  describe "from_id/2 by asset form" do
+    setup do
+      MockNode.expect(fn
+        %QueryContractInfosRequest{} ->
+          {:ok,
+           %{infos: [%ContractInfo{address: "thor1pair", contract: "rujira-fin", version: "1"}]}}
+
+        %QueryDenomMetadataRequest{denom: "x/brune"} ->
+          {:ok,
+           %QueryDenomMetadataResponse{
+             metadata: %DenomMetadata{
+               description: "",
+               display: "bRUNE",
+               name: "Bonded RUNE",
+               symbol: "bRUNE",
+               uri: "",
+               uri_hash: ""
+             }
+           }}
+
+        %{"config" => _} ->
+          MockNode.ok(brune_pair_config())
+      end)
+    end
+
+    test "resolves a ticker the token spells in mixed case" do
+      assert {:ok, %Pair{id: "THOR.bRUNE/THOR.RUNE", address: "thor1pair"}} =
+               Pair.from_id("THOR.bRUNE/THOR.RUNE", height: @height)
+    end
+
+    test "resolves the same pair whatever case the ticker is typed in" do
+      assert {:ok, %Pair{address: "thor1pair"}} =
+               Pair.from_id("THOR.BRUNE/THOR.RUNE", height: @height)
+
+      assert {:ok, %Pair{address: "thor1pair"}} =
+               Pair.from_id("ThOr.bRuNe/THOR.RUNE", height: @height)
+    end
+
+    test "still matches the chain exactly" do
+      assert {:error, :not_found} = Pair.from_id("BSC.bRUNE/THOR.RUNE", height: @height)
+    end
+  end
+
+  defp brune_pair_config do
+    %{
+      "address" => "thor1pair",
+      "market_makers" => [],
+      "denoms" => ["x/brune", "rune"],
+      "oracles" => [],
+      "tick" => 6,
+      "fee_taker" => "0.0015",
+      "fee_maker" => "0.00075",
+      "fee_address" => "thor1fee"
+    }
   end
 end

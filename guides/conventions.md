@@ -159,17 +159,39 @@ does not exist for that asset is an error, never a silent substitution:
 
 | Conversion | Returns | When the form does not exist |
 |------------|---------|------------------------------|
-| `to_native/1` | the bank denom (`rune`, `x/ruji`, `btc-btc`) | `{:error, :no_native_denom}` — layer-1 on another chain, synth, trade |
+| `to_native/1` | the bank denom (`rune`, `tcy`, `tor`, `x/ruji`, `btc-btc`) | `{:error, :no_native_denom}` — layer-1 on another chain, synth, trade |
 | `to_secured/1` | the secured `Asset` (`BTC-BTC`) of a layer-1 asset; a secured asset unchanged | `{:error, :not_supported}` — THOR-chain assets, token-factory (`x/`) denoms, synth, trade |
 | `to_layer1/1` | the layer-1 `Asset` (`BTC.BTC`) | `{:error, :not_supported}` — token-factory (`x/`) denoms |
 | `pool_id/1` | the THORChain pool id string | propagates `to_layer1/1` |
 
-`from_denom/1` is the inverse of `to_native/1` and takes bank denoms only. An asset id
-such as `BTC.BTC` is not a denom — resolve those with `from_id/1`, which validates the
-id and returns `{:error, :invalid_asset_id}` on a malformed one, or `from_string/1`,
-which trusts its input and returns a bare `Asset`. Both are case-insensitive and
-normalise chain and symbol to uppercase (`eth.eth` → `ETH.ETH`); `x/…` token-factory
-ids are case-sensitive and kept as given.
+The THOR layer-1 denoms are named, not derived: `rune` is `THOR.RUNE`, `tcy` is
+`THOR.TCY`, `tor` is `THOR.TOR`, and `x/ruji` is `THOR.RUJI`. A synth (`btc/btc`) and a
+trade asset (`btc~btc`) are built from their denom like any other asset, but they are
+not bank denoms, so `to_native/1` on one is `{:error, :no_native_denom}` rather than the
+secured denom of the same token.
+
+A token-factory (`x/…`) denom is identity the chain holds, so resolving one reads the
+denom metadata — always at latest and memoized, ignoring `opts[:height]`:
+
+| Order | Source | Symbol and ticker | Decimals |
+|-------|--------|-------------------|----------|
+| 1 | the denom metadata the node holds | the metadata `symbol` (`LEND-BTC.BTC`, `sRUJI`, `ybRUNE`) | the exponent of the display unit, or the largest exponent declared |
+| 2 | the node holds none (`status: 5`, `client metadata for denom …`) | the denoms Rujira mints itself: `x/brune` → `bRUNE`, `x/staking-<bond>` → `s` + the bond denom's ticker | the chain default (8) |
+| 3 | the node holds none, and no rule names it | the denom with `x/` stripped, as the chain spells it | the chain default (8) |
+
+The asset carries whatever named it in `metadata`, and `decimals/1` prefers the
+metadata's own decimals over the per-chain table. Any other node error is returned
+unchanged — a denom is never named from a read that failed.
+
+`from_denom/2` is the inverse of `to_native/1` and takes bank denoms only. An asset id
+such as `BTC.BTC` is not a denom — resolve those with `from_id/2`, which validates the
+id and returns `{:error, :invalid_asset_id}` on a malformed one. An `x/…` id is a bank
+denom, so `from_id/2` resolves it exactly as `from_denom/2` does, node read included,
+and one id always yields one asset. `from_string/1` trusts its input and stays pure: it
+names an `x/…` id after the id itself rather than after the chain's metadata, so use
+`from_id/2` wherever the symbol matters. All of them are case-insensitive and normalise
+chain and symbol to uppercase (`eth.eth` → `ETH.ETH`); `x/…` token-factory ids are
+case-sensitive and kept as given.
 
 ## Struct Defaults
 

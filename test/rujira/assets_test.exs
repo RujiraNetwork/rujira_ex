@@ -1,6 +1,7 @@
 defmodule Rujira.AssetsTest do
   use ExUnit.Case, async: true
 
+  alias Cosmos.Bank.V1beta1.DenomUnit
   alias Cosmos.Bank.V1beta1.Metadata, as: DenomMetadata
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataResponse
@@ -8,6 +9,12 @@ defmodule Rujira.AssetsTest do
   alias Rujira.Assets.Asset
   alias Rujira.Assets.Metadata
   alias Rujira.Test.MockNode
+
+  # A token-factory denom takes its identity from the chain's metadata for it.
+  # Unless a test scripts one, these denoms are ones the node holds none for.
+  setup do
+    MockNode.expect(fn %QueryDenomMetadataRequest{denom: denom} -> no_denom_metadata(denom) end)
+  end
 
   describe "type/1" do
     test "classifies THOR-prefixed ids as native" do
@@ -144,7 +151,6 @@ defmodule Rujira.AssetsTest do
       assert {:ok, %Asset{id: "GAIA-ATOM"}} = Assets.from_id("GAIA-ATOM")
       assert {:ok, %Asset{id: "BTC/BTC"}} = Assets.from_id("BTC/BTC")
       assert {:ok, %Asset{id: "BTC~BTC"}} = Assets.from_id("BTC~BTC")
-      assert {:ok, %Asset{id: "x/ruji"}} = Assets.from_id("x/ruji")
     end
 
     test "accepts real THORChain ids" do
@@ -168,6 +174,29 @@ defmodule Rujira.AssetsTest do
 
     test "keeps the case of x/ ids" do
       assert {:ok, %Asset{id: "x/staking-ruji"}} = Assets.from_id("x/staking-ruji")
+    end
+
+    test "resolves an x/ id exactly as from_denom/2 does, chain metadata and all" do
+      expect_metadata("RUJI")
+
+      assert {:ok, %Asset{id: "x/from-id-test", ticker: "RUJI"} = asset} =
+               Assets.from_id("x/from-id-test")
+
+      assert {:ok, ^asset} = Assets.from_denom("x/from-id-test")
+    end
+
+    test "THOR.RUJI is x/ruji, the one asset behind both ids" do
+      assert {:ok, asset} = Assets.from_id("x/ruji")
+      assert {:ok, %Asset{id: "THOR.RUJI", symbol: "RUJI"}} = Assets.from_id("THOR.RUJI")
+      assert {:ok, ^asset} = Assets.from_id("THOR.RUJI")
+    end
+
+    test "hands back the node's error when an x/ id's metadata cannot be read" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{} ->
+        {:error, %GRPC.RPCError{status: 13, message: "boom"}}
+      end)
+
+      assert {:error, %GRPC.RPCError{status: 13}} = Assets.from_id("x/from-id-error-test")
     end
 
     test "returns an error instead of raising on a malformed id" do
@@ -282,14 +311,39 @@ defmodule Rujira.AssetsTest do
                 id: "x/staking-uruji",
                 type: :native,
                 chain: "THOR",
-                symbol: "STAKING-URUJI",
-                ticker: "STAKING-URUJI"
+                symbol: "staking-uruji",
+                ticker: "staking-uruji"
               }} = Assets.from_denom("x/staking-uruji")
     end
 
-    test "upcases generic x/ denoms" do
-      assert {:ok, %Asset{id: "x/foo", symbol: "FOO", ticker: "FOO", chain: "THOR"}} =
+    test "names a generic x/ denom after the denom, as the chain spells it" do
+      assert {:ok, %Asset{id: "x/foo", symbol: "foo", ticker: "foo", chain: "THOR"}} =
                Assets.from_denom("x/foo")
+
+      assert {:ok, %Asset{id: "x/Foo-Bar", symbol: "Foo-Bar"}} = Assets.from_denom("x/Foo-Bar")
+    end
+
+    test "takes an x/ denom's symbol, ticker and decimals from the chain's metadata" do
+      expect_metadata("yRUNE", 6)
+
+      assert {:ok,
+              %Asset{
+                id: "x/metadata-test",
+                type: :native,
+                chain: "THOR",
+                symbol: "yRUNE",
+                ticker: "yRUNE",
+                metadata: %Metadata{symbol: "yRUNE", decimals: 6}
+              } = asset} = Assets.from_denom("x/metadata-test")
+
+      assert Assets.decimals(asset) == 6
+    end
+
+    test "resolves tor, which THORChain names THOR.TOR" do
+      assert {:ok, %Asset{id: "THOR.TOR", type: :native, chain: "THOR", ticker: "TOR"} = tor} =
+               Assets.from_denom("tor")
+
+      assert {:ok, "tor"} = Assets.to_native(tor)
     end
 
     test "upcases thor. denoms" do
@@ -633,19 +687,7 @@ defmodule Rujira.AssetsTest do
     @height 12_345
 
     defp expect_metadata_once(symbol) do
-      MockNode.expect(fn %QueryDenomMetadataRequest{} ->
-        {:ok,
-         %QueryDenomMetadataResponse{
-           metadata: %DenomMetadata{
-             description: "",
-             display: symbol,
-             name: symbol,
-             symbol: symbol,
-             uri: "",
-             uri_hash: ""
-           }
-         }}
-      end)
+      MockNode.expect(fn %QueryDenomMetadataRequest{} -> metadata_reply(symbol) end)
     end
 
     test "Metadata.load_metadata/2 with :height sends no height metadata" do
@@ -681,7 +723,10 @@ defmodule Rujira.AssetsTest do
     end
 
     test "from_denom/2 with :height ignores it for the staking denom it wraps" do
-      expect_metadata_once("NAMI")
+      MockNode.expect(fn
+        %QueryDenomMetadataRequest{denom: "x/staking-" <> _ = denom} -> no_denom_metadata(denom)
+        %QueryDenomMetadataRequest{} -> metadata_reply("NAMI")
+      end)
 
       assert {:ok, %Asset{id: "x/staking-x/nami-index-height-test-staking", symbol: "sNAMI"}} =
                Assets.from_denom("x/staking-x/nami-index-height-test-staking", height: @height)
@@ -705,6 +750,72 @@ defmodule Rujira.AssetsTest do
       refute Keyword.has_key?(opts, :metadata)
     end
 
+    test "display unit exponent 6 wins over another unit's exponent 8" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/decimals-display-wins"} ->
+        {:ok,
+         %QueryDenomMetadataResponse{
+           metadata: %DenomMetadata{
+             description: "",
+             display: "DISP",
+             name: "Display Wins",
+             symbol: "DISP",
+             uri: "",
+             uri_hash: "",
+             denom_units: [
+               %DenomUnit{denom: "DISP", exponent: 6},
+               %DenomUnit{denom: "UNIT", exponent: 8}
+             ]
+           }
+         }}
+      end)
+
+      assert {:ok, %Metadata{symbol: "DISP", decimals: 6}} =
+               Metadata.load_metadata("x/decimals-display-wins")
+    end
+
+    test "largest exponent 8 wins when display unit is base (exponent 0)" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/decimals-base-display"} ->
+        {:ok,
+         %QueryDenomMetadataResponse{
+           metadata: %DenomMetadata{
+             description: "",
+             display: "BASE",
+             name: "Base Display",
+             symbol: "BASE",
+             uri: "",
+             uri_hash: "",
+             denom_units: [
+               %DenomUnit{denom: "BASE", exponent: 0},
+               %DenomUnit{denom: "UNIT", exponent: 8}
+             ]
+           }
+         }}
+      end)
+
+      assert {:ok, %Metadata{symbol: "BASE", decimals: 8}} =
+               Metadata.load_metadata("x/decimals-base-display")
+    end
+
+    test "decimals is nil when there are no denom_units" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/decimals-empty"} ->
+        {:ok,
+         %QueryDenomMetadataResponse{
+           metadata: %DenomMetadata{
+             description: "",
+             display: "EMPTY",
+             name: "Empty Units",
+             symbol: "EMPTY",
+             uri: "",
+             uri_hash: "",
+             denom_units: []
+           }
+         }}
+      end)
+
+      assert {:ok, %Metadata{symbol: "EMPTY", decimals: nil}} =
+               Metadata.load_metadata("x/decimals-empty")
+    end
+
     test "eq_denom/3 with :height ignores it" do
       expect_metadata_once("NAMI")
 
@@ -720,4 +831,29 @@ defmodule Rujira.AssetsTest do
       refute Keyword.has_key?(opts, :metadata)
     end
   end
+
+  # --- Metadata replies ---
+
+  defp expect_metadata(symbol, decimals \\ 8) do
+    MockNode.expect(fn %QueryDenomMetadataRequest{} -> metadata_reply(symbol, decimals) end)
+  end
+
+  defp metadata_reply(symbol, decimals \\ 8) do
+    {:ok,
+     %QueryDenomMetadataResponse{
+       metadata: %DenomMetadata{
+         description: "",
+         display: symbol,
+         name: symbol,
+         symbol: symbol,
+         uri: "",
+         uri_hash: "",
+         denom_units: [%DenomUnit{denom: symbol, exponent: decimals}]
+       }
+     }}
+  end
+
+  # The node's own reply for a denom it holds no metadata for.
+  defp no_denom_metadata(denom),
+    do: {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom #{denom}"}}
 end

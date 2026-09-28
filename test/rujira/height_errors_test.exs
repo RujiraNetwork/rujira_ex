@@ -173,7 +173,10 @@ defmodule Rujira.HeightErrorsTest do
 
   defp vault do
     {:ok, asset} = Assets.from_denom("rune")
-    {:ok, receipt_asset} = Assets.from_denom("x/ghost-vault/rune")
+    # `from_string/1` rather than `from_denom/1`: a receipt denom's asset is
+    # named by the chain's metadata for it, and this fixture needs the denom,
+    # not a node read.
+    receipt_asset = Assets.from_string("x/ghost-vault/rune")
 
     %Vault{
       id: "thor1vault",

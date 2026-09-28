@@ -12,6 +12,7 @@ defmodule Rujira.FanOutTest do
   """
   use ExUnit.Case, async: false
 
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Rujira.Ghost
   alias Rujira.Test.MockNode
   alias Thorchain.Types.ContractInfo
@@ -167,6 +168,9 @@ defmodule Rujira.FanOutTest do
         %QueryContractInfosRequest{} ->
           {:ok, %{infos: [vault_info("thor1vaulta"), vault_info("thor1vaultb")]}}
 
+        %QueryDenomMetadataRequest{denom: denom} ->
+          no_denom_metadata(denom)
+
         %{"config" => _} ->
           # The mailbox message carries the raw `QuerySmartContractStateRequest`,
           # not this decoded map, so it can't be matched by pinning `req`.
@@ -225,6 +229,9 @@ defmodule Rujira.FanOutTest do
       %QueryContractInfosRequest{} ->
         {:ok, %{infos: [vault_info("thor1vaulta"), vault_info("thor1vaultb")]}}
 
+      %QueryDenomMetadataRequest{denom: denom} ->
+        no_denom_metadata(denom)
+
       %{"config" => _} ->
         Process.sleep(delay)
         MockNode.ok(vault_config())
@@ -247,4 +254,9 @@ defmodule Rujira.FanOutTest do
       }
     }
   end
+
+  # A token-factory denom's asset comes from the chain's metadata for it. These
+  # fixtures are denoms the node holds none for, which is what names them here.
+  defp no_denom_metadata(denom),
+    do: {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom #{denom}"}}
 end

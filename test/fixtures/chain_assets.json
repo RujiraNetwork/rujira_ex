@@ -1,0 +1,486 @@
+{
+  "fetched_at": "2026-09-28T08:18:48.861298Z",
+  "denoms": [
+    "avax-avax",
+    "avax-sol-0xfe6b19286885a4f7f55adad09c3cd1f906d2478f",
+    "avax-usdc-0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
+    "avax-usdt-0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
+    "avax/avax",
+    "avax/sol-0xfe6b19286885a4f7f55adad09c3cd1f906d2478f",
+    "avax/usdt-0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
+    "base-eth",
+    "base-usdc-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+    "bch-bch",
+    "bch/bch",
+    "bnb/ava-645",
+    "bnb/bnb",
+    "bnb/btcb-1de",
+    "bnb/busd-bd1",
+    "bnb/eth-1c9",
+    "bnb/twt-8c2",
+    "bsc-bnb",
+    "bsc-btcb-0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
+    "bsc-busd-0xe9e7cea3dedca5984780bafc599bd69add087d56",
+    "bsc-eth-0x2170ed0880ac9a755fd29b2688956bd959f933f8",
+    "bsc-twt-0x4b0f1812e5df2a09796481ff14017e6005508003",
+    "bsc-usdc-0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+    "bsc-usdt-0x55d398326f99059ff775485246999027b3197955",
+    "bsc/bnb",
+    "bsc/usdc-0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+    "bsc/usdt-0x55d398326f99059ff775485246999027b3197955",
+    "btc-btc",
+    "btc/btc",
+    "doge-doge",
+    "doge/doge",
+    "eth-aave-0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9",
+    "eth-dai-0x6b175474e89094c44da98b954eedeac495271d0f",
+    "eth-eth",
+    "eth-fox-0xc770eefad204b5180df6a14ee197d99d808ee52d",
+    "eth-gusd-0x056fd409e1d7a124bd7017459dfea2f387b6d5cd",
+    "eth-link-0x514910771af9ca656af840dff83e8264ecf986ca",
+    "eth-lusd-0x5f98805a4e8be255a32880fdec7f6728c6568ba0",
+    "eth-tgt-0x108a850856db3f85d0269a2693d896b394c80325",
+    "eth-thor-0xa5f2211b9b8170f694421f2046281775e8468044",
+    "eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "eth-usdp-0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+    "eth-usdt-0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "eth-vthor-0x815c23eca83261b6ec689b60cc4a58b54bc24d8d",
+    "eth-wbtc-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+    "eth-xrune-0x69fa0fee221ad11012bab0fdb45d444d3d2ce71c",
+    "eth-yfi-0x0bc529c00c6401aef6d220be8c6ea1667f6ad93e",
+    "eth/aave-0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9",
+    "eth/dai-0x6b175474e89094c44da98b954eedeac495271d0f",
+    "eth/eth",
+    "eth/flip-0x826180541412d574cf1336d22c0c0a287822678a",
+    "eth/fox-0xc770eefad204b5180df6a14ee197d99d808ee52d",
+    "eth/gusd-0x056fd409e1d7a124bd7017459dfea2f387b6d5cd",
+    "eth/hegic-0x584bc13c7d411c00c01a62e8019472de68768430",
+    "eth/kyl-0x67b6d479c7bb412c54e03dca8e1bc6740ce6b99c",
+    "eth/link-0x514910771af9ca656af840dff83e8264ecf986ca",
+    "eth/lusd-0x5f98805a4e8be255a32880fdec7f6728c6568ba0",
+    "eth/snx-0xc011a73ee8576fb46f5e1c5751ca3b9fe0af2a6f",
+    "eth/uos-0xd13c7342e1ef687c5ad21b27c2b65d772cab5c8c",
+    "eth/usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "eth/usdp-0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+    "eth/wbtc-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+    "eth/xdefi-0x72b886d09c117654ab7da13a14d603001de0b777",
+    "eth/xrune-0x69fa0fee221ad11012bab0fdb45d444d3d2ce71c",
+    "eth/yfi-0x0bc529c00c6401aef6d220be8c6ea1667f6ad93e",
+    "gaia-atom",
+    "gaia/atom",
+    "ltc-ltc",
+    "ltc/ltc",
+    "rune",
+    "sol-sol",
+    "tcy",
+    "terra/luna",
+    "terra/ust",
+    "thor.auto",
+    "thor.btc",
+    "thor.eth",
+    "thor.fuzn",
+    "thor.kuji",
+    "thor.lqdy",
+    "thor.lvn",
+    "thor.mimir",
+    "thor.nami",
+    "thor.nstk",
+    "thor.rkuji",
+    "thor.wink",
+    "thor.xusk",
+    "tor",
+    "tron-trx",
+    "tron-usdt-tr7nhqjekqxgtci8q8zy4pl8otszgjlj6t",
+    "x/bow-xyk-avax-avax-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "x/bow-xyk-bch-bch-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "x/bow-xyk-btc-btc-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "x/bow-xyk-eth-eth-btc-btc",
+    "x/bow-xyk-eth-eth-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "x/bow-xyk-gaia-atom-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "x/bow-xyk-thor.auto-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "x/bow-xyk-thor.lqdy-btc-btc",
+    "x/bow-xyk-thor.lqdy-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "x/bow-xyk-thor.nami-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "x/bow-xyk-x/ruji-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "x/bow-xyk-x/ruji-rune",
+    "x/brune",
+    "x/ghost-vault/avax-avax",
+    "x/ghost-vault/avax-usdc-0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
+    "x/ghost-vault/avax-usdt-0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
+    "x/ghost-vault/base-eth",
+    "x/ghost-vault/base-usdc-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+    "x/ghost-vault/bch-bch",
+    "x/ghost-vault/bsc-bnb",
+    "x/ghost-vault/bsc-usdc-0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+    "x/ghost-vault/bsc-usdt-0x55d398326f99059ff775485246999027b3197955",
+    "x/ghost-vault/btc-btc",
+    "x/ghost-vault/doge-doge",
+    "x/ghost-vault/eth-dai-0x6b175474e89094c44da98b954eedeac495271d0f",
+    "x/ghost-vault/eth-eth",
+    "x/ghost-vault/eth-gusd-0x056fd409e1d7a124bd7017459dfea2f387b6d5cd",
+    "x/ghost-vault/eth-lusd-0x5f98805a4e8be255a32880fdec7f6728c6568ba0",
+    "x/ghost-vault/eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "x/ghost-vault/eth-usdp-0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+    "x/ghost-vault/eth-usdt-0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "x/ghost-vault/eth-wbtc-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+    "x/ghost-vault/gaia-atom",
+    "x/ghost-vault/ltc-ltc",
+    "x/ghost-vault/rune",
+    "x/ghost-vault/tcy",
+    "x/ghost-vault/tron-trx",
+    "x/ghost-vault/tron-usdt-tr7nhqjekqxgtci8q8zy4pl8otszgjlj6t",
+    "x/ghost-vault/x/ruji",
+    "x/ghost-vault/xrp-xrp",
+    "x/nami-index-fixed-thor1yqf5spdv8c4088zmvqsg32eq63fzepsjvntahdk0ek0yjnkt3qdqftp3lc-rcpt",
+    "x/nami-index-nav-thor1h0hr0rm3dawkedh44hlrmgvya6plsryehcr46yda2vj0wfwgq5xqrs86px-rcpt",
+    "x/nami-index-nav-thor1mlphkryw5g54yfkrp6xpqzlpv4f8wh6hyw27yyg4z2els8a9gxpqhfhekt-rcpt",
+    "x/ruji",
+    "x/staking-tcy",
+    "x/staking-thor.nami",
+    "x/staking-x/brune",
+    "x/staking-x/ruji",
+    "x/thor1hsy2g59mpca6knrak6q58f5d08zqjsnhd83hmzxjex2ge4wffrhsue9d5x/hans",
+    "xrp-xrp"
+  ],
+  "metadata": {
+    "x/bow-xyk-avax-avax-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+      "symbol": "LP-AVAX.AVAX/ETH.USDC-XYK",
+      "display": "x/bow-xyk-avax-avax-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "name": "AVAX.AVAX/ETH.USDC XYK LP Shares",
+      "denom_units": [["x/bow-xyk-avax-avax-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",0], ["LP-AVAX.AVAX/ETH.USDC-XYK",8]]
+    },
+    "x/bow-xyk-bch-bch-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+      "symbol": "LP-BCH.BCH/ETH.USDC-XYK",
+      "display": "x/bow-xyk-bch-bch-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "name": "BCH.BCH/ETH.USDC XYK LP Shares",
+      "denom_units": [["x/bow-xyk-bch-bch-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",0], ["LP-BCH.BCH/ETH.USDC-XYK",8]]
+    },
+    "x/bow-xyk-btc-btc-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+      "symbol": "LP-BTC.BTC/ETH.USDC-XYK",
+      "display": "x/bow-xyk-btc-btc-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "name": "BTC.BTC/ETH.USDC XYK LP Shares",
+      "denom_units": [["x/bow-xyk-btc-btc-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",0], ["LP-BTC.BTC/ETH.USDC-XYK",8]]
+    },
+    "x/bow-xyk-eth-eth-btc-btc": {
+      "symbol": "LP-ETH.ETH/BTC.BTC-XYK",
+      "display": "x/bow-xyk-eth-eth-btc-btc",
+      "name": "ETH.ETH/BTC.BTC XYK LP Shares",
+      "denom_units": [["x/bow-xyk-eth-eth-btc-btc",0], ["LP-ETH.ETH/BTC.BTC-XYK",8]]
+    },
+    "x/bow-xyk-eth-eth-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+      "symbol": "LP-ETH.ETH/ETH.USDC-XYK",
+      "display": "x/bow-xyk-eth-eth-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "name": "ETH.ETH/ETH.USDC XYK LP Shares",
+      "denom_units": [["x/bow-xyk-eth-eth-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",0], ["LP-ETH.ETH/ETH.USDC-XYK",8]]
+    },
+    "x/bow-xyk-gaia-atom-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+      "symbol": "LP-GAIA.ATOM/ETH.USDC-XYK",
+      "display": "x/bow-xyk-gaia-atom-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "name": "GAIA.ATOM/ETH.USDC XYK LP Shares",
+      "denom_units": [["x/bow-xyk-gaia-atom-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",0], ["LP-GAIA.ATOM/ETH.USDC-XYK",8]]
+    },
+    "x/bow-xyk-thor.auto-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+      "symbol": "LP-THOR.AUTO/ETH.USDC-XYK",
+      "display": "x/bow-xyk-thor.auto-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "name": "THOR.AUTO/ETH.USDC XYK LP Shares",
+      "denom_units": [["x/bow-xyk-thor.auto-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",0], ["LP-THOR.AUTO/ETH.USDC-XYK",8]]
+    },
+    "x/bow-xyk-thor.lqdy-btc-btc": {
+      "symbol": "LP-THOR.LQDY/BTC.BTC-XYK",
+      "display": "x/bow-xyk-thor.lqdy-btc-btc",
+      "name": "THOR.LQDY/BTC.BTC XYK LP Shares",
+      "denom_units": [["x/bow-xyk-thor.lqdy-btc-btc",0], ["LP-THOR.LQDY/BTC.BTC-XYK",8]]
+    },
+    "x/bow-xyk-thor.lqdy-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+      "symbol": "LP-THOR.LQDY/ETH.USDC-XYK",
+      "display": "x/bow-xyk-thor.lqdy-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "name": "THOR.LQDY/ETH.USDC XYK LP Shares",
+      "denom_units": [["x/bow-xyk-thor.lqdy-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",0], ["LP-THOR.LQDY/ETH.USDC-XYK",8]]
+    },
+    "x/bow-xyk-thor.nami-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+      "symbol": "LP-THOR.NAMI/ETH.USDC-XYK",
+      "display": "x/bow-xyk-thor.nami-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "name": "THOR.NAMI/ETH.USDC XYK LP Shares",
+      "denom_units": [["x/bow-xyk-thor.nami-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",0], ["LP-THOR.NAMI/ETH.USDC-XYK",8]]
+    },
+    "x/bow-xyk-x/ruji-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+      "symbol": "LP-THOR.RUJI/ETH.USDC-XYK",
+      "display": "x/bow-xyk-x/ruji-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "name": "THOR.RUJI/ETH.USDC XYK LP Shares",
+      "denom_units": [["x/bow-xyk-x/ruji-eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",0], ["LP-THOR.RUJI/ETH.USDC-XYK",8]]
+    },
+    "x/bow-xyk-x/ruji-rune": {
+      "symbol": "LP-THOR.RUJI/THOR.RUNE-XYK",
+      "display": "x/bow-xyk-x/ruji-rune",
+      "name": "THOR.RUJI/THOR.RUNE XYK LP Shares",
+      "denom_units": [["x/bow-xyk-x/ruji-rune",0], ["LP-THOR.RUJI/THOR.RUNE-XYK",8]]
+    },
+    "x/brune": {
+      "symbol": "bRUNE",
+      "display": "bRUNE",
+      "name": "Bonded RUNE",
+      "denom_units": [["x/brune",0], ["bRUNE",8]]
+    },
+    "x/ghost-vault/avax-avax": {
+      "symbol": "LEND-AVAX.AVAX",
+      "display": "x/ghost-vault/avax-avax",
+      "name": "AVAX.AVAX Lend Shares",
+      "denom_units": [["x/ghost-vault/avax-avax",0], ["LEND-AVAX.AVAX",8]]
+    },
+    "x/ghost-vault/avax-usdc-0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e": {
+      "symbol": "LEND-AVAX.USDC",
+      "display": "x/ghost-vault/avax-usdc-0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
+      "name": "AVAX.USDC Lend Shares",
+      "denom_units": [["x/ghost-vault/avax-usdc-0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",0], ["LEND-AVAX.USDC",8]]
+    },
+    "x/ghost-vault/avax-usdt-0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7": {
+      "symbol": "LEND-AVAX.USDT",
+      "display": "x/ghost-vault/avax-usdt-0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
+      "name": "AVAX.USDT Lend Shares",
+      "denom_units": [["x/ghost-vault/avax-usdt-0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",0], ["LEND-AVAX.USDT",8]]
+    },
+    "x/ghost-vault/base-eth": {
+      "symbol": "LEND-BASE.ETH",
+      "display": "x/ghost-vault/base-eth",
+      "name": "BASE.ETH Lend Shares",
+      "denom_units": [["x/ghost-vault/base-eth",0], ["LEND-BASE.ETH",8]]
+    },
+    "x/ghost-vault/base-usdc-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": {
+      "symbol": "LEND-BASE.USDC",
+      "display": "x/ghost-vault/base-usdc-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+      "name": "BASE.USDC Lend Shares",
+      "denom_units": [["x/ghost-vault/base-usdc-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",0], ["LEND-BASE.USDC",8]]
+    },
+    "x/ghost-vault/bch-bch": {
+      "symbol": "LEND-BCH.BCH",
+      "display": "x/ghost-vault/bch-bch",
+      "name": "BCH.BCH Lend Shares",
+      "denom_units": [["x/ghost-vault/bch-bch",0], ["LEND-BCH.BCH",8]]
+    },
+    "x/ghost-vault/bsc-bnb": {
+      "symbol": "LEND-BSC.BNB",
+      "display": "x/ghost-vault/bsc-bnb",
+      "name": "BSC.BNB Lend Shares",
+      "denom_units": [["x/ghost-vault/bsc-bnb",0], ["LEND-BSC.BNB",8]]
+    },
+    "x/ghost-vault/bsc-usdc-0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": {
+      "symbol": "LEND-BSC.USDC",
+      "display": "x/ghost-vault/bsc-usdc-0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+      "name": "BSC.USDC Lend Shares",
+      "denom_units": [["x/ghost-vault/bsc-usdc-0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",0], ["LEND-BSC.USDC",8]]
+    },
+    "x/ghost-vault/bsc-usdt-0x55d398326f99059ff775485246999027b3197955": {
+      "symbol": "LEND-BSC.USDT",
+      "display": "x/ghost-vault/bsc-usdt-0x55d398326f99059ff775485246999027b3197955",
+      "name": "BSC.USDT Lend Shares",
+      "denom_units": [["x/ghost-vault/bsc-usdt-0x55d398326f99059ff775485246999027b3197955",0], ["LEND-BSC.USDT",8]]
+    },
+    "x/ghost-vault/btc-btc": {
+      "symbol": "LEND-BTC.BTC",
+      "display": "x/ghost-vault/btc-btc",
+      "name": "BTC.BTC Lend Shares",
+      "denom_units": [["x/ghost-vault/btc-btc",0], ["LEND-BTC.BTC",8]]
+    },
+    "x/ghost-vault/doge-doge": {
+      "symbol": "LEND-DOGE.DOGE",
+      "display": "x/ghost-vault/doge-doge",
+      "name": "DOGE.DOGE Lend Shares",
+      "denom_units": [["x/ghost-vault/doge-doge",0], ["LEND-DOGE.DOGE",8]]
+    },
+    "x/ghost-vault/eth-dai-0x6b175474e89094c44da98b954eedeac495271d0f": {
+      "symbol": "LEND-ETH.DAI",
+      "display": "x/ghost-vault/eth-dai-0x6b175474e89094c44da98b954eedeac495271d0f",
+      "name": "ETH.DAI Lend Shares",
+      "denom_units": [["x/ghost-vault/eth-dai-0x6b175474e89094c44da98b954eedeac495271d0f",0], ["LEND-ETH.DAI",8]]
+    },
+    "x/ghost-vault/eth-eth": {
+      "symbol": "LEND-ETH.ETH",
+      "display": "x/ghost-vault/eth-eth",
+      "name": "ETH.ETH Lend Shares",
+      "denom_units": [["x/ghost-vault/eth-eth",0], ["LEND-ETH.ETH",8]]
+    },
+    "x/ghost-vault/eth-gusd-0x056fd409e1d7a124bd7017459dfea2f387b6d5cd": {
+      "symbol": "LEND-ETH.GUSD",
+      "display": "x/ghost-vault/eth-gusd-0x056fd409e1d7a124bd7017459dfea2f387b6d5cd",
+      "name": "ETH.GUSD Lend Shares",
+      "denom_units": [["x/ghost-vault/eth-gusd-0x056fd409e1d7a124bd7017459dfea2f387b6d5cd",0], ["LEND-ETH.GUSD",8]]
+    },
+    "x/ghost-vault/eth-lusd-0x5f98805a4e8be255a32880fdec7f6728c6568ba0": {
+      "symbol": "LEND-ETH.LUSD",
+      "display": "x/ghost-vault/eth-lusd-0x5f98805a4e8be255a32880fdec7f6728c6568ba0",
+      "name": "ETH.LUSD Lend Shares",
+      "denom_units": [["x/ghost-vault/eth-lusd-0x5f98805a4e8be255a32880fdec7f6728c6568ba0",0], ["LEND-ETH.LUSD",8]]
+    },
+    "x/ghost-vault/eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+      "symbol": "LEND-ETH.USDC",
+      "display": "x/ghost-vault/eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "name": "ETH.USDC Lend Shares",
+      "denom_units": [["x/ghost-vault/eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",0], ["LEND-ETH.USDC",8]]
+    },
+    "x/ghost-vault/eth-usdp-0x8e870d67f660d95d5be530380d0ec0bd388289e1": {
+      "symbol": "LEND-ETH.USDP",
+      "display": "x/ghost-vault/eth-usdp-0x8e870d67f660d95d5be530380d0ec0bd388289e1",
+      "name": "ETH.USDP Lend Shares",
+      "denom_units": [["x/ghost-vault/eth-usdp-0x8e870d67f660d95d5be530380d0ec0bd388289e1",0], ["LEND-ETH.USDP",8]]
+    },
+    "x/ghost-vault/eth-usdt-0xdac17f958d2ee523a2206206994597c13d831ec7": {
+      "symbol": "LEND-ETH.USDT",
+      "display": "x/ghost-vault/eth-usdt-0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "name": "ETH.USDT Lend Shares",
+      "denom_units": [["x/ghost-vault/eth-usdt-0xdac17f958d2ee523a2206206994597c13d831ec7",0], ["LEND-ETH.USDT",8]]
+    },
+    "x/ghost-vault/eth-wbtc-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": {
+      "symbol": "LEND-ETH.WBTC",
+      "display": "x/ghost-vault/eth-wbtc-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "name": "ETH.WBTC Lend Shares",
+      "denom_units": [["x/ghost-vault/eth-wbtc-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",0], ["LEND-ETH.WBTC",8]]
+    },
+    "x/ghost-vault/gaia-atom": {
+      "symbol": "LEND-GAIA.ATOM",
+      "display": "x/ghost-vault/gaia-atom",
+      "name": "GAIA.ATOM Lend Shares",
+      "denom_units": [["x/ghost-vault/gaia-atom",0], ["LEND-GAIA.ATOM",8]]
+    },
+    "x/ghost-vault/ltc-ltc": {
+      "symbol": "LEND-LTC.LTC",
+      "display": "x/ghost-vault/ltc-ltc",
+      "name": "LTC.LTC Lend Shares",
+      "denom_units": [["x/ghost-vault/ltc-ltc",0], ["LEND-LTC.LTC",8]]
+    },
+    "x/ghost-vault/rune": {
+      "symbol": "LEND-THOR.RUNE",
+      "display": "x/ghost-vault/rune",
+      "name": "THOR.RUNE Lend Shares",
+      "denom_units": [["x/ghost-vault/rune",0], ["LEND-THOR.RUNE",8]]
+    },
+    "x/ghost-vault/tcy": {
+      "symbol": "LEND-THOR.TCY",
+      "display": "x/ghost-vault/tcy",
+      "name": "THOR.TCY Lend Shares",
+      "denom_units": [["x/ghost-vault/tcy",0], ["LEND-THOR.TCY",8]]
+    },
+    "x/ghost-vault/tron-trx": {
+      "symbol": "LEND-TRON.TRX",
+      "display": "x/ghost-vault/tron-trx",
+      "name": "TRON.TRX Lend Shares",
+      "denom_units": [["x/ghost-vault/tron-trx",0], ["LEND-TRON.TRX",8]]
+    },
+    "x/ghost-vault/tron-usdt-tr7nhqjekqxgtci8q8zy4pl8otszgjlj6t": {
+      "symbol": "LEND-TRON.USDT",
+      "display": "x/ghost-vault/tron-usdt-tr7nhqjekqxgtci8q8zy4pl8otszgjlj6t",
+      "name": "TRON.USDT Lend Shares",
+      "denom_units": [["x/ghost-vault/tron-usdt-tr7nhqjekqxgtci8q8zy4pl8otszgjlj6t",0], ["LEND-TRON.USDT",8]]
+    },
+    "x/ghost-vault/x/ruji": {
+      "symbol": "LEND-THOR.RUJI",
+      "display": "x/ghost-vault/x/ruji",
+      "name": "THOR.RUJI Lend Shares",
+      "denom_units": [["x/ghost-vault/x/ruji",0], ["LEND-THOR.RUJI",8]]
+    },
+    "x/ghost-vault/xrp-xrp": {
+      "symbol": "LEND-XRP.XRP",
+      "display": "x/ghost-vault/xrp-xrp",
+      "name": "XRP.XRP Lend Shares",
+      "denom_units": [["x/ghost-vault/xrp-xrp",0], ["LEND-XRP.XRP",8]]
+    },
+    "x/nami-index-fixed-thor1yqf5spdv8c4088zmvqsg32eq63fzepsjvntahdk0ek0yjnkt3qdqftp3lc-rcpt": {
+      "symbol": "RJI",
+      "display": "RJI",
+      "name": "The Rujira Index",
+      "denom_units": [["x/nami-index-fixed-thor1yqf5spdv8c4088zmvqsg32eq63fzepsjvntahdk0ek0yjnkt3qdqftp3lc-rcpt",0], ["RJI",8]]
+    },
+    "x/nami-index-nav-thor1h0hr0rm3dawkedh44hlrmgvya6plsryehcr46yda2vj0wfwgq5xqrs86px-rcpt": {
+      "symbol": "yTCY",
+      "display": "yTCY",
+      "name": "The Yield Bearing TCY Index",
+      "denom_units": [["x/nami-index-nav-thor1h0hr0rm3dawkedh44hlrmgvya6plsryehcr46yda2vj0wfwgq5xqrs86px-rcpt",0], ["yTCY",8]]
+    },
+    "x/nami-index-nav-thor1mlphkryw5g54yfkrp6xpqzlpv4f8wh6hyw27yyg4z2els8a9gxpqhfhekt-rcpt": {
+      "symbol": "yRUNE",
+      "display": "yRUNE",
+      "name": "The Yield Bearing RUNE Index",
+      "denom_units": [["x/nami-index-nav-thor1mlphkryw5g54yfkrp6xpqzlpv4f8wh6hyw27yyg4z2els8a9gxpqhfhekt-rcpt",0], ["yRUNE",8]]
+    },
+    "x/ruji": {
+      "symbol": "RUJI",
+      "display": "RUJI",
+      "name": "Rujira",
+      "denom_units": [["x/ruji",0], ["RUJI",8]]
+    },
+    "x/staking-tcy": {
+      "symbol": "sTCY",
+      "display": "sTCY",
+      "name": "Liquid Staked TCY",
+      "denom_units": [["x/staking-tcy",0], ["sTCY",8]]
+    },
+    "x/staking-thor.nami": {
+      "symbol": "sNAMI",
+      "display": "x/staking-thor.nami",
+      "name": "Auto-Compounding NAMI",
+      "denom_units": [["x/staking-thor.nami",0], ["sNAMI",8]]
+    },
+    "x/staking-x/brune": {
+      "symbol": "ybRUNE",
+      "display": "ybRUNE",
+      "name": "Yield-Bearing Staked BRUNE",
+      "denom_units": [["x/staking-x/brune",0], ["ybRUNE",8]]
+    },
+    "x/staking-x/ruji": {
+      "symbol": "sRUJI",
+      "display": "x/staking-x/ruji",
+      "name": "Auto-Compounding RUJI",
+      "denom_units": [["x/staking-x/ruji",0], ["sRUJI",8]]
+    },
+    "x/thor1hsy2g59mpca6knrak6q58f5d08zqjsnhd83hmzxjex2ge4wffrhsue9d5x/hans": {
+      "symbol": "HANS",
+      "display": "HANS",
+      "name": "His Awesomeness Never Stops",
+      "denom_units": [["x/thor1hsy2g59mpca6knrak6q58f5d08zqjsnhd83hmzxjex2ge4wffrhsue9d5x/hans",0], ["HANS",6]]
+    }
+  },
+  "pools": [
+    "AVAX.AVAX",
+    "AVAX.SOL-0XFE6B19286885A4F7F55ADAD09C3CD1F906D2478F",
+    "AVAX.USDC-0XB97EF9EF8734C71904D8002F8B6BC66DD9C48A6E",
+    "AVAX.USDT-0X9702230A8EA53601F5CD2DC00FDBC13D4DF4A8C7",
+    "BASE.ETH",
+    "BASE.USDC-0X833589FCD6EDB6E08F4C7C32D4F71B54BDA02913",
+    "BASE.VVV-0XACFE6019ED1A7DC6F7B508C02D1B04EC88CC21BF",
+    "BCH.BCH",
+    "BSC.BNB",
+    "BSC.BTCB-0X7130D2A12B9BCBFAE4F2634D864A1EE1CE3EAD9C",
+    "BSC.BUSD-0XE9E7CEA3DEDCA5984780BAFC599BD69ADD087D56",
+    "BSC.ETH-0X2170ED0880AC9A755FD29B2688956BD959F933F8",
+    "BSC.TWT-0X4B0F1812E5DF2A09796481FF14017E6005508003",
+    "BSC.USDC-0X8AC76A51CC950D9822D68B83FE1AD97B32CD580D",
+    "BSC.USDT-0X55D398326F99059FF775485246999027B3197955",
+    "BTC.BTC",
+    "DOGE.DOGE",
+    "ETH.AAVE-0X7FC66500C84A76AD7E9C93437BFC5AC33E2DDAE9",
+    "ETH.DAI-0X6B175474E89094C44DA98B954EEDEAC495271D0F",
+    "ETH.DPI-0X1494CA1F11D487C2BBE4543E90080AEBA4BA3C2B",
+    "ETH.ETH",
+    "ETH.FOX-0XC770EEFAD204B5180DF6A14EE197D99D808EE52D",
+    "ETH.GUSD-0X056FD409E1D7A124BD7017459DFEA2F387B6D5CD",
+    "ETH.LINK-0X514910771AF9CA656AF840DFF83E8264ECF986CA",
+    "ETH.LUSD-0X5F98805A4E8BE255A32880FDEC7F6728C6568BA0",
+    "ETH.SNX-0XC011A73EE8576FB46F5E1C5751CA3B9FE0AF2A6F",
+    "ETH.TGT-0X108A850856DB3F85D0269A2693D896B394C80325",
+    "ETH.THOR-0XA5F2211B9B8170F694421F2046281775E8468044",
+    "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
+    "ETH.USDP-0X8E870D67F660D95D5BE530380D0EC0BD388289E1",
+    "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7",
+    "ETH.VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D",
+    "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599",
+    "ETH.XRUNE-0X69FA0FEE221AD11012BAB0FDB45D444D3D2CE71C",
+    "ETH.YFI-0X0BC529C00C6401AEF6D220BE8C6EA1667F6AD93E",
+    "GAIA.ATOM",
+    "LTC.LTC",
+    "SOL.SOL",
+    "THOR.RUJI",
+    "THOR.TCY",
+    "TRON.TRX",
+    "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T",
+    "XRP.XRP"
+  ]
+}

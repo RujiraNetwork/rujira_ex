@@ -1,9 +1,14 @@
 defmodule Rujira.Ghost.VaultTest do
   use ExUnit.Case, async: true
 
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Rujira.Ghost.Vault
   alias Rujira.Ghost.Vault.Interest
   alias Rujira.Test.MockNode
+
+  setup do
+    MockNode.expect(fn %QueryDenomMetadataRequest{denom: denom} -> no_denom_metadata(denom) end)
+  end
 
   describe "new/1" do
     test "parses vault config including the interest curve" do
@@ -60,19 +65,23 @@ defmodule Rujira.Ghost.VaultTest do
 
   describe "from_id/2" do
     test "resolves a vault by its address, which is its id" do
-      MockNode.expect(fn %{"config" => _} ->
-        MockNode.ok(%{
-          "address" => "thor1vault",
-          "denom" => "btc-btc",
-          "fee" => "0.1",
-          "fee_address" => "thor1fee",
-          "interest" => %{
-            "target_utilization" => "0.8",
-            "base_rate" => "0",
-            "step1" => "1",
-            "step2" => "2"
-          }
-        })
+      MockNode.expect(fn
+        %QueryDenomMetadataRequest{denom: denom} ->
+          no_denom_metadata(denom)
+
+        %{"config" => _} ->
+          MockNode.ok(%{
+            "address" => "thor1vault",
+            "denom" => "btc-btc",
+            "fee" => "0.1",
+            "fee_address" => "thor1fee",
+            "interest" => %{
+              "target_utilization" => "0.8",
+              "base_rate" => "0",
+              "step1" => "1",
+              "step2" => "2"
+            }
+          })
       end)
 
       assert {:ok, %Vault{id: "thor1vault", address: "thor1vault"}} =
@@ -87,4 +96,9 @@ defmodule Rujira.Ghost.VaultTest do
       assert {:error, :not_found} = Vault.from_id("thor1missing")
     end
   end
+
+  # A token-factory denom's asset comes from the chain's metadata for it. These
+  # fixtures are denoms the node holds none for, which is what names them here.
+  defp no_denom_metadata(denom),
+    do: {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom #{denom}"}}
 end
