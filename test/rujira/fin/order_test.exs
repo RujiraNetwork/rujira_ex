@@ -159,11 +159,34 @@ defmodule Rujira.Fin.OrderTest do
       assert {:error, :not_found} = Order.load(pair(), :base, @fixed, "thor1owner")
     end
 
+    test "a missing order is cached, so a second read does not re-ask the node" do
+      MockNode.expect(fn _ -> {:error, not_found()} end)
+
+      assert {:error, :not_found} = Order.load(pair(), :base, @fixed, "thor1owner")
+      assert {:error, :not_found} = Order.load(pair(), :base, @fixed, "thor1owner")
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
     test "any other failure propagates unchanged" do
       MockNode.expect(fn _ -> {:error, vm_error()} end)
 
       assert {:error, %GRPC.RPCError{status: 2}} =
                Order.load(pair(), :base, @fixed, "thor1owner")
+    end
+
+    test "a genuine failure is not cached, so the next read asks the node again" do
+      MockNode.expect(fn _ -> {:error, vm_error()} end)
+
+      assert {:error, %GRPC.RPCError{status: 2}} =
+               Order.load(pair(), :base, @fixed, "thor1owner")
+
+      assert {:error, %GRPC.RPCError{status: 2}} =
+               Order.load(pair(), :base, @fixed, "thor1owner")
+
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
     end
   end
 

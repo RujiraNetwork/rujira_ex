@@ -9,6 +9,24 @@ defmodule Rujira.ThorchainSwap.StrategyTest do
   alias Rujira.ThorchainSwap.Strategy
   alias Rujira.ThorchainSwap.Strategy.Vault
   alias Rujira.Test.MockNode
+  alias Thorchain.Types.ContractInfo
+  alias Thorchain.Types.QueryContractInfosRequest
+
+  defp config do
+    %{
+      "address" => "thor1strategy",
+      "max_stream_length" => 10,
+      "stream_step_ratio" => "0.1",
+      "spread_bps" => 50,
+      "max_borrow_ratio" => "0.8",
+      "min_borrow_amount" => "100000000",
+      "reserve_fee" => "0.02",
+      "fee" => ["0.001", "thor1fee"]
+    }
+  end
+
+  defp info(address),
+    do: %ContractInfo{address: address, contract: "rujira-thorchain-swap", version: "1"}
 
   describe "new/1" do
     test "parses strategy config, splitting the fee tuple" do
@@ -75,6 +93,37 @@ defmodule Rujira.ThorchainSwap.StrategyTest do
       end)
 
       assert {:error, :not_found} = Strategy.from_id("thor1missing")
+    end
+  end
+
+  describe "list/1" do
+    test "the head moving mid fan-out does not split the list across heights" do
+      parent = self()
+      pinned = default_head()
+
+      MockNode.expect(fn
+        %QueryContractInfosRequest{} ->
+          {:ok, %{infos: [info("thor1strategya"), info("thor1strategyb")]}}
+
+        %{"config" => _} ->
+          # `MockNode.query/3` posts `{:mock_node, request, opts}` to the leg's
+          # own Task mailbox, so the leg forwards the height it was read at.
+          receive do
+            {:mock_node, _request, opts} ->
+              send(parent, {:leg_height, get_in(opts, [:metadata, "x-cosmos-block-height"])})
+          end
+
+          # The head moves while the fan-out is still running. One item at a
+          # time, so the second leg is read after the move.
+          set_head(pinned + 1)
+          MockNode.ok(config())
+      end)
+
+      assert {:ok, [_, _]} = Strategy.list(fan_out: [max_concurrency: 1])
+
+      expected = Integer.to_string(pinned)
+      assert_received {:leg_height, ^expected}
+      assert_received {:leg_height, ^expected}
     end
   end
 

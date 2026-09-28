@@ -3,12 +3,13 @@ defmodule Rujira.Brune do
   Public API for the rujira-brune node/bond protocol.
 
   Pure delegation facade. Each resource module owns its struct, construction,
-  and queries. Invalidate cache on the resource module, not here.
+  and queries. Invalidation is `Rujira.Cache`'s: it follows from a read's
+  sources, not from a call here.
 
   Every query takes a trailing `opts`, forwarded to `Rujira.Node.query/3`, so a
-  caller can read a whole composite at one `height:`. A memoized query's opts
-  arity reads the node uncached when given a `:height` - see the resource
-  module.
+  caller can read a whole composite at one `height:`. Every lookup here is
+  cached per `Rujira.Cache`, resolved at `opts[:height]` or, without one, at the
+  head - see the resource module.
   """
 
   alias Rujira.Brune.LoggedEvent

@@ -54,18 +54,27 @@ defmodule Rujira.Staking.Pool.AccountTest do
                Account.load(loaded_pool(), "thor1owner")
     end
 
-    test "an owner the contract holds no account for is not found" do
-      MockNode.expect(fn %{"account" => %{"addr" => "thor1owner"}} ->
-        {:error,
-         %GRPC.RPCError{
-           status: 2,
-           message:
-             "type: rujira_rs::account_pool::AccountPoolAccount; key: [00] not found: " <>
-               "query wasm contract failed"
-         }}
-      end)
+    test "an owner that has never bonded is an empty account, not a not-found" do
+      MockNode.expect(fn %{"account" => %{"addr" => "thor1owner"}} -> never_bonded() end)
 
-      assert {:error, :not_found} = Account.load(pool(), "thor1owner")
+      assert {:ok,
+              %Account{
+                id: "thor1pool/thor1owner",
+                pool: "thor1pool",
+                owner: "thor1owner",
+                bonded: 0,
+                pending_revenue: 0
+              }} = Account.load(pool(), "thor1owner")
+    end
+
+    test "the empty account is cached, so a second read does not re-ask the node" do
+      MockNode.expect(fn %{"account" => %{"addr" => "thor1owner"}} -> never_bonded() end)
+
+      assert {:ok, %Account{bonded: 0}} = Account.load(pool(), "thor1owner")
+      assert {:ok, %Account{bonded: 0}} = Account.load(pool(), "thor1owner")
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
     end
 
     test "propagates other errors" do
@@ -87,6 +96,18 @@ defmodule Rujira.Staking.Pool.AccountTest do
       assert_received {:mock_node, _, _}
       refute_received {:mock_node, _, _}
     end
+  end
+
+  # The contract loads the account bare, so an owner it holds no record for comes
+  # back as a `StdError::NotFound` rather than an empty response.
+  defp never_bonded do
+    {:error,
+     %GRPC.RPCError{
+       status: 2,
+       message:
+         "type: rujira_rs::account_pool::AccountPoolAccount; key: [00] not found: " <>
+           "query wasm contract failed"
+     }}
   end
 
   describe "from_id/1" do

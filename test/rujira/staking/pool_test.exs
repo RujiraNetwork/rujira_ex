@@ -1,11 +1,18 @@
 defmodule Rujira.Staking.PoolTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  `list/1` reads the deployment registry and each pool's config through
+  `Rujira.Cache`, whose stores and head are global, so this case runs sync and
+  starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Rujira.Assets.Asset
   alias Rujira.Staking.Pool
   alias Rujira.Staking.Pool.RevenueConverter
   alias Rujira.Test.MockNode
+  alias Thorchain.Types.ContractInfo
+  alias Thorchain.Types.QueryContractInfosRequest
 
   setup do
     MockNode.expect(fn %QueryDenomMetadataRequest{denom: denom} -> no_denom_metadata(denom) end)
@@ -65,6 +72,40 @@ defmodule Rujira.Staking.PoolTest do
     end
   end
 
+  describe "list/1" do
+    test "the head moving mid fan-out does not split the list across heights" do
+      parent = self()
+      pinned = default_head()
+
+      MockNode.expect(fn
+        %QueryContractInfosRequest{} ->
+          {:ok, %{infos: [info("thor1poola"), info("thor1poolb")]}}
+
+        %QueryDenomMetadataRequest{denom: denom} ->
+          no_denom_metadata(denom)
+
+        %{"config" => _} ->
+          # `MockNode.query/3` posts `{:mock_node, request, opts}` to the leg's
+          # own Task mailbox, so the leg forwards the height it was read at.
+          receive do
+            {:mock_node, _request, opts} ->
+              send(parent, {:leg_height, get_in(opts, [:metadata, "x-cosmos-block-height"])})
+          end
+
+          # The head moves while the fan-out is still running. One item at a
+          # time, so the second leg is read after the move.
+          set_head(pinned + 1)
+          MockNode.ok(config())
+      end)
+
+      assert {:ok, [_, _]} = Pool.list(fan_out: [max_concurrency: 1])
+
+      expected = Integer.to_string(pinned)
+      assert_received {:leg_height, ^expected}
+      assert_received {:leg_height, ^expected}
+    end
+  end
+
   describe "from_id/2" do
     test "a well-formed id with no contract behind it is not_found" do
       MockNode.expect(fn %{"config" => %{}} ->
@@ -74,6 +115,9 @@ defmodule Rujira.Staking.PoolTest do
       assert {:error, :not_found} = Pool.from_id("thor1missing")
     end
   end
+
+  defp info(address),
+    do: %ContractInfo{address: address, contract: "rujira-staking", version: "1"}
 
   # A vault/pool receipt is a token-factory denom, so building one reads the
   # chain's metadata for it. These fixtures are denoms the node holds none for,

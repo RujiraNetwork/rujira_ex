@@ -31,6 +31,9 @@ defmodule Rujira.Revenue.ConverterTest do
     }
   end
 
+  defp info(address),
+    do: %ContractInfo{address: address, contract: "rujira-revenue", version: "2"}
+
   describe "new/1" do
     test "parses a v2.0.1 converter config" do
       assert {:ok,
@@ -155,6 +158,35 @@ defmodule Rujira.Revenue.ConverterTest do
   end
 
   describe "list/1" do
+    test "the head moving mid fan-out does not split the list across heights" do
+      parent = self()
+      pinned = default_head()
+
+      MockNode.expect(fn
+        %QueryContractInfosRequest{} ->
+          {:ok, %{infos: [info("thor1revenuea"), info("thor1revenueb")]}}
+
+        %{"config" => _} ->
+          # `MockNode.query/3` posts `{:mock_node, request, opts}` to the leg's
+          # own Task mailbox, so the leg forwards the height it was read at.
+          receive do
+            {:mock_node, _request, opts} ->
+              send(parent, {:leg_height, get_in(opts, [:metadata, "x-cosmos-block-height"])})
+          end
+
+          # The head moves while the fan-out is still running. One item at a
+          # time, so the second leg is read after the move.
+          set_head(pinned + 1)
+          MockNode.ok(config())
+      end)
+
+      assert {:ok, [_, _]} = Converter.list(fan_out: [max_concurrency: 1])
+
+      expected = Integer.to_string(pinned)
+      assert_received {:leg_height, ^expected}
+      assert_received {:leg_height, ^expected}
+    end
+
     test "fails as a whole when any target fails" do
       MockNode.expect(fn _ -> {:error, %GRPC.RPCError{status: 2, message: "boom"}} end)
 

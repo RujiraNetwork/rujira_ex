@@ -158,6 +158,16 @@ defmodule Rujira.Ghost.Credit.AccountTest do
       assert {:error, :not_found} = Account.get("thor1credit", "thor1nope", height: @height)
     end
 
+    test "a missing account is cached, so a second read does not re-ask the node" do
+      MockNode.expect(fn %{"account" => _} -> {:error, @not_found} end)
+
+      assert {:error, :not_found} = Account.get("thor1credit", "thor1nope", height: @height)
+      assert {:error, :not_found} = Account.get("thor1credit", "thor1nope", height: @height)
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
     test "any other query error is handed back unchanged" do
       MockNode.expect(fn %{"account" => _} ->
         {:error, %GRPC.RPCError{status: 3, message: "boom"}}

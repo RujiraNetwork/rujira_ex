@@ -89,9 +89,11 @@ defmodule Rujira.Ghost.Credit.Account do
   Reads one account of a credit contract by the account's address.
 
   An address the credit contract holds no account for is
-  `{:error, :not_found}`.
+  `{:error, :not_found}`, cached as the fact it is until the account's sources
+  change.
   """
-  @spec get(String.t(), String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
+  @spec get(String.t(), String.t(), Node.opts()) ::
+          {:ok, t()} | {:error, :not_found} | {:error, term()}
   def get(credit, account, opts \\ []) do
     with {:ok, opts} <- Cache.pin(opts),
          {:ok, res} <- account(credit, account, opts) do
@@ -175,10 +177,19 @@ defmodule Rujira.Ghost.Credit.Account do
   defp predicted(_), do: {:error, :invalid_response}
 
   defp account(credit, account, opts) do
-    {__MODULE__, :query_account, [credit, account]}
-    |> Cache.fetch([:per_block], opts, fn _height -> fetch_account(credit, account, opts) end)
-    |> not_found()
+    with {:ok, value} <-
+           Cache.fetch(
+             {__MODULE__, :query_account, [credit, account]},
+             [:per_block],
+             opts,
+             fn _height -> fetch_account(credit, account, opts) end
+           ) do
+      found(value)
+    end
   end
+
+  defp found(:none), do: {:error, :not_found}
+  defp found(value), do: {:ok, value}
 
   defp accounts_by_owner(credit, owner, tag, opts) do
     Cache.fetch(
@@ -199,7 +210,9 @@ defmodule Rujira.Ghost.Credit.Account do
   end
 
   defp fetch_account(credit, account, opts) do
-    Contracts.query_state_smart(credit, %{account: account}, opts)
+    credit
+    |> Contracts.query_state_smart(%{account: account}, opts)
+    |> not_found()
   end
 
   defp fetch_accounts_by_owner(credit, owner, tag, opts) do
@@ -221,10 +234,11 @@ defmodule Rujira.Ghost.Credit.Account do
   defp accounts({:error, _} = err), do: err
 
   # The contract loads the account bare, so an address it holds no account for is
-  # a `StdError::NotFound` - a missing account, not a failed read.
-  defp not_found({:error, err}) do
-    if Contracts.not_found?(err), do: {:error, :not_found}, else: {:error, err}
+  # a `StdError::NotFound` - a missing account, not a failed read. It is a fact
+  # about the credit contract, so it is cached as one rather than re-read.
+  defp not_found({:error, err} = result) do
+    if Contracts.not_found?(err), do: {:ok, :none}, else: result
   end
 
-  defp not_found(other), do: other
+  defp not_found(result), do: result
 end

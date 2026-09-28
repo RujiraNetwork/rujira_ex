@@ -81,7 +81,8 @@ defmodule Rujira.Ghost.Vault.Status do
   @doc "Loads the vault's live status into its `status` field, at `opts[:height]` when given."
   @spec load(Vault.t(), Node.opts()) :: {:ok, Vault.t()} | {:error, term()}
   def load(%Vault{address: address} = vault, opts \\ []) do
-    with {:ok, res} <- query(address, opts),
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, res} <- query(address, opts),
          {:ok, status} <- new(res) do
       {:ok, %{vault | status: status}}
     end

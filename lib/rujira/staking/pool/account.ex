@@ -3,6 +3,11 @@ defmodule Rujira.Staking.Pool.Account do
   A user's bonded account in a rujira-staking pool: the bond the contract holds
   and the revenue it has already assigned to it.
 
+  The contract never removes an account, so an owner it holds no record for has
+  the same position as a fully unbonded one: `load/3` answers with an empty
+  account - `bonded` and `pending_revenue` zero - rather than
+  `{:error, :not_found}`.
+
   The account is the contract's own record, nothing more. A holder's liquid
   receipt tokens are a bank balance - read them with
   `Rujira.Bank.balance(owner, pool.receipt_asset)`. What the next distribution
@@ -54,21 +59,23 @@ defmodule Rujira.Staking.Pool.Account do
 
   @doc """
   Loads the contract's account for `owner`, at `opts[:height]` when one is
-  given. An owner the contract holds no account for is `{:error, :not_found}`.
+  given.
+
+  An owner the contract holds no account for has never bonded, which is the
+  position of an empty account: `bonded` and `pending_revenue` zero.
   """
   @spec load(Pool.t(), String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def load(%Pool{} = pool, owner, opts \\ []) do
     with {:ok, opts} <- Cache.pin(opts),
-         {:ok, res} <- account(pool.address, owner, opts),
-         {:ok, bonded} <- Amount.new(Map.get(res, "bonded")),
-         {:ok, pending_revenue} <- Amount.new(Map.get(res, "pending_revenue")) do
-      {:ok, new(pool, owner, bonded, pending_revenue)}
+         {:ok, res} <- account(pool.address, owner, opts) do
+      build(pool, owner, res)
     end
   end
 
   @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def from_id(id, opts \\ []) do
-    with [address, owner] <- String.split(id, "/"),
+    with {:ok, opts} <- Cache.pin(opts),
+         [address, owner] <- String.split(id, "/"),
          {:ok, pool} <- Pool.get(address, opts) do
       load(pool, owner, opts)
     else
@@ -125,22 +132,39 @@ defmodule Rujira.Staking.Pool.Account do
   # --- Private ---
 
   defp fetch(address, owner, opts) do
-    Contracts.query_state_smart(address, %{account: %{addr: owner}}, opts)
+    address
+    |> Contracts.query_state_smart(%{account: %{addr: owner}}, opts)
+    |> never_bonded()
   end
 
   defp account(address, owner, opts) do
-    {__MODULE__, :query, [address, owner]}
-    |> Cache.fetch([{:contract, address}], opts, fn _height -> fetch(address, owner, opts) end)
-    |> not_found()
+    Cache.fetch(
+      {__MODULE__, :query, [address, owner]},
+      [{:contract, address}],
+      opts,
+      fn _height ->
+        fetch(address, owner, opts)
+      end
+    )
   end
 
-  # The contract loads the account bare, so an owner that has never bonded is a
-  # `StdError::NotFound` - a missing account, not a failed read.
-  defp not_found({:error, err}) do
-    if Contracts.not_found?(err), do: {:error, :not_found}, else: {:error, err}
+  # The contract loads the account bare and never removes one, so an owner that
+  # has never bonded is a `StdError::NotFound` - an empty account, not a failed
+  # read. It is the contract's own state, cached as the value it stands for.
+  defp never_bonded({:error, err} = result) do
+    if Contracts.not_found?(err), do: {:ok, :none}, else: result
   end
 
-  defp not_found(other), do: other
+  defp never_bonded(result), do: result
+
+  defp build(pool, owner, :none), do: {:ok, new(pool, owner, 0, 0)}
+
+  defp build(pool, owner, res) do
+    with {:ok, bonded} <- Amount.new(Map.get(res, "bonded")),
+         {:ok, pending_revenue} <- Amount.new(Map.get(res, "pending_revenue")) do
+      {:ok, new(pool, owner, bonded, pending_revenue)}
+    end
+  end
 
   defp net(undistributed_revenue, nil), do: undistributed_revenue
 

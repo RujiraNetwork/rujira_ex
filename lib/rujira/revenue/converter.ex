@@ -148,7 +148,8 @@ defmodule Rujira.Revenue.Converter do
   """
   @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def list(opts \\ []) do
-    with {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
       Rujira.Enum.reduce_async_while_ok(
         targets,
         fn %{address: address} -> Contracts.get({__MODULE__, address}, opts) end,
@@ -164,7 +165,8 @@ defmodule Rujira.Revenue.Converter do
   @doc "Loads the converter's live `actions` and `last_action` into its fields."
   @spec load(t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def load(%__MODULE__{address: address} = converter, opts \\ []) do
-    with {:ok, actions} <- query_actions(address, opts),
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, actions} <- query_actions(address, opts),
          {:ok, last_action} <- query_status(address, opts) do
       {:ok, %{converter | actions: actions, last_action: last_action}}
     end

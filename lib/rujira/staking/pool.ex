@@ -9,6 +9,7 @@ defmodule Rujira.Staking.Pool do
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Assets.Asset
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Deployments
   alias Rujira.Math
@@ -104,7 +105,8 @@ defmodule Rujira.Staking.Pool do
   """
   @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
   def list(opts \\ []) do
-    with {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
       Rujira.Enum.reduce_async_while_ok(
         targets,
         fn %{address: address} -> Contracts.get({__MODULE__, address}, opts) end,

@@ -73,24 +73,30 @@ defmodule Rujira.Brune.LoggedEvent do
           {:ok, [t()]} | {:error, term()}
   def list(address, start_after \\ nil, limit \\ @max_limit, opts \\ []) do
     with {:ok, opts} <- Cache.pin(opts),
-         {:ok, %{"events" => events}} <-
+         {:ok, events} <-
            Cache.fetch(
              {__MODULE__, :list, [address, start_after, limit]},
              [{:contract, address}],
              opts,
-             fn _height ->
-               Contracts.query_state_smart(
-                 address,
-                 %{events: %{start_after: start_after, limit: limit}},
-                 opts
-               )
-             end
+             fn _height -> fetch_events(address, start_after, limit, opts) end
            ) do
       Rujira.Enum.reduce_while_ok(events, &new(&1, address))
     end
   end
 
   # --- Private ---
+
+  defp fetch_events(address, start_after, limit, opts) do
+    case Contracts.query_state_smart(
+           address,
+           %{events: %{start_after: start_after, limit: limit}},
+           opts
+         ) do
+      {:ok, %{"events" => events}} -> {:ok, events}
+      {:ok, _} -> {:error, :invalid_response}
+      {:error, _} = err -> err
+    end
+  end
 
   defp attributes(attributes, address) do
     attributes
