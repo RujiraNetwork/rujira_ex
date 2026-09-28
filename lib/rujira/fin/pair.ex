@@ -6,6 +6,7 @@ defmodule Rujira.Fin.Pair do
   """
 
   alias Rujira.Assets
+  alias Rujira.Assets.Asset
   alias Rujira.Contracts
   alias Rujira.Deployments
   alias Rujira.Fin.Book
@@ -20,8 +21,8 @@ defmodule Rujira.Fin.Pair do
   defstruct id: nil,
             address: nil,
             market_makers: [],
-            token_base: nil,
-            token_quote: nil,
+            asset_base: nil,
+            asset_quote: nil,
             oracle_base: nil,
             oracle_quote: nil,
             tick: 0,
@@ -34,8 +35,8 @@ defmodule Rujira.Fin.Pair do
           id: String.t() | nil,
           address: String.t() | nil,
           market_makers: [String.t()],
-          token_base: String.t() | nil,
-          token_quote: String.t() | nil,
+          asset_base: Asset.t() | nil,
+          asset_quote: Asset.t() | nil,
           oracle_base: Oracle.t() | nil,
           oracle_quote: Oracle.t() | nil,
           tick: integer(),
@@ -69,6 +70,8 @@ defmodule Rujira.Fin.Pair do
       }) do
     with {:ok, fee_taker} <- Math.to_decimal(fee_taker),
          {:ok, fee_maker} <- Math.to_decimal(fee_maker),
+         {:ok, asset_base} <- Assets.from_denom(Enum.at(denoms, 0)),
+         {:ok, asset_quote} <- Assets.from_denom(Enum.at(denoms, 1)),
          {:ok, oracle_base} <- oracle_from_config(Enum.at(oracles || [], 0)),
          {:ok, oracle_quote} <- oracle_from_config(Enum.at(oracles || [], 1)) do
       {:ok,
@@ -76,8 +79,8 @@ defmodule Rujira.Fin.Pair do
          id: address,
          address: address,
          market_makers: market_makers,
-         token_base: Enum.at(denoms, 0),
-         token_quote: Enum.at(denoms, 1),
+         asset_base: asset_base,
+         asset_quote: asset_quote,
          oracle_base: oracle_base,
          oracle_quote: oracle_quote,
          tick: tick,
@@ -137,7 +140,7 @@ defmodule Rujira.Fin.Pair do
   @spec pick_default([t()], String.t()) :: {:ok, t()} | {:error, :not_found}
   def pick_default(pairs, base_denom) do
     stable = Enum.find(pairs, &stable_pair?(&1, base_denom))
-    first = Enum.find(pairs, &(&1.token_base == base_denom))
+    first = Enum.find(pairs, &base_denom?(&1, base_denom))
 
     case stable || first do
       %__MODULE__{} = pair -> {:ok, pair}
@@ -145,12 +148,19 @@ defmodule Rujira.Fin.Pair do
     end
   end
 
-  defp stable_pair?(%__MODULE__{token_base: base_denom, token_quote: quote}, base_denom)
-       when is_binary(quote) do
-    String.contains?(quote, "usdc") or String.contains?(quote, "usdt")
+  defp stable_pair?(%__MODULE__{asset_quote: %Asset{} = asset_quote} = pair, base_denom) do
+    with true <- base_denom?(pair, base_denom),
+         {:ok, quote_denom} <- Assets.to_native(asset_quote) do
+      String.contains?(quote_denom, "usdc") or String.contains?(quote_denom, "usdt")
+    else
+      _ -> false
+    end
   end
 
   defp stable_pair?(_, _), do: false
+
+  defp base_denom?(%__MODULE__{asset_base: asset_base}, base_denom),
+    do: Assets.to_native(asset_base) == {:ok, base_denom}
 
   @doc """
   Memoized lookup of the preferred base denom for a ticker.
@@ -228,11 +238,8 @@ defmodule Rujira.Fin.Pair do
   end
 
   @spec ticker_id!(t()) :: String.t()
-  def ticker_id!(%__MODULE__{token_base: token_base, token_quote: token_quote}) do
-    {:ok, base} = Assets.from_denom(token_base)
-    {:ok, target} = Assets.from_denom(token_quote)
-
-    "#{Assets.label(base)}_#{Assets.label(target)}"
+  def ticker_id!(%__MODULE__{asset_base: asset_base, asset_quote: asset_quote}) do
+    "#{Assets.label(asset_base)}_#{Assets.label(asset_quote)}"
   end
 
   # --- Private ---
@@ -250,8 +257,12 @@ defmodule Rujira.Fin.Pair do
     do: Contracts.get({module, address}, opts)
 
   defp fetch_denom_for_ticker(ticker, opts) do
-    with {:ok, pairs} <- list(opts) do
-      pairs |> Enum.map(& &1.token_base) |> pick_denom(ticker)
+    with {:ok, pairs} <- list(opts),
+         {:ok, denoms} <-
+           Rujira.Enum.reduce_while_ok(pairs, fn pair ->
+             Assets.to_native(pair.asset_base)
+           end) do
+      pick_denom(denoms, ticker)
     end
   end
 
@@ -260,7 +271,7 @@ defmodule Rujira.Fin.Pair do
          %__MODULE__{} = pair <-
            Enum.find(
              pairs,
-             &(&1.token_base == base_denom && &1.token_quote == quote_denom)
+             &(base_denom?(&1, base_denom) and quote_denom?(&1, quote_denom))
            ) do
       {:ok, pair}
     else
@@ -268,6 +279,9 @@ defmodule Rujira.Fin.Pair do
       err -> err
     end
   end
+
+  defp quote_denom?(%__MODULE__{asset_quote: asset_quote}, quote_denom),
+    do: Assets.to_native(asset_quote) == {:ok, quote_denom}
 
   defp oracle_from_config(%{"chain" => chain, "symbol" => symbol}) do
     id = String.upcase(chain) <> "." <> symbol
@@ -290,14 +304,8 @@ defmodule Rujira.Fin.Pair do
          %__MODULE__{} = pair <-
            Enum.find(
              pairs,
-             &(Assets.eq_denom(
-                 Assets.from_shortcode(b),
-                 &1.token_base
-               ) and
-                 Assets.eq_denom(
-                   Assets.from_shortcode(q),
-                   &1.token_quote
-                 ))
+             &(same_asset?(Assets.from_shortcode(b), &1.asset_base) and
+                 same_asset?(Assets.from_shortcode(q), &1.asset_quote))
            ) do
       {:ok, pair}
     else
@@ -306,4 +314,9 @@ defmodule Rujira.Fin.Pair do
       _ -> {:error, :invalid_id}
     end
   end
+
+  defp same_asset?(%Asset{chain: chain, ticker: ticker}, %Asset{chain: chain, ticker: ticker}),
+    do: true
+
+  defp same_asset?(_, _), do: false
 end

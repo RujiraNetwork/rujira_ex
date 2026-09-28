@@ -4,6 +4,60 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+
+- Ghost credit, exposing the rujira-ghost-credit contract (v1.0.4) as typed
+  chain data, delegated from the existing `Rujira.Ghost` facade:
+  - `Rujira.Ghost.Credit` — the contract's config (`get_credit`/`list_credits`/
+    `credit_from_id`/`load_credit`), whose `borrows` loads the vault borrower
+    positions the contract itself holds, as `Rujira.Ghost.Vault.Borrower`
+    structs, through the memoized `query_borrows`.
+  - `Rujira.Ghost.Credit.Account` — a credit account with its
+    `Rujira.Ghost.Credit.Collateral`, `Rujira.Ghost.Credit.Debt` (a
+    `Rujira.Ghost.Vault.Delegate` and its value) and
+    `Rujira.Ghost.Credit.LiquidationPreferences`, keyed
+    `"<credit>/<account>"` (`credit_account`/`credit_accounts`/
+    `credit_accounts_by_owner`/`credit_account_from_id`/
+    `credit_account_predict`). `ltv` and every value are the contract's own
+    response fields; nothing is re-derived and no total is added.
+  - `Rujira.Ghost.Credit.Events` — one struct per emitted event, routed from
+    `Rujira.Events.parse/1` under `wasm-rujira-ghost-credit/*`. The `funds`
+    attribute of the `account.msg/execute`, `account.msg/send` and
+    `liquidate.msg/execute` events has no field: it is a `NativeBalance`
+    rendered with no delimiter between coins, so it cannot be split back
+    apart.
+  - `Rujira.Deployments` now resolves `"rujira-ghost-credit"` contracts to
+    `Rujira.Ghost.Credit` by default.
+- `Rujira.Revenue` protocol facade, exposing the rujira-revenue contract
+  (v1.1.0 and v2.x) as typed chain data: `Rujira.Revenue.Converter` (`get`/
+  `list`/`load`/`from_id`, plus memoized `query_actions`/`query_status`).
+  `Rujira.Deployments` now resolves `"rujira-revenue"` contracts to
+  `Rujira.Revenue.Converter` by default.
+
+### Changed (breaking)
+
+- Token identity fields that held a raw denom string now hold an
+  `Rujira.Assets.Asset.t()`, resolved with `Rujira.Assets.from_denom/1` (an
+  unrecognised denom is now `{:error, :invalid_denom}` from construction,
+  not a raw string field) — migration:
+  - `Rujira.Ghost.Vault.denom` -> `Rujira.Ghost.Vault.asset`
+  - `Rujira.Ghost.Vault.receipt_denom` -> `Rujira.Ghost.Vault.receipt_asset`
+  - `Rujira.Ghost.Vault.Borrower.denom` -> `Rujira.Ghost.Vault.Borrower.asset`
+  - `Rujira.Fin.Events.TradeRange.Dynamic.denom` ->
+    `Rujira.Fin.Events.TradeRange.Dynamic.asset` (`nil` when the contract
+    emits no denom for the fill)
+  - `Rujira.Fin.Pair.token_base` -> `Rujira.Fin.Pair.asset_base`
+  - `Rujira.Fin.Pair.token_quote` -> `Rujira.Fin.Pair.asset_quote`
+- `Rujira.Contracts.paginate/4` returns `{:error, :invalid_response}` when a
+  page reply lacks the list key or holds a non-list there (previously an
+  empty page, or a raise); affects the paged lists of `Rujira.Fin.Order`,
+  `Rujira.Fin.Range`, `Rujira.Ghost.Vault.Borrower` and
+  `Rujira.Ghost.Credit.Account`.
+- `Rujira.Contracts.query_state_smart/3` success is typed as any decoded JSON
+  value (`term()`), not `map() | nil`.
+
 ## 0.6.1
 
 ### Changed

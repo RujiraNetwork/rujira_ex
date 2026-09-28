@@ -17,7 +17,6 @@ defmodule Rujira.Prices.Default do
   use Memoize
 
   alias Rujira.Amount
-  alias Rujira.Assets
   alias Rujira.Node
   alias Thorchain.Types.Query.Stub, as: Q
   alias Thorchain.Types.QueryOraclePriceRequest
@@ -149,8 +148,7 @@ defmodule Rujira.Prices.Default do
          {:ok, pair} <- Rujira.Fin.get_default_pair(denom, opts),
          {:ok, %{book: %{center: center}}} <- Rujira.Fin.load_pair(pair, 1, opts),
          {:ok, center} <- mid_price(center),
-         {:ok, quote_asset} <- Assets.from_denom(pair.token_quote, opts),
-         {:ok, quote_price} <- quote_price(quote_asset, ticker, opts) do
+         {:ok, quote_price} <- quote_price(pair.asset_quote, ticker, opts) do
       {:ok, Decimal.mult(center, quote_price)}
     else
       {:error, :not_found} -> {:error, :no_price}

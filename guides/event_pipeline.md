@@ -358,5 +358,5 @@ The high-level steps are the same as adding an action, plus:
 - One new `route/1` clause in `lib/rujira/events.ex` above the catch-all.
 
 The commented-out clauses in `lib/rujira/events.ex` show the prefixes that
-are reserved for protocols not yet implemented (`wasm-rujira-ghost-credit/`,
-`wasm-rujira-merge/`, `wasm-rujira-ventures-factory/`, etc.).
+are reserved for protocols not yet implemented (`wasm-rujira-merge/`,
+`wasm-rujira-ventures-factory/`, etc.).

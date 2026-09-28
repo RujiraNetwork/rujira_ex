@@ -72,6 +72,42 @@ defmodule Rujira.DeploymentsTest do
       assert %{module: Strategy} = Enum.find(targets, &(&1.address == "thor1tswap"))
       assert %{module: Pair} = Enum.find(targets, &(&1.address == "thor1fin"))
     end
+
+    test "rujira-revenue resolves to Rujira.Revenue.Converter by default" do
+      Deployments.invalidate()
+
+      MockNode.expect(fn %QueryContractInfosRequest{} ->
+        {:ok,
+         %{
+           infos: [
+             %ContractInfo{address: "thor1revenue", contract: "rujira-revenue", version: "1"}
+           ]
+         }}
+      end)
+
+      assert {:ok, [%{address: "thor1revenue", module: Rujira.Revenue.Converter}]} =
+               Deployments.list_all_targets()
+    end
+
+    test "rujira-ghost-credit resolves to Rujira.Ghost.Credit by default" do
+      Deployments.invalidate()
+
+      MockNode.expect(fn %QueryContractInfosRequest{} ->
+        {:ok,
+         %{
+           infos: [
+             %ContractInfo{
+               address: "thor1credit",
+               contract: "rujira-ghost-credit",
+               version: "1.0.4"
+             }
+           ]
+         }}
+      end)
+
+      assert {:ok, [%{address: "thor1credit", module: Rujira.Ghost.Credit}]} =
+               Deployments.list_all_targets()
+    end
   end
 
   describe "get_target/1 and list_targets/1" do

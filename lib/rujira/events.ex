@@ -69,6 +69,7 @@ defmodule Rujira.Events do
   """
   alias Rujira.Brune.Events.Event, as: BruneEvent
   alias Rujira.Fin.Events.Event, as: FinEvent
+  alias Rujira.Ghost.Credit.Events.Event, as: GhostCreditEvent
   alias Rujira.Ghost.Vault.Events.Event, as: GhostVaultEvent
   alias Rujira.Revenue.Events.Event, as: RevenueEvent
   alias Rujira.Staking.Events.Event, as: StakingEvent
@@ -81,6 +82,7 @@ defmodule Rujira.Events do
            | TcEvent.t()
            | ThorchainSwapEvent.t()
            | GhostVaultEvent.t()
+           | GhostCreditEvent.t()
            | RevenueEvent.t()
            | StakingEvent.t()
            | BruneEvent.t()
@@ -105,6 +107,9 @@ defmodule Rujira.Events do
   defp route(%Event{type: "wasm-rujira-ghost-vault/" <> _} = event),
     do: Rujira.Ghost.Vault.Events.parse(event)
 
+  defp route(%Event{type: "wasm-rujira-ghost-credit/" <> _} = event),
+    do: Rujira.Ghost.Credit.Events.parse(event)
+
   defp route(%Event{type: "wasm-rujira-revenue/" <> _} = event),
     do: Rujira.Revenue.Events.parse(event)
 
@@ -119,7 +124,6 @@ defmodule Rujira.Events do
        do: Rujira.Thorchain.Events.parse(event)
 
   # --- Not yet implemented ---
-  # defp route(%Event{type: "wasm-rujira-ghost-credit/" <> _} = event), do: Rujira.Ghost.Credit.Events.parse(event)
   # defp route(%Event{type: "wasm-rujira-merge/" <> _} = event), do: Rujira.Merge.Events.parse(event)
   # defp route(%Event{type: "wasm-rujira-ventures-factory/" <> _} = event), do: Rujira.Keiko.Events.parse(event)
   # defp route(%Event{type: "wasm-calc-" <> _} = event), do: Rujira.Calc.Events.parse(event)

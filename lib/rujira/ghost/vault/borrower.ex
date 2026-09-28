@@ -6,6 +6,8 @@ defmodule Rujira.Ghost.Vault.Borrower do
   """
 
   alias Rujira.Amount
+  alias Rujira.Assets
+  alias Rujira.Assets.Asset
   alias Rujira.Contracts
   alias Rujira.Math
   alias Rujira.Node
@@ -17,7 +19,7 @@ defmodule Rujira.Ghost.Vault.Borrower do
   # --- Struct ---
 
   defstruct address: nil,
-            denom: nil,
+            asset: nil,
             limit: 0,
             current: 0,
             shares: Decimal.new(0),
@@ -25,7 +27,7 @@ defmodule Rujira.Ghost.Vault.Borrower do
 
   @type t :: %__MODULE__{
           address: String.t() | nil,
-          denom: String.t() | nil,
+          asset: Asset.t() | nil,
           limit: Amount.t(),
           current: Amount.t(),
           shares: Decimal.t(),
@@ -43,14 +45,15 @@ defmodule Rujira.Ghost.Vault.Borrower do
         "shares" => shares,
         "available" => available
       }) do
-    with {:ok, limit} <- Amount.new(limit),
+    with {:ok, asset} <- Assets.from_denom(denom),
+         {:ok, limit} <- Amount.new(limit),
          {:ok, current} <- Amount.new(current),
          {:ok, shares} <- Math.to_decimal(shares),
          {:ok, available} <- Amount.new(available) do
       {:ok,
        %__MODULE__{
          address: addr,
-         denom: denom,
+         asset: asset,
          limit: limit,
          current: current,
          shares: shares,

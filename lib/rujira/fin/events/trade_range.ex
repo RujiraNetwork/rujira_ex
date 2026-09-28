@@ -25,6 +25,8 @@ defmodule Rujira.Fin.Events.TradeRange do
   values, not 8-decimal token integers.
   """
 
+  alias Rujira.Assets
+  alias Rujira.Assets.Asset
   alias Rujira.Math
 
   defmodule Fixed do
@@ -55,7 +57,7 @@ defmodule Rujira.Fin.Events.TradeRange do
 
     `pre_aep` and `aep` bracket the fill — the average entry price before and
     after it. `profit` is realized against `pre_aep` and splits into `claimable`
-    (segregated) and `compounded` (returned to principal). `denom` is the denom
+    (segregated) and `compounded` (returned to principal). `asset` is the asset
     bid into the range.
     """
 
@@ -65,7 +67,7 @@ defmodule Rujira.Fin.Events.TradeRange do
               effective_price: Decimal.new(0),
               gross: Decimal.new(0),
               fee: Decimal.new(0),
-              denom: nil,
+              asset: nil,
               deduct: Decimal.new(0),
               add: Decimal.new(0),
               profit: Decimal.new(0),
@@ -84,7 +86,7 @@ defmodule Rujira.Fin.Events.TradeRange do
             effective_price: Decimal.t(),
             gross: Decimal.t(),
             fee: Decimal.t(),
-            denom: String.t() | nil,
+            asset: Asset.t() | nil,
             deduct: Decimal.t(),
             add: Decimal.t(),
             profit: Decimal.t(),
@@ -174,6 +176,7 @@ defmodule Rujira.Fin.Events.TradeRange do
          ] <- String.split(entry, ":"),
          {:ok, side} <- side(side),
          {:ok, idx} <- Math.to_integer(idx),
+         {:ok, asset} <- dynamic_asset(denom),
          {:ok, values} <-
            Rujira.Enum.reduce_while_ok(
              [
@@ -196,7 +199,7 @@ defmodule Rujira.Fin.Events.TradeRange do
              ],
              &Math.to_decimal/1
            ) do
-      {:ok, %__MODULE__{idx: idx, side: side, range: dynamic(denom, values)}}
+      {:ok, %__MODULE__{idx: idx, side: side, range: dynamic(asset, values)}}
     else
       {:error, _} = err -> err
       _ -> {:error, :invalid_range}
@@ -215,7 +218,10 @@ defmodule Rujira.Fin.Events.TradeRange do
     }
   end
 
-  defp dynamic(denom, [
+  defp dynamic_asset(""), do: {:ok, nil}
+  defp dynamic_asset(denom), do: Assets.from_denom(denom)
+
+  defp dynamic(asset, [
          pre_aep,
          aep,
          oracle,
@@ -240,7 +246,7 @@ defmodule Rujira.Fin.Events.TradeRange do
       effective_price: effective_price,
       gross: gross,
       fee: fee,
-      denom: denom,
+      asset: asset,
       deduct: deduct,
       add: add,
       profit: profit,

@@ -8,7 +8,7 @@ defmodule Rujira.Ghost.Vault.BorrowerTest do
       assert {:ok,
               %Borrower{
                 address: "thor1b",
-                denom: "btc",
+                asset: asset,
                 limit: 500,
                 current: 100,
                 available: 400,
@@ -16,18 +16,31 @@ defmodule Rujira.Ghost.Vault.BorrowerTest do
               }} =
                Borrower.new(%{
                  "addr" => "thor1b",
-                 "denom" => "btc",
+                 "denom" => "btc-btc",
                  "limit" => "500",
                  "current" => "100",
                  "shares" => "100.5",
                  "available" => "400"
                })
 
+      assert asset.id == "BTC-BTC"
       assert Decimal.equal?(shares, Decimal.new("100.5"))
     end
 
     test "errors on missing fields" do
       assert {:error, :invalid_attrs} = Borrower.new(%{})
+    end
+
+    test "an unrecognised denom is an error" do
+      assert {:error, :invalid_denom} =
+               Borrower.new(%{
+                 "addr" => "thor1b",
+                 "denom" => "not a denom",
+                 "limit" => "500",
+                 "current" => "100",
+                 "shares" => "100.5",
+                 "available" => "400"
+               })
     end
   end
 end

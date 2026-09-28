@@ -15,7 +15,7 @@ defmodule Rujira.Ghost.Vault.DelegateTest do
                  "shares" => "49.5",
                  "borrower" => %{
                    "addr" => "thor1b",
-                   "denom" => "btc",
+                   "denom" => "btc-btc",
                    "limit" => "500",
                    "current" => "100",
                    "shares" => "100",

@@ -11,6 +11,7 @@ defmodule Rujira.HeightErrorsTest do
   """
   use ExUnit.Case, async: false
 
+  alias Rujira.Assets
   alias Rujira.Deployments
   alias Rujira.Fin
   alias Rujira.Fin.Pair
@@ -158,21 +159,27 @@ defmodule Rujira.HeightErrorsTest do
   # --- Fixtures ---
 
   defp pair do
+    {:ok, asset_base} = Assets.from_denom("gaia-atom")
+    {:ok, asset_quote} = Assets.from_denom("eth-usdc-0xabc")
+
     %Pair{
       id: "thor1pair",
       address: "thor1pair",
       market_makers: [],
-      token_base: "gaia-atom",
-      token_quote: "eth-usdc-0xabc"
+      asset_base: asset_base,
+      asset_quote: asset_quote
     }
   end
 
   defp vault do
+    {:ok, asset} = Assets.from_denom("rune")
+    {:ok, receipt_asset} = Assets.from_denom("x/ghost-vault/rune")
+
     %Vault{
       id: "thor1vault",
       address: "thor1vault",
-      denom: "rune",
-      receipt_denom: "x/ghost-vault/rune"
+      asset: asset,
+      receipt_asset: receipt_asset
     }
   end
 

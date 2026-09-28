@@ -21,6 +21,7 @@ defmodule Rujira.HeightCoverageTest do
   alias Rujira.Fin
   alias Rujira.Fin.Price
   alias Rujira.Ghost
+  alias Rujira.Revenue
   alias Rujira.Staking
   alias Rujira.Test.MockNode
   alias Rujira.Thorchain
@@ -44,6 +45,7 @@ defmodule Rujira.HeightCoverageTest do
       account_liquid_size: "pure - values receipt tokens at an already-loaded pool status"
     },
     Brune => %{},
+    Revenue => %{},
     ThorchainSwap => %{},
     Thorchain => %{
       module_address: "pure - hashes a module name into an address, no node read",
@@ -64,6 +66,7 @@ defmodule Rujira.HeightCoverageTest do
     test "Rujira.Ghost", do: assert_forwards_height(Ghost)
     test "Rujira.Staking", do: assert_forwards_height(Staking)
     test "Rujira.Brune", do: assert_forwards_height(Brune)
+    test "Rujira.Revenue", do: assert_forwards_height(Revenue)
     test "Rujira.ThorchainSwap", do: assert_forwards_height(ThorchainSwap)
     test "Rujira.Thorchain", do: assert_forwards_height(Thorchain)
     test "Rujira.Bank", do: assert_forwards_height(Rujira.Bank)
@@ -85,6 +88,18 @@ defmodule Rujira.HeightCoverageTest do
 
       assert {:ok, brune_pool} = Brune.get_pool("thor1brune", height: @height)
       assert {:ok, %{state: %{minted: 0}}} = Brune.load_pool(brune_pool, height: @height)
+      assert [_, _] = assert_all_calls_at_height()
+    end
+
+    test "Revenue.load_converter reads actions and status at the height" do
+      MockNode.expect(fn
+        %{"actions" => _} -> MockNode.ok(%{"actions" => []})
+        %{"status" => _} -> MockNode.ok(%{"last" => nil})
+      end)
+
+      assert {:ok, %{actions: [], last_action: nil}} =
+               Revenue.load_converter(converter(), height: @height)
+
       assert [_, _] = assert_all_calls_at_height()
     end
 
@@ -115,6 +130,20 @@ defmodule Rujira.HeightCoverageTest do
       end)
 
       assert {:ok, []} = Rujira.Bank.balances("thor1acc", height: @height)
+      assert [_, _] = assert_all_calls_at_height()
+    end
+
+    test "Ghost.credit_accounts reads every page at the height" do
+      MockNode.expect(fn
+        %{"all_accounts" => %{"cursor" => nil}} ->
+          MockNode.ok(%{"accounts" => List.duplicate(credit_account_response("thor1acc-a"), 100)})
+
+        %{"all_accounts" => %{"cursor" => "thor1acc-a"}} ->
+          MockNode.ok(%{"accounts" => [credit_account_response("thor1acc-b")]})
+      end)
+
+      assert {:ok, accounts} = Ghost.credit_accounts("thor1credit", height: @height)
+      assert length(accounts) == 101
       assert [_, _] = assert_all_calls_at_height()
     end
   end
@@ -151,6 +180,7 @@ defmodule Rujira.HeightCoverageTest do
 
   defp covered(Ghost) do
     vault = vault()
+    credit = credit()
 
     [
       {:list_vaults, &Ghost.list_vaults/1},
@@ -161,7 +191,18 @@ defmodule Rujira.HeightCoverageTest do
       {:vault_borrowers, &Ghost.vault_borrowers("thor1vault", &1)},
       {:vault_delegate, &Ghost.vault_delegate("thor1vault", "thor1b", "thor1d", &1)},
       {:load_vault_account, &Ghost.load_vault_account(vault, "thor1acc", &1)},
-      {:vault_account_from_id, &Ghost.vault_account_from_id("thor1vault/thor1acc", &1)}
+      {:vault_account_from_id, &Ghost.vault_account_from_id("thor1vault/thor1acc", &1)},
+      {:get_credit, &Ghost.get_credit("thor1credit", &1)},
+      {:list_credits, &Ghost.list_credits/1},
+      {:credit_from_id, &Ghost.credit_from_id("thor1credit", &1)},
+      {:load_credit, &Ghost.load_credit(credit, &1)},
+      {:credit_account, &Ghost.credit_account("thor1credit", "thor1acc", &1)},
+      {:credit_accounts, &Ghost.credit_accounts("thor1credit", &1)},
+      {:credit_accounts_by_owner,
+       &Ghost.credit_accounts_by_owner("thor1credit", "thor1owner", nil, &1)},
+      {:credit_account_from_id, &Ghost.credit_account_from_id("thor1credit/thor1acc", &1)},
+      {:credit_account_predict,
+       &Ghost.credit_account_predict("thor1credit", "thor1owner", <<1, 2, 3>>, &1)}
     ]
   end
 
@@ -186,6 +227,15 @@ defmodule Rujira.HeightCoverageTest do
       {:pool_from_id, &Brune.pool_from_id("thor1brune", &1)},
       {:list_events, &Brune.list_events("thor1brune", nil, 100, &1)},
       {:quote, &Brune.quote("thor1brune", rune(), ruji(), nil, &1)}
+    ]
+  end
+
+  defp covered(Revenue) do
+    [
+      {:get_converter, &Revenue.get_converter("thor1revenue", &1)},
+      {:list_converters, &Revenue.list_converters/1},
+      {:load_converter, &Revenue.load_converter(converter(), &1)},
+      {:converter_from_id, &Revenue.converter_from_id("thor1revenue", &1)}
     ]
   end
 
@@ -314,17 +364,19 @@ defmodule Rujira.HeightCoverageTest do
       id: "thor1pair",
       address: "thor1pair",
       market_makers: [],
-      token_base: "rune",
-      token_quote: "x/ruji"
+      asset_base: rune(),
+      asset_quote: ruji()
     }
   end
 
   defp vault do
+    {:ok, receipt_asset} = Assets.from_denom("x/ghost-vault/rune")
+
     %Ghost.Vault{
       id: "thor1vault",
       address: "thor1vault",
-      denom: "rune",
-      receipt_denom: "x/ghost-vault/rune"
+      asset: rune(),
+      receipt_asset: receipt_asset
     }
   end
 
@@ -340,9 +392,25 @@ defmodule Rujira.HeightCoverageTest do
     }
   end
 
+  defp credit, do: %Ghost.Credit{id: "thor1credit", address: "thor1credit"}
+
+  defp credit_account_response(account) do
+    %{
+      "owner" => "thor1owner",
+      "account" => account,
+      "tag" => "",
+      "collaterals" => [],
+      "debts" => [],
+      "ltv" => "0",
+      "liquidation_preferences" => %{"messages" => [], "order" => %{"map" => %{}, "limit" => 0}}
+    }
+  end
+
   defp brune_pool, do: %Brune.Pool{id: "thor1brune", address: "thor1brune"}
 
   defp strategy, do: %ThorchainSwap.Strategy{id: "thor1strategy", address: "thor1strategy"}
+
+  defp converter, do: %Revenue.Converter{id: "thor1revenue", address: "thor1revenue"}
 
   defp brune_config do
     %{

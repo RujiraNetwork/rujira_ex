@@ -6,6 +6,8 @@ defmodule Rujira.Ghost.Vault do
   Struct, construction, and queries. Use `Rujira.Ghost` as the public API.
   """
 
+  alias Rujira.Assets
+  alias Rujira.Assets.Asset
   alias Rujira.Contracts
   alias Rujira.Deployments
   alias Rujira.Ghost.Vault.Interest
@@ -17,8 +19,8 @@ defmodule Rujira.Ghost.Vault do
 
   defstruct id: nil,
             address: nil,
-            denom: nil,
-            receipt_denom: nil,
+            asset: nil,
+            receipt_asset: nil,
             interest: nil,
             fee: Decimal.new(0),
             fee_address: nil,
@@ -27,8 +29,8 @@ defmodule Rujira.Ghost.Vault do
   @type t :: %__MODULE__{
           id: String.t() | nil,
           address: String.t() | nil,
-          denom: String.t() | nil,
-          receipt_denom: String.t() | nil,
+          asset: Asset.t() | nil,
+          receipt_asset: Asset.t() | nil,
           interest: Interest.t() | nil,
           fee: Decimal.t(),
           fee_address: String.t() | nil,
@@ -45,14 +47,16 @@ defmodule Rujira.Ghost.Vault do
         "fee" => fee,
         "fee_address" => fee_address
       }) do
-    with {:ok, interest} <- Interest.new(interest),
+    with {:ok, asset} <- Assets.from_denom(denom),
+         {:ok, receipt_asset} <- Assets.from_denom("x/ghost-vault/#{denom}"),
+         {:ok, interest} <- Interest.new(interest),
          {:ok, fee} <- Math.to_decimal(fee) do
       {:ok,
        %__MODULE__{
          id: address,
          address: address,
-         denom: denom,
-         receipt_denom: "x/ghost-vault/#{denom}",
+         asset: asset,
+         receipt_asset: receipt_asset,
          interest: interest,
          fee: fee,
          fee_address: fee_address

@@ -43,7 +43,9 @@ defmodule Rujira.Deployments do
   @default_protocol_modules %{
     "rujira-brune" => Rujira.Brune.Pool,
     "rujira-fin" => Rujira.Fin.Pair,
+    "rujira-ghost-credit" => Rujira.Ghost.Credit,
     "rujira-ghost-vault" => Rujira.Ghost.Vault,
+    "rujira-revenue" => Rujira.Revenue.Converter,
     "rujira-staking" => Rujira.Staking.Pool,
     "rujira-thorchain-swap" => Rujira.ThorchainSwap.Strategy
   }

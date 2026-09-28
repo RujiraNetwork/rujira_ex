@@ -1,8 +1,14 @@
 defmodule Rujira.Fin.PairTest do
   use ExUnit.Case, async: true
 
+  alias Rujira.Assets
   alias Rujira.Fin.Pair
   alias Rujira.Thorchain.Oracle
+
+  defp asset(denom) do
+    {:ok, asset} = Assets.from_denom(denom)
+    asset
+  end
 
   describe "new/1 from map" do
     test "parses pair config with market_makers list" do
@@ -24,8 +30,8 @@ defmodule Rujira.Fin.PairTest do
       assert pair.address == "thor1pair"
       assert pair.id == "thor1pair"
       assert pair.market_makers == ["thor1mm1", "thor1mm2"]
-      assert pair.token_base == "gaia-atom"
-      assert pair.token_quote == "eth-usdc-0xabc"
+      assert pair.asset_base == asset("gaia-atom")
+      assert pair.asset_quote == asset("eth-usdc-0xabc")
       assert pair.tick == 6
       assert pair.fee_taker == Decimal.new("0.0015")
       assert pair.fee_maker == Decimal.new("0.00075")
@@ -113,31 +119,52 @@ defmodule Rujira.Fin.PairTest do
   end
 
   describe "pick_default/2" do
-    @pairs [
-      %Pair{address: "p_btc_rune", token_base: "btc-btc", token_quote: "thor.rune"},
-      %Pair{address: "p_btc_usdc", token_base: "btc-btc", token_quote: "eth-usdc-0xabc"},
-      %Pair{address: "p_eth_rune", token_base: "eth-eth", token_quote: "thor.rune"}
-    ]
+    defp pairs do
+      [
+        %Pair{
+          address: "p_btc_rune",
+          asset_base: asset("btc-btc"),
+          asset_quote: asset("thor.rune")
+        },
+        %Pair{
+          address: "p_btc_usdc",
+          asset_base: asset("btc-btc"),
+          asset_quote: asset("eth-usdc-0xabc")
+        },
+        %Pair{
+          address: "p_eth_rune",
+          asset_base: asset("eth-eth"),
+          asset_quote: asset("thor.rune")
+        }
+      ]
+    end
 
     test "prefers the stable (usdc/usdt) pair when one exists" do
-      assert {:ok, %Pair{address: "p_btc_usdc"}} = Pair.pick_default(@pairs, "btc-btc")
+      assert {:ok, %Pair{address: "p_btc_usdc"}} = Pair.pick_default(pairs(), "btc-btc")
     end
 
     test "falls back to the first pair quoting the base when no stable exists" do
-      assert {:ok, %Pair{address: "p_eth_rune"}} = Pair.pick_default(@pairs, "eth-eth")
+      assert {:ok, %Pair{address: "p_eth_rune"}} = Pair.pick_default(pairs(), "eth-eth")
     end
 
     test "does not treat a usdc quote for a different base as a match" do
-      pairs = [%Pair{address: "p_eth_usdc", token_base: "eth-eth", token_quote: "eth-usdc-0xabc"}]
+      pairs = [
+        %Pair{
+          address: "p_eth_usdc",
+          asset_base: asset("eth-eth"),
+          asset_quote: asset("eth-usdc-0xabc")
+        }
+      ]
+
       assert {:error, :not_found} = Pair.pick_default(pairs, "btc-btc")
     end
 
     test "returns :not_found when no pair quotes the base" do
-      assert {:error, :not_found} = Pair.pick_default(@pairs, "doge-doge")
+      assert {:error, :not_found} = Pair.pick_default(pairs(), "doge-doge")
     end
 
-    test "tolerates a nil token_quote" do
-      pairs = [%Pair{address: "p_nil_quote", token_base: "btc-btc", token_quote: nil}]
+    test "tolerates a nil asset_quote" do
+      pairs = [%Pair{address: "p_nil_quote", asset_base: asset("btc-btc"), asset_quote: nil}]
       assert {:ok, %Pair{address: "p_nil_quote"}} = Pair.pick_default(pairs, "btc-btc")
     end
   end

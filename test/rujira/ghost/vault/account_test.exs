@@ -4,13 +4,16 @@ defmodule Rujira.Ghost.Vault.AccountTest do
   alias Cosmos.Bank.V1beta1.QueryBalanceRequest
   alias Cosmos.Bank.V1beta1.QueryBalanceResponse
   alias Cosmos.Base.V1beta1.Coin
+  alias Rujira.Assets
   alias Rujira.Ghost.Vault
   alias Rujira.Ghost.Vault.Account
   alias Rujira.Ghost.Vault.Status
   alias Rujira.Test.MockNode
 
   defp vault do
-    %Vault{address: "thor1vault", denom: "btc", receipt_denom: "x/ghost-vault/btc"}
+    {:ok, asset} = Assets.from_denom("btc-btc")
+    {:ok, receipt_asset} = Assets.from_denom("x/ghost-vault/btc-btc")
+    %Vault{address: "thor1vault", asset: asset, receipt_asset: receipt_asset}
   end
 
   defp loaded_vault do
@@ -34,9 +37,10 @@ defmodule Rujira.Ghost.Vault.AccountTest do
     test "is the receipt-token balance and nothing else - no vault status" do
       MockNode.expect(fn %QueryBalanceRequest{
                            address: "thor1owner",
-                           denom: "x/ghost-vault/btc"
+                           denom: "x/ghost-vault/btc-btc"
                          } ->
-        {:ok, %QueryBalanceResponse{balance: %Coin{denom: "x/ghost-vault/btc", amount: "100"}}}
+        {:ok,
+         %QueryBalanceResponse{balance: %Coin{denom: "x/ghost-vault/btc-btc", amount: "100"}}}
       end)
 
       assert {:ok, %Account{id: "thor1vault/thor1owner", shares: 100}} =

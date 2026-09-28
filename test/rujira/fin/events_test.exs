@@ -133,7 +133,7 @@ defmodule Rujira.Fin.EventsTest do
                })
 
       assert %TradeRange{idx: 7, side: :base, range: %TradeRange.Dynamic{} = fill} = range
-      assert fill.denom == "btc-btc"
+      assert fill.asset.id == "BTC-BTC"
       assert Decimal.equal?(fill.pre_aep, Decimal.new("100"))
       assert Decimal.equal?(fill.aep, Decimal.new("120"))
       assert Decimal.equal?(fill.oracle, Decimal.new("120"))
@@ -182,6 +182,38 @@ defmodule Rujira.Fin.EventsTest do
                  "bid" => "1100",
                  "ranges" => short
                })
+    end
+
+    test "a dynamic entry with an unrecognised denom is an error" do
+      bad =
+        "dynamic:7:base:100:120:120:110:10:0.1:not a denom:10:1100:100:50:50:90:1050:0:50:9000"
+
+      assert {:error, :invalid_denom} =
+               parse("wasm-rujira-fin/trade", %{
+                 "side" => "Base",
+                 "price" => "ccl:110",
+                 "rate" => "110",
+                 "offer" => "10",
+                 "bid" => "1100",
+                 "ranges" => bad
+               })
+    end
+
+    test "a dynamic entry with no denom has a nil asset" do
+      empty =
+        "dynamic:7:base:100:120:120:110:10:0.1::10:1100:100:50:50:90:1050:0:50:9000"
+
+      assert {:ok, %FinEvent{data: %{ranges: [range]}}} =
+               parse("wasm-rujira-fin/trade", %{
+                 "side" => "Base",
+                 "price" => "ccl:110",
+                 "rate" => "110",
+                 "offer" => "10",
+                 "bid" => "1100",
+                 "ranges" => empty
+               })
+
+      assert %TradeRange{range: %TradeRange.Dynamic{asset: nil}} = range
     end
   end
 

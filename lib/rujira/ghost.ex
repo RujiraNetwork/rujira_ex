@@ -12,8 +12,14 @@ defmodule Rujira.Ghost do
 
   `vault_account_value/2` reaches no node: it is pure over a vault whose status
   is loaded - see `Rujira.Ghost.Vault.Account`.
+
+  Ghost has two families: the vaults that lend (`Rujira.Ghost.Vault`) and the
+  credit contracts that borrow from them on an account holder's behalf
+  (`Rujira.Ghost.Credit`).
   """
 
+  alias Rujira.Ghost.Credit
+  alias Rujira.Ghost.Credit.Account, as: CreditAccount
   alias Rujira.Ghost.Vault
   alias Rujira.Ghost.Vault.Account
   alias Rujira.Ghost.Vault.Borrower
@@ -41,4 +47,26 @@ defmodule Rujira.Ghost do
   defdelegate load_vault_account(vault, account, opts \\ []), to: Account, as: :load
   defdelegate vault_account_from_id(id, opts \\ []), to: Account, as: :from_id
   defdelegate vault_account_value(account, vault), to: Account, as: :value
+
+  # --- Credit ---
+
+  defdelegate get_credit(address, opts \\ []), to: Credit, as: :get
+  defdelegate list_credits(opts \\ []), to: Credit, as: :list
+  defdelegate credit_from_id(id, opts \\ []), to: Credit, as: :from_id
+  defdelegate load_credit(credit, opts \\ []), to: Credit, as: :load
+
+  # --- Credit account ---
+
+  defdelegate credit_account(credit, account, opts \\ []), to: CreditAccount, as: :get
+  defdelegate credit_accounts(credit, opts \\ []), to: CreditAccount, as: :list
+
+  defdelegate credit_accounts_by_owner(credit, owner, tag \\ nil, opts \\ []),
+    to: CreditAccount,
+    as: :list_by_owner
+
+  defdelegate credit_account_from_id(id, opts \\ []), to: CreditAccount, as: :from_id
+
+  defdelegate credit_account_predict(credit, owner, salt, opts \\ []),
+    to: CreditAccount,
+    as: :predict
 end

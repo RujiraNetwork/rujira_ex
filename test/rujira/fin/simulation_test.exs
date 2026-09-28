@@ -7,7 +7,11 @@ defmodule Rujira.Fin.SimulationTest do
   alias Rujira.Fin.Simulation
   alias Rujira.Test.MockNode
 
-  @pair %Pair{address: "thor1pair", token_base: "btc-btc", token_quote: "rune"}
+  @pair %Pair{
+    address: "thor1pair",
+    asset_base: elem(Assets.from_denom("btc-btc"), 1),
+    asset_quote: elem(Assets.from_denom("rune"), 1)
+  }
 
   describe "simulate/2" do
     test "parses the simulate response into a struct, returned/fee in the ask token" do

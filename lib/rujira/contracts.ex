@@ -294,7 +294,7 @@ defmodule Rujira.Contracts do
   end
 
   @spec query_state_smart(String.t(), map(), Node.opts()) ::
-          {:ok, map() | nil} | {:error, Node.rpc_error()}
+          {:ok, term()} | {:error, Node.rpc_error()}
   def query_state_smart(address, query, opts \\ []) do
     with {:ok, %{data: data}} <-
            Node.query(
@@ -311,6 +311,9 @@ defmodule Rujira.Contracts do
 
   @doc """
   Paginates through a smart contract query result set.
+
+  `key` missing from the reply, or present with a non-list value, is a
+  malformed reply rather than an empty page: `{:error, :invalid_response}`.
   """
   @spec paginate(
           {:ok, map()} | {:error, any()},
@@ -321,16 +324,19 @@ defmodule Rujira.Contracts do
   def paginate(result, key, limit, next_fn)
 
   def paginate({:ok, %{} = res}, key, limit, next_fn) do
-    items = Map.get(res, key, [])
-
-    if length(items) == limit do
-      with {:ok, next} <- next_fn.(items), do: {:ok, items ++ next}
-    else
-      {:ok, items}
+    case Map.fetch(res, key) do
+      {:ok, items} when is_list(items) -> paginate_page(items, limit, next_fn)
+      _ -> {:error, :invalid_response}
     end
   end
 
   def paginate(err, _, _, _), do: err
+
+  defp paginate_page(items, limit, next_fn) when length(items) == limit do
+    with {:ok, next} <- next_fn.(items), do: {:ok, items ++ next}
+  end
+
+  defp paginate_page(items, _limit, _next_fn), do: {:ok, items}
 
   @doc "Queries the full, raw contract state at an address"
   @spec query_state_all(String.t()) ::

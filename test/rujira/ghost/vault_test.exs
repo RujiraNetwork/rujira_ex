@@ -11,15 +11,15 @@ defmodule Rujira.Ghost.VaultTest do
               %Vault{
                 id: "thor1vault",
                 address: "thor1vault",
-                denom: "btc",
-                receipt_denom: "x/ghost-vault/btc",
+                asset: asset,
+                receipt_asset: receipt_asset,
                 fee_address: "thor1fee",
                 fee: fee,
                 interest: %Interest{} = interest
               }} =
                Vault.new(%{
                  "address" => "thor1vault",
-                 "denom" => "btc",
+                 "denom" => "btc-btc",
                  "fee" => "0.1",
                  "fee_address" => "thor1fee",
                  "interest" => %{
@@ -30,6 +30,8 @@ defmodule Rujira.Ghost.VaultTest do
                  }
                })
 
+      assert asset.id == "BTC-BTC"
+      assert receipt_asset.id == "x/ghost-vault/btc-btc"
       assert Decimal.equal?(fee, Decimal.new("0.1"))
       assert Decimal.equal?(interest.target_utilization, Decimal.new("0.8"))
       assert Decimal.equal?(interest.step2, Decimal.new("2"))
@@ -38,6 +40,22 @@ defmodule Rujira.Ghost.VaultTest do
     test "errors on missing fields" do
       assert {:error, :invalid_attrs} = Vault.new(%{})
     end
+
+    test "an unrecognised denom is an error" do
+      assert {:error, :invalid_denom} =
+               Vault.new(%{
+                 "address" => "thor1vault",
+                 "denom" => "not a denom",
+                 "fee" => "0.1",
+                 "fee_address" => "thor1fee",
+                 "interest" => %{
+                   "target_utilization" => "0.8",
+                   "base_rate" => "0",
+                   "step1" => "1",
+                   "step2" => "2"
+                 }
+               })
+    end
   end
 
   describe "from_id/2" do
@@ -45,7 +63,7 @@ defmodule Rujira.Ghost.VaultTest do
       MockNode.expect(fn %{"config" => _} ->
         MockNode.ok(%{
           "address" => "thor1vault",
-          "denom" => "btc",
+          "denom" => "btc-btc",
           "fee" => "0.1",
           "fee_address" => "thor1fee",
           "interest" => %{

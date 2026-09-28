@@ -199,6 +199,33 @@ defmodule Rujira.ContractsTest do
     end
   end
 
+  describe "paginate/4" do
+    test "a full page fetches the next one and appends it" do
+      assert {:ok, [1, 2, 3]} =
+               Contracts.paginate({:ok, %{"items" => [1, 2]}}, "items", 2, fn [1, 2] ->
+                 {:ok, [3]}
+               end)
+    end
+
+    test "a short page is the whole result, no next fetch" do
+      assert {:ok, [1]} = Contracts.paginate({:ok, %{"items" => [1]}}, "items", 2, &{:ok, &1})
+    end
+
+    test "the key missing from the reply is a malformed response, not an empty page" do
+      assert {:error, :invalid_response} =
+               Contracts.paginate({:ok, %{}}, "items", 2, &{:ok, &1})
+    end
+
+    test "a non-list value under the key is a malformed response" do
+      assert {:error, :invalid_response} =
+               Contracts.paginate({:ok, %{"items" => "not-a-list"}}, "items", 2, &{:ok, &1})
+    end
+
+    test "an upstream error passes through unchanged" do
+      assert {:error, :boom} = Contracts.paginate({:error, :boom}, "items", 2, &{:ok, &1})
+    end
+  end
+
   defp wasm_error(contract_error) do
     %GRPC.RPCError{status: 2, message: "#{contract_error}: query wasm contract failed"}
   end

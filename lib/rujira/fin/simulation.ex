@@ -134,11 +134,11 @@ defmodule Rujira.Fin.Simulation do
   end
 
   @spec ask_asset(Pair.t(), String.t()) :: {:ok, Asset.t()} | {:error, :invalid_offer}
-  defp ask_asset(%Pair{token_base: base, token_quote: quote}, offer_denom) do
-    case offer_denom do
-      ^base -> Assets.from_denom(quote)
-      ^quote -> Assets.from_denom(base)
-      _ -> {:error, :invalid_offer}
+  defp ask_asset(%Pair{asset_base: base, asset_quote: quote}, offer_denom) do
+    cond do
+      Assets.to_native(base) == {:ok, offer_denom} -> {:ok, quote}
+      Assets.to_native(quote) == {:ok, offer_denom} -> {:ok, base}
+      true -> {:error, :invalid_offer}
     end
   end
 
