@@ -144,7 +144,7 @@ config :rujira_ex, Rujira.Cache,
 
 ## Telemetry
 
-`rujira_ex` emits three `:telemetry` events. Attach to them with
+`rujira_ex` emits four `:telemetry` events. Attach to them with
 `Rujira.Cache.Telemetry.events/0`, or to one at a time:
 
 ```elixir
@@ -161,14 +161,16 @@ through `System.convert_time_unit(duration, :native, :millisecond)`.
 
 | Event | Measurements | Metadata |
 |---|---|---|
-| `[:rujira, :cache, :fetch]` | `duration` — serving the read, store lookup included | `store` (`:frontier`/`:exact`/`:identity`), `result` (`:hit`/`:miss`/`:error`), `module` and `function` of the query key |
+| `[:rujira, :cache, :fetch]` | `duration` — serving the read, store lookup included | `store` (`:frontier`/`:exact`/`:identity`), `result` (`:hit`/`:miss`/`:bypass`/`:error`), `module` and `function` of the query key |
 | `[:rujira, :cache, :advance]` | `from`, `to` — the head either side of the fill; `blocks` applied; `duration` | none |
 | `[:rujira, :cache, :reset]` | `from`, `to` | `reason` (`:catchup`/`:stuck_block`/`:upgrade`/`:invalidate_all`) |
+| `[:rujira, :cache, :sweep]` | `invalid`, `frontier_cap`, `marker_pin`, `markers_dropped`, `exact_heights_pruned` — rows evicted, by cause; `frontier_rows`, `exact_rows`, `identity_rows`, `markers_rows` — sizes after the sweep; `duration` | `head`, `gen` |
 
 - A **fetch** is emitted once per `Rujira.Cache.fetch/4`, under the store that
   actually served it: a read at a height the frontier cannot serve is reported
   under `:exact`, not twice. `result: :miss` covers joining a node read already
-  in flight as well as running one. The query key's *arguments* are
+  in flight as well as running one; `result: :bypass` is a node read whose
+  value was served without being stored. The query key's *arguments* are
   deliberately not in the metadata — they carry addresses and denoms, which
   would give the metric the cardinality of the chain.
 - An **advance** is emitted by the caller that took the lock and filled. A
@@ -177,6 +179,11 @@ through `System.convert_time_unit(duration, :native, :millisecond)`.
 - A **reset** is emitted wherever everything is invalidated at once, alongside
   a `Logger.warning`. `from` and `to` are equal for `invalidate_all/0`, which
   does not move the head.
+- A **sweep** is emitted once per `Rujira.Cache.Store.sweep/2` run — once per
+  block `advance/1` applies. `exact_heights_pruned` counts the exact store's
+  own insert-time pruning, which runs off the sweep's cadence: it is held in a
+  counter and read (and reset) by the next sweep, rather than emitted on every
+  insert.
 
 ## Testing against the cache
 

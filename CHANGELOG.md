@@ -43,18 +43,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `list`/`load`/`from_id`, plus cached `query_actions`/`query_status`).
   `Rujira.Deployments` now resolves `"rujira-revenue"` contracts to
   `Rujira.Revenue.Converter` by default.
-- Cache telemetry: three `:telemetry` events, listed together by
+- Cache telemetry: four `:telemetry` events, listed together by
   `Rujira.Cache.Telemetry.events/0` and documented in `Rujira.Cache` and
   [Caching](guides/caching.md).
   - `[:rujira, :cache, :fetch]` - one per read: `duration`, and the `store`
-    (`:frontier`/`:exact`/`:identity`), the `result` (`:hit`/`:miss`/`:error`)
-    and the `module`/`function` of the query key. The key's arguments are
-    deliberately left out of the metadata.
+    (`:frontier`/`:exact`/`:identity`), the `result`
+    (`:hit`/`:miss`/`:bypass`/`:error`) and the `module`/`function` of the
+    query key. The key's arguments are deliberately left out of the metadata.
   - `[:rujira, :cache, :advance]` - one per fill: the head `from` and `to`,
     the `blocks` applied, and the `duration`.
   - `[:rujira, :cache, :reset]` - one per invalidation of everything, with a
     `reason` of `:catchup`, `:stuck_block`, `:upgrade` or `:invalidate_all`
     and the heights either side. Each also logs a `Logger.warning`.
+  - `[:rujira, :cache, :sweep]` - one per `Rujira.Cache.Store.sweep/2` run:
+    rows evicted by cause (`invalid`, `frontier_cap`, `marker_pin`,
+    `markers_dropped`, `exact_heights_pruned`), each store's resulting size
+    (`frontier_rows`, `exact_rows`, `identity_rows`, `markers_rows`), and the
+    `duration`, with the `head` and `gen` it ran at.
   - Emission is wrapped, so a handler that raises cannot turn a read into an
     error. Adds `{:telemetry, "~> 1.0"}`, already an indirect dependency
     through `grpc`.

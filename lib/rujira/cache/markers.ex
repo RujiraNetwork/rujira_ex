@@ -35,11 +35,12 @@ defmodule Rujira.Cache.Markers do
   A single old but still-valid frontier row - one that never had a source
   change - pins the frontier's oldest `as_of` forever, so the floor the sweep
   passes never rises past it and the collapse frees nothing, block after
-  block. `prune/2` reports this back as `true`: still over the cap after the
-  attempt. `Rujira.Cache.Store` responds by evicting the frontier's oldest row
-  - always safe, since the evicted entry is just refetched on its next read -
-  which frees the pin and lets the next sweep's floor climb past whatever the
-  stuck collapse could not reach.
+  block. `prune/2` reports this back as `{true, dropped}`: still over the cap
+  after the attempt, however many markers `dropped` came with it.
+  `Rujira.Cache.Store` responds by evicting the frontier's oldest row - always
+  safe, since the evicted entry is just refetched on its next read - which
+  frees the pin and lets the next sweep's floor climb past whatever the stuck
+  collapse could not reach.
   """
 
   alias Rujira.Cache.Tables
@@ -89,18 +90,19 @@ defmodule Rujira.Cache.Markers do
   The floor is raised first and the markers at or below it are dropped after -
   see the moduledoc. A floor that would not move frees nothing, so it is not
   rescanned. Returns whether the table is still over `max_markers` once the
-  attempt is done, so the caller can evict a frontier row to unstick a floor
-  that a still-valid old row is pinning.
+  attempt is done - so the caller can evict a frontier row to unstick a floor
+  that a still-valid old row is pinning - together with how many markers the
+  collapse actually dropped.
   """
-  @spec prune(non_neg_integer(), pos_integer()) :: boolean()
+  @spec prune(non_neg_integer(), pos_integer()) :: {boolean(), non_neg_integer()}
   def prune(floor, max_markers) do
     case over_cap?(max_markers) do
       true ->
-        maybe_collapse(floor)
-        over_cap?(max_markers)
+        dropped = maybe_collapse(floor)
+        {over_cap?(max_markers), dropped}
 
       false ->
-        false
+        {false, 0}
     end
   end
 
@@ -119,7 +121,7 @@ defmodule Rujira.Cache.Markers do
   defp maybe_collapse(floor) do
     case floor > Tables.marker_floor() do
       true -> collapse(floor)
-      false -> :ok
+      false -> 0
     end
   end
 
@@ -138,6 +140,5 @@ defmodule Rujira.Cache.Markers do
 
   defp drop_to(floor) do
     :ets.select_delete(Tables.markers(), [{{:_, :"$1"}, [{:"=<", :"$1", floor}], [true]}])
-    :ok
   end
 end

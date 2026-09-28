@@ -32,6 +32,11 @@ defmodule Rujira.Cache.Tables do
   than a lock. The marker floor is written the same way, and the exact store's
   insertion sequence is an `add_get/3`.
 
+  The exact store's pruned-height count is also here: it is bumped on every
+  insert-time prune, off the sweep's own cadence, and `take_exact_pruned/0`
+  reads and resets it with `exchange/3` so the next sweep reports what
+  happened since the last one without a lost update.
+
   `0` means "unset": heights start at 1, so a head of `0` is "no block has
   been advanced yet".
 
@@ -49,7 +54,8 @@ defmodule Rujira.Cache.Tables do
   @all 4
   @floor 5
   @seq 6
-  @size 6
+  @exact_pruned 7
+  @size 7
 
   @frontier :rujira_cache_frontier
   @frontier_index :rujira_cache_frontier_index
@@ -180,6 +186,14 @@ defmodule Rujira.Cache.Tables do
   @doc "Bumps the generation, making every stored row unreachable. Returns the new one."
   @spec bump_gen() :: non_neg_integer()
   def bump_gen, do: :atomics.add_get(ref(), @gen, 1)
+
+  @doc "Counts one more exact-store height pruned on insert, for the next sweep to report."
+  @spec bump_exact_pruned() :: non_neg_integer()
+  def bump_exact_pruned, do: :atomics.add_get(ref(), @exact_pruned, 1)
+
+  @doc "Reads the exact-store pruned-height count since the last sweep, and resets it to `0`."
+  @spec take_exact_pruned() :: non_neg_integer()
+  def take_exact_pruned, do: :atomics.exchange(ref(), @exact_pruned, 0)
 
   # --- Lifecycle ---
 

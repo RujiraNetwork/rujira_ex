@@ -43,16 +43,23 @@ defmodule Rujira.Cache.Store do
 
   ## Sweep
 
-  `advance/1` calls `sweep/2` once per block. It does three bounded jobs:
+  `advance/1` calls `sweep/2` once per block. It does three bounded jobs, then
+  reports `[:rujira, :cache, :sweep]`:
 
-    * evicts by oldest `as_of` while the frontier is over `frontier_max_rows`;
+    * evicts by oldest `as_of` while the frontier is over `frontier_max_rows`
+      (`frontier_cap`);
     * walks `sweep_per_block` rows from a cursor, dropping those that are
-      invalid at the head or left behind by an old generation;
+      invalid at the head or left behind by an old generation (`invalid`);
     * collapses the marker table when it is over `max_markers`, raising the
-      marker floor to the frontier's oldest `as_of` first - and if that
-      collapse frees nothing (an old but still-valid frontier row is pinning
-      the floor), evicts that oldest frontier row so the next sweep's floor
-      can climb past it.
+      marker floor to the frontier's oldest `as_of` first (`markers_dropped`)
+      - and if that collapse frees nothing (an old but still-valid frontier
+      row is pinning the floor), evicts that oldest frontier row
+      (`marker_pin`) so the next sweep's floor can climb past it.
+
+  The exact store prunes itself on insert, off the sweep's own cadence - see
+  below - so its eviction count (`exact_heights_pruned`) is read from a
+  running `:atomics` counter and reset for the next sweep, rather than
+  reported at the moment it happens.
 
   The first two jobs walk the `frontier_index`, an `ordered_set` of
   `{{as_of, gen, query_key}}` that orders the frontier by age. The cursor is a
@@ -72,6 +79,7 @@ defmodule Rujira.Cache.Store do
   alias Rujira.Cache.Config
   alias Rujira.Cache.Markers
   alias Rujira.Cache.Tables
+  alias Rujira.Cache.Telemetry
 
   @type query_key :: term()
   @type gen :: non_neg_integer()
@@ -151,10 +159,25 @@ defmodule Rujira.Cache.Store do
   @doc "One block's bounded sweep of the frontier and the marker table."
   @spec sweep(non_neg_integer(), gen()) :: :ok
   def sweep(head, gen) do
+    start = System.monotonic_time()
+
     safe(:ok, fn ->
-      evict(Config.sweep_per_block())
-      walk(cursor(), Config.sweep_per_block(), gen)
-      prune_markers(head)
+      frontier_cap = evict(Config.sweep_per_block())
+      invalid = walk(cursor(), Config.sweep_per_block(), gen)
+      {marker_pin, markers_dropped} = prune_markers(head)
+
+      Telemetry.sweep(
+        %{
+          invalid: invalid,
+          frontier_cap: frontier_cap,
+          marker_pin: marker_pin,
+          markers_dropped: markers_dropped,
+          exact_heights_pruned: Tables.take_exact_pruned()
+        },
+        head,
+        gen,
+        start
+      )
     end)
   end
 
@@ -175,15 +198,19 @@ defmodule Rujira.Cache.Store do
   # can climb past it.
   defp prune_markers(head) do
     case Markers.prune(oldest_as_of(head), Config.max_markers()) do
-      true -> evict_oldest_row()
-      false -> :ok
+      {true, dropped} -> {evict_oldest_row(), dropped}
+      {false, dropped} -> {0, dropped}
     end
   end
 
   defp evict_oldest_row do
     case :ets.first(Tables.frontier_index()) do
-      {_as_of, _gen, _query_key} = key -> drop(key)
-      _ -> :ok
+      {_as_of, _gen, _query_key} = key ->
+        drop(key)
+        1
+
+      _ ->
+        0
     end
   end
 
@@ -241,23 +268,25 @@ defmodule Rujira.Cache.Store do
 
   # --- Private: sweep ---
 
-  defp evict(budget) when budget <= 0, do: :ok
+  defp evict(budget), do: evict(budget, 0)
 
-  defp evict(budget) do
+  defp evict(budget, count) when budget <= 0, do: count
+
+  defp evict(budget, count) do
     case over_cap?() do
-      true -> evict_oldest(budget)
-      false -> :ok
+      true -> evict_oldest(budget, count)
+      false -> count
     end
   end
 
-  defp evict_oldest(budget) do
+  defp evict_oldest(budget, count) do
     case :ets.first(Tables.frontier_index()) do
       {_as_of, _gen, _query_key} = key ->
         drop(key)
-        evict(budget - 1)
+        evict(budget - 1, count + 1)
 
       _ ->
-        :ok
+        count
     end
   end
 
@@ -268,36 +297,54 @@ defmodule Rujira.Cache.Store do
     end
   end
 
-  defp walk(cursor, 0, _gen), do: put_cursor(cursor)
+  defp walk(cursor, budget, gen), do: walk(cursor, budget, gen, 0)
 
-  defp walk(cursor, budget, gen) do
+  defp walk(cursor, 0, _gen, count) do
+    put_cursor(cursor)
+    count
+  end
+
+  defp walk(cursor, budget, gen, count) do
     case next(cursor) do
       {_as_of, _gen, _query_key} = key ->
-        visit(key, gen)
-        walk(key, budget - 1, gen)
+        dropped = visit(key, gen)
+        walk(key, budget - 1, gen, count + dropped)
 
       _ ->
         put_cursor(nil)
+        count
     end
   end
 
   defp next(nil), do: :ets.first(Tables.frontier_index())
   defp next(cursor), do: :ets.next(Tables.frontier_index(), cursor)
 
-  defp visit({_as_of, gen, _query_key} = key, current) when gen != current, do: drop(key)
+  defp visit({_as_of, gen, _query_key} = key, current) when gen != current do
+    drop(key)
+    1
+  end
 
   defp visit({as_of, gen, query_key} = key, _current) do
     case :ets.lookup(Tables.frontier(), {gen, query_key}) do
       [{_key, ^as_of, sources, _value}] -> drop_changed(key, sources, as_of)
-      _ -> :ets.delete(Tables.frontier_index(), key)
+      _ -> not_dropped(key)
     end
   end
 
   defp drop_changed(key, sources, as_of) do
     case Markers.changed_after?(sources, as_of) do
-      true -> drop(key)
-      false -> :ok
+      true ->
+        drop(key)
+        1
+
+      false ->
+        0
     end
+  end
+
+  defp not_dropped(key) do
+    :ets.delete(Tables.frontier_index(), key)
+    0
   end
 
   defp drop({as_of, gen, query_key} = key) do
@@ -357,8 +404,13 @@ defmodule Rujira.Cache.Store do
 
   defp evict_height(h, seq) do
     case :ets.select_delete(Tables.exact_heights(), [{{h, seq}, [], [true]}]) do
-      1 -> drop_height(h)
-      _ -> :ok
+      1 ->
+        drop_height(h)
+        Tables.bump_exact_pruned()
+        :ok
+
+      _ ->
+        :ok
     end
   end
 

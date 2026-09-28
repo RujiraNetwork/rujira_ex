@@ -88,11 +88,11 @@ defmodule Rujira.Cache do
 
   ## Telemetry
 
-  Three `:telemetry` events, each executed in the calling process. Every
+  Four `:telemetry` events, each executed in the calling process. Every
   duration is in `System.monotonic_time/0`'s native unit -
   `System.convert_time_unit/3` turns one into milliseconds. Nothing here can
   raise into a read: see `Rujira.Cache.Telemetry`, whose `events/0` lists all
-  three for a consumer attaching to them at once.
+  four for a consumer attaching to them at once.
 
   ### `[:rujira, :cache, :fetch]`
 
@@ -128,6 +128,22 @@ defmodule Rujira.Cache do
   |---|---|---|
   | Measurements | `from`, `to` | The head before and after. Equal for `invalidate_all/0`, which does not move it |
   | Metadata | `reason` | `:catchup`, `:stuck_block`, `:upgrade` or `:invalidate_all` - see `Rujira.Cache.Advance` |
+
+  ### `[:rujira, :cache, :sweep]`
+
+  One per `Rujira.Cache.Store.sweep/2` run - once per block `Rujira.Node.advance/1`
+  applies.
+
+  | | Key | Is |
+  |---|---|---|
+  | Measurements | `invalid` | Frontier rows the walk dropped: invalid at the head, or left behind by an old generation |
+  | | `frontier_cap` | Frontier rows evicted by oldest `as_of` for being over `frontier_max_rows` |
+  | | `marker_pin` | `0` or `1` - the frontier row evicted because it alone pinned the marker floor and the collapse froze nothing |
+  | | `markers_dropped` | Markers the collapse actually dropped, once the marker table was over `max_markers` |
+  | | `exact_heights_pruned` | Exact-store heights pruned on insert since the last sweep - counted off-cycle, see `Rujira.Cache.Store` |
+  | | `frontier_rows`, `exact_rows`, `identity_rows`, `markers_rows` | Each store's size right after the sweep |
+  | | `duration` | How long the sweep took |
+  | Metadata | `head`, `gen` | The height and generation the sweep ran at |
 
   ## Testing
 

@@ -242,7 +242,112 @@ defmodule Rujira.Cache.StoreTest do
     end
   end
 
+  describe "sweep telemetry" do
+    @event [:rujira, :cache, :sweep]
+
+    setup do
+      attach(@event)
+    end
+
+    test "it reports frontier_cap evictions and the resulting sizes" do
+      configure(frontier_max_rows: 1, sweep_per_block: 100)
+      gen = Tables.gen()
+
+      assert :ok = Node.advance(100)
+      assert :ok = Store.frontier_put(gen, :old, 98, [], :old)
+      assert :ok = Store.frontier_put(gen, :new, 100, [], :new)
+
+      assert :ok = Node.advance(block(101))
+
+      assert_receive {:telemetry,
+                      %{
+                        frontier_cap: 1,
+                        invalid: 0,
+                        marker_pin: 0,
+                        markers_dropped: 0,
+                        exact_heights_pruned: 0,
+                        frontier_rows: frontier_rows,
+                        exact_rows: exact_rows,
+                        identity_rows: identity_rows,
+                        markers_rows: markers_rows,
+                        duration: duration
+                      }, %{head: 101, gen: ^gen}}
+
+      assert duration >= 0
+      assert frontier_rows == :ets.info(Tables.frontier(), :size)
+      assert exact_rows == :ets.info(Tables.exact(), :size)
+      assert identity_rows == :ets.info(Tables.identity(), :size)
+      assert markers_rows == :ets.info(Tables.markers(), :size)
+    end
+
+    test "it reports invalid drops from a changed source" do
+      configure(sweep_per_block: 100)
+
+      assert :ok = Node.advance(100)
+
+      assert :ok =
+               Store.frontier_put(Tables.gen(), :key, 100, [{:contract, "thor1pair"}], :v)
+
+      assert :ok =
+               Node.advance(block(101, [event("wasm", %{"_contract_address" => "thor1pair"})]))
+
+      assert_receive {:telemetry, %{invalid: 1, frontier_cap: 0}, _metadata}
+    end
+
+    test "it reports marker_pin and markers_dropped from a marker collapse" do
+      configure(max_markers: 2, sweep_per_block: 100)
+
+      assert :ok = Node.advance(100)
+
+      assert :ok =
+               Node.advance(
+                 block(101, [
+                   event("coin_spent", %{"spender" => "thor1a", "amount" => "1rune"}),
+                   event("coin_spent", %{"spender" => "thor1b", "amount" => "1rune"}),
+                   event("coin_spent", %{"spender" => "thor1c", "amount" => "1rune"})
+                 ])
+               )
+
+      # 3 x {:balance, addr} + {:denom_transfers, "rune"} + :per_block.
+      assert_receive {:telemetry, %{markers_dropped: dropped, marker_pin: 0}, _metadata}
+      assert dropped == 5
+    end
+
+    test "it reports exact_heights_pruned counted since the last sweep" do
+      configure(retention: 1, sweep_per_block: 100)
+      gen = Tables.gen()
+
+      assert :ok = Node.advance(100)
+
+      assert :ok = Store.exact_put(gen, :key, 100, :a)
+      assert :ok = Store.exact_put(gen, :key, 101, :b)
+
+      assert :ok = Node.advance(block(101))
+
+      assert_receive {:telemetry, %{exact_heights_pruned: 1}, _metadata}
+
+      assert :ok = Node.advance(block(102))
+
+      assert_receive {:telemetry, %{exact_heights_pruned: 0}, _metadata}
+    end
+  end
+
   # --- Fixtures ---
+
+  @doc false
+  def forward(_event, measurements, metadata, test),
+    do: send(test, {:telemetry, measurements, metadata})
+
+  # Forwards one event to the test process. The handler is a module function,
+  # not a closure: `:telemetry` logs about the performance of a local one every
+  # time it is attached.
+  defp attach(event) do
+    handler = {__MODULE__, event, System.unique_integer()}
+
+    :telemetry.attach(handler, event, &__MODULE__.forward/4, self())
+    on_exit(fn -> :telemetry.detach(handler) end)
+    :ok
+  end
 
   defp configure(opts) do
     original = Application.get_env(:rujira_ex, Cache)
