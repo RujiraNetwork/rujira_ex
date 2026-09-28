@@ -45,6 +45,58 @@ defmodule Rujira.Fin.OrderTest do
                Order.new(%{address: "thor1pair"}, %{"owner" => "thor1owner"})
     end
 
+    test "filled_value on a :base order flips the rate, unlike offer_value" do
+      pair = %{
+        address: "thor1pair",
+        fee_maker: "0.0015",
+        token_quote: "eth-usdc-0xabc",
+        token_base: "gaia-atom"
+      }
+
+      attrs = %{
+        "owner" => "thor1owner",
+        "side" => "base",
+        "price" => %{"fixed" => "1000000"},
+        "rate" => "1.3",
+        "updated_at" => "1700000000000000000",
+        "offer" => "100000000",
+        "remaining" => "50000000",
+        "filled" => "50000001"
+      }
+
+      assert {:ok, %Order{} = order} = Order.new(pair, attrs)
+      # base offer_value: mul_floor(offer, rate) = floor(100_000_000 * 1.3) = 130_000_000
+      assert order.offer_value == 130_000_000
+      # filled_value flips to :quote's rule: div_floor(filled, rate) = floor(50_000_001 / 1.3)
+      assert order.filled_value == 38_461_539
+    end
+
+    test "filled_value on a :quote order flips the rate, unlike offer_value" do
+      pair = %{
+        address: "thor1pair",
+        fee_maker: "0.0015",
+        token_quote: "eth-usdc-0xabc",
+        token_base: "gaia-atom"
+      }
+
+      attrs = %{
+        "owner" => "thor1owner",
+        "side" => "quote",
+        "price" => %{"fixed" => "1000000"},
+        "rate" => "1.3",
+        "updated_at" => "1700000000000000000",
+        "offer" => "100000000",
+        "remaining" => "50000000",
+        "filled" => "50000001"
+      }
+
+      assert {:ok, %Order{} = order} = Order.new(pair, attrs)
+      # quote offer_value: div_floor(offer, rate) = floor(100_000_000 / 1.3)
+      assert order.offer_value == 76_923_076
+      # filled_value flips to :base's rule: mul_floor(filled, rate) = floor(50_000_001 * 1.3)
+      assert order.filled_value == 65_000_001
+    end
+
     test "parses order with oracle price" do
       pair = %{
         address: "thor1pair",

@@ -93,5 +93,5 @@ defmodule Rujira.Fin.Range.Fixed do
   @doc "Total base and quote held by the range, including uncollected fees."
   @spec totals(t()) :: {Amount.t(), Amount.t()}
   def totals(%__MODULE__{} = range),
-    do: {range.base + range.fees_base, range.quote + range.fees_quote}
+    do: {Math.add(range.base, range.fees_base), Math.add(range.quote, range.fees_quote)}
 end

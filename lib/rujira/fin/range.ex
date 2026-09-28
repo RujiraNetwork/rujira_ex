@@ -74,6 +74,12 @@ defmodule Rujira.Fin.Range do
   end
 
   @doc """
+  As `list/4`, every range on the pair for the given `owner`, with no limit.
+  """
+  @spec list_pair(Pair.t(), String.t() | nil, Node.opts()) :: {:ok, [t()]} | {:error, term()}
+  def list_pair(pair, owner \\ nil, opts \\ []), do: list(pair, owner, nil, opts)
+
+  @doc """
   Loads a single range of a named kind.
 
   A bare `idx` is a fixed range, `{:dynamic, idx}` a dynamic one — the index

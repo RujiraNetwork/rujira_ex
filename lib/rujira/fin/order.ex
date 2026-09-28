@@ -92,6 +92,12 @@ defmodule Rujira.Fin.Order do
   end
 
   @doc """
+  As `list/4`, every order on the pair regardless of owner, with no limit.
+  """
+  @spec list_pair(Pair.t(), Node.opts()) :: {:ok, [t()]} | {:error, term()}
+  def list_pair(pair, opts \\ []), do: list(pair, nil, nil, opts)
+
+  @doc """
   Loads a single order by its `(side, price, owner)` key on a pair.
 
   An order the pair does not hold is `{:error, :not_found}`.
@@ -173,7 +179,7 @@ defmodule Rujira.Fin.Order do
          remaining: remaining,
          remaining_value: value(remaining, rate, side),
          filled: filled,
-         filled_value: value(filled, Decimal.div(Decimal.new(1), rate), side),
+         filled_value: value(filled, rate, opposite(side)),
          type: type(price),
          deviation: deviation(price)
        }}
@@ -278,4 +284,7 @@ defmodule Rujira.Fin.Order do
 
   defp value(amount, rate, :base), do: Math.mul_floor(amount, rate)
   defp value(amount, rate, :quote), do: Math.div_floor(amount, rate)
+
+  defp opposite(:base), do: :quote
+  defp opposite(:quote), do: :base
 end

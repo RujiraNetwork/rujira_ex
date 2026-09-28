@@ -51,21 +51,8 @@ defmodule Rujira.Fin.Book do
     def new(_, _), do: {:error, :invalid_attrs}
 
     @spec value(side, Decimal.t(), Amount.t()) :: Amount.t()
-    defp value(:ask, price, total) do
-      total
-      |> Decimal.new()
-      |> Decimal.mult(price)
-      |> Decimal.round(0, :floor)
-      |> Decimal.to_integer()
-    end
-
-    defp value(:bid, price, total) do
-      total
-      |> Decimal.new()
-      |> Decimal.div(price)
-      |> Decimal.round(0, :floor)
-      |> Decimal.to_integer()
-    end
+    defp value(:ask, price, total), do: Math.mul_floor(total, price)
+    defp value(:bid, price, total), do: Math.div_floor(total, price)
   end
 
   defstruct id: nil,
@@ -127,15 +114,12 @@ defmodule Rujira.Fin.Book do
   # centre and no spread, so both stay `nil` - an absent value, not a zero.
   @spec populate(t()) :: t()
   defp populate(%__MODULE__{asks: [ask | _], bids: [bid | _]} = book) do
-    center =
-      ask.price
-      |> Decimal.add(bid.price)
-      |> Decimal.div(Decimal.new(2))
+    center = Math.avg(ask.price, bid.price)
 
     %{
       book
       | center: center,
-        spread: ask.price |> Decimal.sub(bid.price) |> Decimal.div(center)
+        spread: Math.div(Math.sub(ask.price, bid.price), center)
     }
   end
 
@@ -146,19 +130,19 @@ defmodule Rujira.Fin.Book do
   def depth(%__MODULE__{asks: []}, :ask, _), do: 0
 
   def depth(%__MODULE__{bids: [best | _] = bids}, :bid, deviation),
-    do: sum_depth(bids, best.price, Decimal.sub(1, Decimal.from_float(deviation)), :lt, :total)
+    do: sum_depth(bids, best.price, Math.sub(1, deviation), :lt, :total)
 
   def depth(%__MODULE__{asks: [best | _] = asks}, :ask, deviation),
-    do: sum_depth(asks, best.price, Decimal.add(1, Decimal.from_float(deviation)), :gt, :value)
+    do: sum_depth(asks, best.price, Math.add(1, deviation), :gt, :value)
 
   defp sum_depth(prices, best, factor, exclude, field) do
-    bound = Decimal.mult(best, factor)
+    bound = Math.mul(best, factor)
 
     prices
     |> Enum.filter(&(Decimal.compare(&1.price, bound) != exclude))
-    |> Enum.reduce(Decimal.new(0), fn p, acc -> Decimal.add(Map.get(p, field), acc) end)
-    |> Decimal.round(0, :floor)
-    |> Decimal.to_integer()
+    |> Enum.map(&Map.get(&1, field))
+    |> Math.sum()
+    |> Math.floor()
   end
 
   # --- Private ---

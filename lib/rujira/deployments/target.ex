@@ -3,7 +3,11 @@ defmodule Rujira.Deployments.Target do
   A deployment target resolved from on-chain contract metadata.
   """
 
-  defstruct [:id, :address, :module, :name, :version]
+  defstruct id: nil,
+            address: nil,
+            module: nil,
+            name: nil,
+            version: nil
 
   @type t :: %__MODULE__{
           id: String.t() | nil,

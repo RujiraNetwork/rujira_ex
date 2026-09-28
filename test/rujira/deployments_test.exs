@@ -132,6 +132,18 @@ defmodule Rujira.DeploymentsTest do
       assert {:ok, %{address: "thor1fin", module: Pair}} = Deployments.get_target(Pair)
     end
 
+    test "from_id/1 returns the same target as the one it was resolved from" do
+      Deployments.invalidate()
+
+      MockNode.expect(fn %QueryContractInfosRequest{} ->
+        {:ok,
+         %{infos: [%ContractInfo{address: "thor1fin", contract: "rujira-fin", version: "1"}]}}
+      end)
+
+      assert {:ok, %{address: "thor1fin", module: Pair} = target} = Deployments.get_target(Pair)
+      assert {:ok, ^target} = Deployments.from_id(target.id)
+    end
+
     test "get_target/1 propagates an underlying query error rather than :not_found" do
       Deployments.invalidate()
 

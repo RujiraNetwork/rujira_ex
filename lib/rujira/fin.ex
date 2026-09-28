@@ -40,7 +40,7 @@ defmodule Rujira.Fin do
   # --- Order ---
 
   defdelegate list_orders(pair, address, limit \\ nil, opts \\ []), to: Order, as: :list
-  def list_pair_orders(pair, opts \\ []), do: Order.list(pair, nil, nil, opts)
+  defdelegate list_pair_orders(pair, opts \\ []), to: Order, as: :list_pair
   defdelegate load_order(pair, side, price, owner, opts \\ []), to: Order, as: :load
   defdelegate list_all_orders(address, opts \\ []), to: Order, as: :list_all_pairs
   defdelegate order_from_id(id, opts \\ []), to: Order, as: :from_id
@@ -48,7 +48,7 @@ defmodule Rujira.Fin do
 
   # --- Range ---
 
-  def list_ranges(pair, address \\ nil, opts \\ []), do: Range.list(pair, address, nil, opts)
+  defdelegate list_ranges(pair, address \\ nil, opts \\ []), to: Range, as: :list_pair
   defdelegate load_range(pair, idx, opts \\ []), to: Range, as: :load
 
   defdelegate list_all_ranges(address \\ nil, contracts \\ nil, opts \\ []),

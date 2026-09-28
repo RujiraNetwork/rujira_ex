@@ -1,7 +1,14 @@
 defmodule Rujira.Math do
   @moduledoc """
-  Math utilities for Rujira financial calculations
+  Math utilities for Rujira financial calculations.
+
+  All arithmetic on amounts, prices and rates goes through this module rather
+  than raw operators or `Decimal` calls, so the behaviour per operand type is
+  defined in one place: two integers (amounts) stay integers, and any `Decimal`
+  or float operand makes the result a `Decimal`.
   """
+
+  import Kernel, except: [div: 2]
 
   # Decimal 3 defaults to decimal128 limits, rejecting inputs over 34 significant
   # digits. That is narrower than the chain: a CosmWasm `Decimal` serialises up to
@@ -67,12 +74,47 @@ defmodule Rujira.Math do
   def to_decimal(_), do: {:error, :invalid_decimal}
 
   @doc """
+  Adds two numbers. Two integers give an integer; otherwise a Decimal.
+  """
+  @spec add(number() | Decimal.t(), number() | Decimal.t()) :: integer() | Decimal.t()
+  def add(a, b) when is_integer(a) and is_integer(b), do: a + b
+  def add(a, b), do: Decimal.add(decimal(a), decimal(b))
+
+  @doc """
+  Subtracts `b` from `a`. Two integers give an integer; otherwise a Decimal.
+  """
+  @spec sub(number() | Decimal.t(), number() | Decimal.t()) :: integer() | Decimal.t()
+  def sub(a, b) when is_integer(a) and is_integer(b), do: a - b
+  def sub(a, b), do: Decimal.sub(decimal(a), decimal(b))
+
+  @doc """
+  Multiplies two numbers exactly. Two integers give an integer; otherwise a Decimal.
+  """
+  @spec mul(number() | Decimal.t(), number() | Decimal.t()) :: integer() | Decimal.t()
+  def mul(a, b) when is_integer(a) and is_integer(b), do: a * b
+  def mul(a, b), do: Decimal.mult(decimal(a), decimal(b))
+
+  @doc """
+  Divides `a` by `b` as a Decimal. Raises on a zero divisor - use `safe_div/2`
+  where a zero divisor is a legitimate input.
+  """
+  @spec div(number() | Decimal.t(), number() | Decimal.t()) :: Decimal.t()
+  def div(a, b), do: Decimal.div(decimal(a), decimal(b))
+
+  @doc """
+  Sums a list with `add/2`. An empty list is `0`.
+  """
+  @spec sum([number() | Decimal.t()]) :: integer() | Decimal.t()
+  def sum(values), do: Enum.reduce(values, 0, &add(&2, &1))
+
+  @doc """
   Multiply two numbers and round down to integer
   """
   @spec mul_floor(number() | Decimal.t(), number() | Decimal.t()) :: integer()
   def mul_floor(a, b) do
-    Decimal.new(a)
-    |> Decimal.mult(Decimal.new(b))
+    a
+    |> mul(b)
+    |> decimal()
     |> Decimal.round(0, :floor)
     |> Decimal.to_integer()
   end
@@ -82,8 +124,9 @@ defmodule Rujira.Math do
   """
   @spec mul_ceil(number() | Decimal.t(), number() | Decimal.t()) :: integer()
   def mul_ceil(a, b) do
-    Decimal.new(a)
-    |> Decimal.mult(Decimal.new(b))
+    a
+    |> mul(b)
+    |> decimal()
     |> Decimal.round(0, :ceiling)
     |> Decimal.to_integer()
   end
@@ -93,8 +136,8 @@ defmodule Rujira.Math do
   """
   @spec div_floor(number() | Decimal.t(), number() | Decimal.t()) :: integer()
   def div_floor(a, b) do
-    Decimal.new(a)
-    |> Decimal.div(Decimal.new(b))
+    a
+    |> div(b)
     |> Decimal.round(0, :floor)
     |> Decimal.to_integer()
   end
@@ -104,12 +147,12 @@ defmodule Rujira.Math do
   """
   @spec safe_div(number() | Decimal.t(), number() | Decimal.t()) :: Decimal.t()
   def safe_div(a, b) do
-    b_decimal = Decimal.new(b)
+    b_decimal = decimal(b)
 
-    if Decimal.eq?(b_decimal, Decimal.new(0)) do
+    if Decimal.eq?(b_decimal, 0) do
       Decimal.new(0)
     else
-      Decimal.div(Decimal.new(a), b_decimal)
+      div(a, b_decimal)
     end
   end
 
@@ -119,11 +162,7 @@ defmodule Rujira.Math do
   @spec normalize(number() | float() | Decimal.t(), integer(), integer()) :: Decimal.t()
   def normalize(a, from \\ 0, to \\ Rujira.Amount.decimals())
 
-  def normalize(a, from, to) when is_float(a),
-    do: do_normalize(Decimal.from_float(a), from, to)
-
-  def normalize(a, from, to),
-    do: do_normalize(Decimal.new(a), from, to)
+  def normalize(a, from, to), do: do_normalize(decimal(a), from, to)
 
   defp do_normalize(a, from, to) when to >= from do
     Decimal.mult(a, Decimal.new(10 ** (to - from)))
@@ -137,8 +176,11 @@ defmodule Rujira.Math do
   Round down to integer using floor
   """
   @spec floor(number() | Decimal.t()) :: integer()
+  def floor(a) when is_integer(a), do: a
+
   def floor(a) do
-    Decimal.new(a)
+    a
+    |> decimal()
     |> Decimal.round(0, :floor)
     |> Decimal.to_integer()
   end
@@ -148,6 +190,12 @@ defmodule Rujira.Math do
   """
   @spec avg(number() | Decimal.t(), number() | Decimal.t()) :: Decimal.t()
   def avg(a, b) do
-    Decimal.div(Decimal.add(Decimal.new(a), Decimal.new(b)), 2)
+    a |> add(b) |> div(2)
   end
+
+  # --- Private ---
+
+  defp decimal(%Decimal{} = a), do: a
+  defp decimal(a) when is_float(a), do: Decimal.from_float(a)
+  defp decimal(a), do: Decimal.new(a)
 end

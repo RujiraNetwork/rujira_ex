@@ -104,12 +104,8 @@ defmodule Rujira.Prices.Default do
 
   defp to_usd(amount, price, decimals) do
     amount
-    |> Decimal.new()
-    |> Decimal.mult(price)
-    |> Decimal.mult(Decimal.new(Amount.precision()))
-    |> Decimal.div(Decimal.new(10 ** decimals))
-    |> Decimal.round(0, :floor)
-    |> Decimal.to_integer()
+    |> Rujira.Math.normalize(decimals, Amount.decimals())
+    |> Rujira.Math.mul_floor(price)
   end
 
   defp fetch_oracle_price(ticker, opts) do
@@ -149,7 +145,7 @@ defmodule Rujira.Prices.Default do
          {:ok, %{book: %{center: center}}} <- Rujira.Fin.load_pair(pair, 1, opts),
          {:ok, center} <- mid_price(center),
          {:ok, quote_price} <- quote_price(pair.asset_quote, ticker, opts) do
-      {:ok, Decimal.mult(center, quote_price)}
+      {:ok, Rujira.Math.mul(center, quote_price)}
     else
       {:error, :not_found} -> {:error, :no_price}
       {:error, _} = err -> err

@@ -85,6 +85,17 @@ defmodule Rujira.Deployments do
     )
   end
 
+  @doc """
+  Resolves a target by its `id`, which is always its contract `address` - see
+  `target/1`. Round-trips: `from_id(x.id)` returns `x`.
+  """
+  @spec from_id(String.t()) :: {:ok, Target.t()} | {:error, term()}
+  def from_id(id), do: from_address(id)
+
+  @doc "As `from_id/1`, resolved at `opts[:height]` when given."
+  @spec from_id(String.t(), Node.opts()) :: {:ok, Target.t()} | {:error, term()}
+  def from_id(id, opts), do: from_address(id, opts)
+
   @spec list_all_targets() :: {:ok, [Target.t()]} | {:error, term()}
   defmemo(list_all_targets, do: fetch_list_all_targets([]))
 

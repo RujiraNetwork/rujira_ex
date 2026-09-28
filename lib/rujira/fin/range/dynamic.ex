@@ -78,5 +78,5 @@ defmodule Rujira.Fin.Range.Dynamic do
   @doc "Total base and quote held by the range, including segregated profit."
   @spec totals(t()) :: {Amount.t(), Amount.t()}
   def totals(%__MODULE__{} = range),
-    do: {range.base + range.claimable_base, range.quote + range.claimable_quote}
+    do: {Math.add(range.base, range.claimable_base), Math.add(range.quote, range.claimable_quote)}
 end

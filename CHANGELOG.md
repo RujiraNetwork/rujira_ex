@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `Rujira.Math.add/2`, `sub/2`, `mul/2`, `div/2` and `sum/1`: the general
+  arithmetic entry points behind `mul_floor`/`mul_ceil`/`div_floor` - two
+  integers give an integer, any `Decimal` or float operand gives a `Decimal`,
+  and `div/2` raises on a zero divisor.
+- `Rujira.Deployments.from_id/1,2`, resolving a `Rujira.Deployments.Target` by
+  its `id` (its contract `address`) - round-trips with `from_address/1,2`.
 - Ghost credit, exposing the rujira-ghost-credit contract (v1.0.4) as typed
   chain data, delegated from the existing `Rujira.Ghost` facade:
   - `Rujira.Ghost.Credit` — the contract's config (`get_credit`/`list_credits`/
@@ -91,6 +97,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   spells in mixed case (`THOR.bRUNE/THOR.RUNE`, `sRUJI`, `yRUNE`): the ticker is
   compared case-insensitively, the chain still exactly. Those pairs were
   `{:error, :not_found}`.
+- `Rujira.Fin.list_pair_orders/2` and `Rujira.Fin.list_ranges/3` are now pure
+  `defdelegate`s (to the new `Rujira.Fin.Order.list_pair/2` and
+  `Rujira.Fin.Range.list_pair/3`), matching every other protocol facade -
+  names, arities and results are unchanged.
 
 ## 0.6.1
 

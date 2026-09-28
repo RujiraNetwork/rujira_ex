@@ -100,6 +100,92 @@ defmodule Rujira.MathTest do
     end
   end
 
+  describe "add/2" do
+    test "two integers give an integer" do
+      assert Math.add(2, 3) == 5
+    end
+
+    test "an integer and a Decimal give a Decimal" do
+      assert Decimal.eq?(Math.add(2, Decimal.new("3.5")), Decimal.new("5.5"))
+    end
+
+    test "an integer and a float give a Decimal" do
+      assert Decimal.eq?(Math.add(2, 1.5), Decimal.new("3.5"))
+    end
+
+    test "two Decimals give a Decimal" do
+      assert Decimal.eq?(Math.add(Decimal.new("1.5"), Decimal.new("2.5")), Decimal.new(4))
+    end
+  end
+
+  describe "sub/2" do
+    test "two integers give an integer" do
+      assert Math.sub(5, 3) == 2
+    end
+
+    test "an integer and a Decimal give a Decimal" do
+      assert Decimal.eq?(Math.sub(5, Decimal.new("1.5")), Decimal.new("3.5"))
+    end
+
+    test "an integer and a float give a Decimal" do
+      assert Decimal.eq?(Math.sub(5, 1.5), Decimal.new("3.5"))
+    end
+
+    test "two Decimals give a Decimal" do
+      assert Decimal.eq?(Math.sub(Decimal.new("5.5"), Decimal.new("1.5")), Decimal.new(4))
+    end
+  end
+
+  describe "mul/2" do
+    test "two integers give an integer" do
+      assert Math.mul(3, 4) == 12
+    end
+
+    test "an integer and a Decimal give a Decimal" do
+      assert Decimal.eq?(Math.mul(3, Decimal.new("2.5")), Decimal.new("7.5"))
+    end
+
+    test "an integer and a float give a Decimal" do
+      assert Decimal.eq?(Math.mul(3, 2.5), Decimal.new("7.5"))
+    end
+
+    test "two Decimals give a Decimal" do
+      assert Decimal.eq?(Math.mul(Decimal.new("2.5"), Decimal.new("2")), Decimal.new(5))
+    end
+  end
+
+  describe "div/2" do
+    test "two integers give a Decimal" do
+      assert Decimal.eq?(Math.div(10, 4), Decimal.new("2.5"))
+    end
+
+    test "an integer and a Decimal give a Decimal" do
+      assert Decimal.eq?(Math.div(10, Decimal.new(4)), Decimal.new("2.5"))
+    end
+
+    test "a float operand gives a Decimal" do
+      assert Decimal.eq?(Math.div(5, 2.0), Decimal.new("2.5"))
+    end
+
+    test "raises on a zero divisor" do
+      assert_raise Decimal.Error, fn -> Math.div(10, 0) end
+    end
+  end
+
+  describe "sum/1" do
+    test "an empty list is 0" do
+      assert Math.sum([]) == 0
+    end
+
+    test "sums a list of integers to an integer" do
+      assert Math.sum([1, 2, 3]) == 6
+    end
+
+    test "sums a mixed list to a Decimal" do
+      assert Decimal.eq?(Math.sum([1, Decimal.new("2.5"), 3]), Decimal.new("6.5"))
+    end
+  end
+
   describe "mul_floor/2" do
     test "multiplies and floors" do
       assert Math.mul_floor(3, 4) == 12
@@ -112,6 +198,11 @@ defmodule Rujira.MathTest do
 
     test "handles zero" do
       assert Math.mul_floor(0, 100) == 0
+    end
+
+    test "two integers do not raise" do
+      assert Math.mul_floor(3, 4) == 12
+      assert Math.mul_floor(-3, 4) == -12
     end
   end
 
@@ -127,6 +218,11 @@ defmodule Rujira.MathTest do
 
     test "handles zero" do
       assert Math.mul_ceil(0, 100) == 0
+    end
+
+    test "two integers do not raise" do
+      assert Math.mul_ceil(3, 4) == 12
+      assert Math.mul_ceil(-3, 4) == -12
     end
   end
 

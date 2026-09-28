@@ -119,11 +119,7 @@ defmodule Rujira.Staking.Pool.Account do
   def liquid_size(shares, %Pool{status: status}) do
     %Status{liquid_bond_shares: liquid_bond_shares, liquid_bond_size: liquid_bond_size} = status
 
-    {:ok,
-     Math.div_floor(
-       Decimal.mult(Decimal.new(shares), Decimal.new(liquid_bond_size)),
-       liquid_bond_shares
-     )}
+    {:ok, Math.div_floor(Math.mul(shares, liquid_bond_size), liquid_bond_shares)}
   end
 
   # --- Private ---
@@ -153,27 +149,18 @@ defmodule Rujira.Staking.Pool.Account do
   defp net(undistributed_revenue, nil), do: undistributed_revenue
 
   defp net(undistributed_revenue, fee) do
-    fee_amount =
-      undistributed_revenue
-      |> Decimal.new()
-      |> Decimal.mult(fee)
-      |> Decimal.round(0, :ceiling)
-      |> Decimal.to_integer()
+    fee_amount = Math.mul_ceil(undistributed_revenue, fee)
 
-    undistributed_revenue - fee_amount
+    Math.sub(undistributed_revenue, fee_amount)
   end
 
   defp alloc(0, _net, _liquid_bond_size), do: 0
 
   defp alloc(account_bond, net, liquid_bond_size),
-    do:
-      Math.div_floor(
-        Decimal.mult(Decimal.new(account_bond), Decimal.new(net)),
-        account_bond + liquid_bond_size
-      )
+    do: Math.div_floor(Math.mul(account_bond, net), Math.add(account_bond, liquid_bond_size))
 
   defp share(_alloc, _bonded, 0), do: 0
 
   defp share(alloc, bonded, account_bond),
-    do: Math.div_floor(Decimal.mult(Decimal.new(alloc), Decimal.new(bonded)), account_bond)
+    do: Math.div_floor(Math.mul(alloc, bonded), account_bond)
 end
