@@ -44,6 +44,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed (breaking)
 
+- Caching - group B: `Rujira.Fin` and `Rujira.Prices.Default` read through
+  `Rujira.Cache` instead of memoizing. Every lookup resolves at `opts[:height]`
+  or - without one - at the head the consumer moves with
+  `Rujira.Node.advance/1`, so a heightless read before the first `advance/1` is
+  `{:error, :no_head}`, and a height read is now cached rather than always
+  reaching the node. With it:
+  - `Rujira.Fin.Pair.list/0,1` is cached against the code registry and every
+    pair it resolved. `denom_for_ticker`, `find_stable`, `find_default`,
+    `find_by_denoms` and `from_id` derive from that one list in memory and are
+    no longer cached on their own.
+  - `Rujira.Fin.Book.query/1,2`, `Rujira.Fin.Order.query/4,5` for an
+    oracle-priced order, `Rujira.Fin.Order.query_orders/2,3`,
+    `Rujira.Fin.Simulation.query/3,4`, `Rujira.Fin.MarketMaker.Quote.query/5`
+    and both `Rujira.Prices.Default` legs are read per block: they move with
+    the oracle and the market makers, which announce themselves with no event,
+    so each is valid at the height it was read at and no other.
+  - `Rujira.Fin.Order.query/4,5` for a fixed price, and every
+    `Rujira.Fin.Range` query, are cached against the pair contract alone, so a
+    block that does not touch it carries them over.
+  - `Rujira.Fin.Simulation.query/3,4` keys on the offer asset's native denom
+    and `Rujira.Fin.MarketMaker.Quote.query/5` on the offer and ask denoms plus
+    `min_price`'s wire form, rather than on the structs they arrive in.
+  - `Rujira.Prices.Default.oracle_price/1,2` and `fin_price/1,2` no longer
+    expire on `Rujira.cache_ttl/0`; a price is held at its own height.
+  - `Rujira.Fin.denom_for_ticker/1,2` and `get_pair_from_denoms/2,3` keep both
+    arities, now as one function with a default `opts`.
+
 - `Rujira.Contracts`, `Rujira.Deployments`, `Rujira.Assets.Metadata` and
   `Rujira.Thorchain.Block` read through `Rujira.Cache` instead of memoizing:
   every read resolves at `opts[:height]` or, without one, at the head the

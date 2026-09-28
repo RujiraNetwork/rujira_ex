@@ -1,9 +1,16 @@
 defmodule Rujira.Fin.MarketMaker.QuoteTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  A quote is read through `Rujira.Cache`, whose stores and head are global, so
+  this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Assets
   alias Rujira.Fin.MarketMaker.Quote
   alias Rujira.Test.MockNode
+
+  @height 500
+  @metadata %{"x-cosmos-block-height" => "500"}
 
   setup do
     {:ok, btc} = Assets.from_denom("btc-btc")
@@ -41,13 +48,7 @@ defmodule Rujira.Fin.MarketMaker.QuoteTest do
     end
   end
 
-  describe "query/4" do
-    setup do
-      Memoize.invalidate(Quote)
-      on_exit(fn -> Memoize.invalidate(Quote) end)
-      :ok
-    end
-
+  describe "query/5" do
     test "queries with a null min_price when none is given", %{btc: btc, rune: rune} do
       MockNode.expect(fn
         %{"quote" => %{"min_price" => nil, "offer_denom" => "btc-btc", "ask_denom" => "rune"}} ->
@@ -75,54 +76,68 @@ defmodule Rujira.Fin.MarketMaker.QuoteTest do
       assert {:ok, %Quote{}} = Quote.query("thor1mm", btc, rune, Decimal.new("1.5"))
     end
 
-    test "normalizes min_price so equal decimals share a memoized cache key", %{
-      btc: btc,
-      rune: rune
-    } do
-      test_pid = self()
+    test "normalizes min_price so equal decimals share one cache key", %{btc: btc, rune: rune} do
+      MockNode.expect(fn _ -> MockNode.ok(%{"price" => "1.5", "size" => "1", "data" => nil}) end)
 
-      MockNode.expect(fn query ->
-        send(test_pid, {:queried, query})
-        MockNode.ok(%{"price" => "1.5", "size" => "1", "data" => nil})
-      end)
+      assert {:ok, _} = Quote.query("thor1mm", btc, rune, Decimal.new("1.50"), height: @height)
+      assert {:ok, _} = Quote.query("thor1mm", btc, rune, Decimal.new("1.5"), height: @height)
 
-      assert {:ok, _} = Quote.query("thor1mm", btc, rune, Decimal.new("1.50"))
-      assert {:ok, _} = Quote.query("thor1mm", btc, rune, Decimal.new("1.5"))
-
-      assert_received {:queried, _}
-      refute_received {:queried, _}
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
     end
 
-    test "the documented Memoize.invalidate/3 call actually invalidates the cache", %{
+    test "a height read carries the block-height metadata into the quote query", %{
       btc: btc,
       rune: rune
     } do
-      MockNode.expect(fn _ ->
-        MockNode.ok(%{"price" => "1.5", "size" => "1", "data" => nil})
-      end)
+      MockNode.expect(fn _ -> MockNode.ok(%{"price" => "1.5", "size" => "1", "data" => nil}) end)
 
-      assert {:ok, %Quote{price: price}} = Quote.query("thor1mm", btc, rune, Decimal.new("1.5"))
+      assert {:ok, %Quote{}} = Quote.query("thor1mm", btc, rune, nil, height: @height)
+      assert_received {:mock_node, _request, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
 
-      assert Decimal.equal?(price, Decimal.new("1.5"))
+    test "a quote is only the quote of its own height", %{btc: btc, rune: rune} do
+      MockNode.expect(fn _ -> MockNode.ok(%{"price" => "1.5", "size" => "1", "data" => nil}) end)
 
-      MockNode.expect(fn _ ->
-        MockNode.ok(%{"price" => "2.5", "size" => "1", "data" => nil})
-      end)
+      assert {:ok, %Quote{}} = Quote.query("thor1mm", btc, rune, nil, height: @height)
+      assert {:ok, %Quote{}} = Quote.query("thor1mm", btc, rune, nil, height: @height - 1)
 
-      assert {:ok, %Quote{price: price}} = Quote.query("thor1mm", btc, rune, Decimal.new("1.5"))
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
+    end
 
-      assert Decimal.equal?(price, Decimal.new("1.5"))
+    test "nothing to quote is a fact, cached like any other", %{btc: btc, rune: rune} do
+      MockNode.expect(fn %{"quote" => _} -> MockNode.ok(nil) end)
 
-      Memoize.invalidate(Quote, :do_query, [
-        "thor1mm",
-        btc,
-        rune,
-        Decimal.normalize(Decimal.new("1.5"))
-      ])
+      assert {:error, :not_found} = Quote.query("thor1mm", btc, rune, nil, height: @height)
+      assert {:error, :not_found} = Quote.query("thor1mm", btc, rune, nil, height: @height)
 
-      assert {:ok, %Quote{price: price}} = Quote.query("thor1mm", btc, rune, Decimal.new("1.5"))
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
 
-      assert Decimal.equal?(price, Decimal.new("2.5"))
+    test "an error is never cached, so the next read retries it", %{btc: btc, rune: rune} do
+      MockNode.expect(fn _ -> {:error, %GRPC.RPCError{status: 13, message: "boom"}} end)
+
+      assert {:error, %GRPC.RPCError{}} =
+               Quote.query("thor1mm", btc, rune, nil, height: @height)
+
+      MockNode.expect(fn _ -> MockNode.ok(%{"price" => "1.5", "size" => "1", "data" => nil}) end)
+
+      assert {:ok, %Quote{}} = Quote.query("thor1mm", btc, rune, nil, height: @height)
+    end
+
+    test "a heightless read is at the head, and has none before the first advance", %{
+      btc: btc,
+      rune: rune
+    } do
+      MockNode.expect(fn _ -> MockNode.ok(%{"price" => "1.5", "size" => "1", "data" => nil}) end)
+
+      assert {:ok, %Quote{}} = Quote.query("thor1mm", btc, rune)
+
+      reset_cache()
+      assert {:error, :no_head} = Quote.query("thor1mm", btc, rune)
     end
   end
 end

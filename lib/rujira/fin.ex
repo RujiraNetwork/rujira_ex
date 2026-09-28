@@ -3,13 +3,13 @@ defmodule Rujira.Fin do
   Public API for the FIN DEX protocol.
 
   Pure delegation facade. Each resource module owns its struct, construction,
-  and queries. Invalidate cache on the resource module, not here.
+  and queries.
 
   Every query takes a trailing `opts`, forwarded to `Rujira.Node.query/3`, so a
-  caller can read a whole composite at one `height:`. A memoized query's opts
-  arity reads the node uncached when given a `:height` - see the resource
-  module. Pure functions (`ticker_id!/1`, `book_depth/3`, `order_filled_fee/2`)
-  take no `opts`.
+  caller can read a whole composite at one `height:`. Every lookup is cached per
+  `Rujira.Cache`, resolved at `opts[:height]` or - without one - at the head.
+  Pure functions (`ticker_id!/1`, `book_depth/3`, `order_filled_fee/2`) take no
+  `opts`.
   """
 
   alias Rujira.Fin.Book
@@ -24,10 +24,12 @@ defmodule Rujira.Fin do
   defdelegate list_pairs(opts \\ []), to: Pair, as: :list
   defdelegate get_stable_pair(denom, opts \\ []), to: Pair, as: :find_stable
   defdelegate get_default_pair(denom, opts \\ []), to: Pair, as: :find_default
-  defdelegate denom_for_ticker(ticker), to: Pair
-  defdelegate denom_for_ticker(ticker, opts), to: Pair
-  defdelegate get_pair_from_denoms(base, quote_denom), to: Pair, as: :find_by_denoms
-  defdelegate get_pair_from_denoms(base, quote_denom, opts), to: Pair, as: :find_by_denoms
+  defdelegate denom_for_ticker(ticker, opts \\ []), to: Pair
+
+  defdelegate get_pair_from_denoms(base, quote_denom, opts \\ []),
+    to: Pair,
+    as: :find_by_denoms
+
   defdelegate pair_from_id(id, opts \\ []), to: Pair, as: :from_id
   defdelegate ticker_id!(pair), to: Pair
 

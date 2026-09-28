@@ -12,16 +12,19 @@ defmodule Rujira.Fin.Range do
   against `<pair>/<idx>` for a fixed one.
 
   Struct, construction, and queries. Use `Rujira.Fin` as the public API.
+
+  A range is the pair contract's own stored state, so every read here is cached
+  per `Rujira.Cache` against `{:contract, pair}` and resolved at `opts[:height]`
+  or - without one - at the head.
   """
 
+  alias Rujira.Cache
   alias Rujira.Contracts
   alias Rujira.Fin.Pair
   alias Rujira.Fin.Range.Dynamic
   alias Rujira.Fin.Range.Fixed
   alias Rujira.Math
   alias Rujira.Node
-
-  use Memoize
 
   @max_limit 100
 
@@ -65,7 +68,8 @@ defmodule Rujira.Fin.Range do
   @spec list(Pair.t(), String.t() | nil, integer() | nil, Node.opts()) ::
           {:ok, [t()]} | {:error, term()}
   def list(pair, owner \\ nil, limit \\ nil, opts \\ []) do
-    with {:ok, fixed} <- query_ranges(pair.address, owner, opts),
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, fixed} <- query_ranges(pair.address, owner, opts),
          {:ok, dynamic} <- query_dynamic_ranges(pair.address, owner, opts) do
       (fixed ++ dynamic)
       |> take(limit)
@@ -88,7 +92,9 @@ defmodule Rujira.Fin.Range do
   """
   @spec load(Pair.t(), integer() | {:dynamic, integer()}, Node.opts()) ::
           {:ok, t()} | {:error, term()}
-  def load(%{address: address}, idx, opts \\ []), do: load_at(address, idx, opts)
+  def load(%{address: address}, idx, opts \\ []) do
+    with {:ok, opts} <- Cache.pin(opts), do: load_at(address, idx, opts)
+  end
 
   @doc """
   Lists every range across pairs, optionally narrowed to an `owner` and to
@@ -100,7 +106,8 @@ defmodule Rujira.Fin.Range do
   @spec list_all(String.t() | nil, [String.t()] | nil, Node.opts()) ::
           {:ok, [t()]} | {:error, term()}
   def list_all(owner \\ nil, contracts \\ nil, opts \\ []) do
-    with {:ok, pairs} <- resolve_pairs(contracts, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, pairs} <- resolve_pairs(contracts, opts) do
       collect(pairs, owner, opts)
     end
   end
@@ -113,110 +120,91 @@ defmodule Rujira.Fin.Range do
   the range query alone.
   """
   @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
-  def from_id(id, opts \\ []), do: id |> String.split("/") |> load_parts(opts)
-
-  @doc """
-  Memoized full fetch of fixed ranges on a contract, optionally filtered by `owner`.
-
-  Returns the flat list of raw range maps from the chain, paginated internally.
-  Invalidate with `Memoize.invalidate(Rujira.Fin.Range, :query_ranges, [contract, owner])`.
-  """
-  @spec query_ranges(String.t(), String.t() | nil) :: {:ok, [map()]} | {:error, term()}
-  defmemo query_ranges(contract, owner) do
-    query_ranges_page(contract, owner, nil, [])
+  def from_id(id, opts \\ []) do
+    with {:ok, opts} <- Cache.pin(opts) do
+      id |> String.split("/") |> load_parts(opts)
+    end
   end
 
   @doc """
-  As `query_ranges/2`, read at `opts[:height]` when one is given - a height read
-  is never cached. Without a `:height` this is `query_ranges/2`, so the other
-  opts are not applied.
+  Every fixed range on a contract, optionally filtered by `owner`.
+
+  Returns the flat list of raw range maps from the chain, paginated internally.
   """
+  @spec query_ranges(String.t(), String.t() | nil) :: {:ok, [map()]} | {:error, term()}
+  def query_ranges(contract, owner), do: query_ranges(contract, owner, [])
+
+  @doc "As `query_ranges/2`, read at `opts[:height]` when given."
   @spec query_ranges(String.t(), String.t() | nil, Node.opts()) ::
           {:ok, [map()]} | {:error, term()}
   def query_ranges(contract, owner, opts) do
-    Node.at_height(
-      opts,
-      fn -> query_ranges_page(contract, owner, nil, opts) end,
-      fn -> query_ranges(contract, owner) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :query_ranges, [contract, owner]},
+        [{:contract, contract}],
+        opts,
+        fn _height -> query_ranges_page(contract, owner, nil, opts) end
+      )
+    end
   end
 
   @doc """
-  Memoized full fetch of dynamic ranges on a contract, optionally filtered by `owner`.
+  Every dynamic range on a contract, optionally filtered by `owner`.
 
   Dynamic ranges are an addition to FIN. A build that only has fixed ones does
   not reject this query — it ignores the `dynamic` selector and answers with
   fixed ranges — so the response is kept to the dynamic shape and such a
   contract reads as having none, which is what it has.
-
-  Invalidate with `Memoize.invalidate(Rujira.Fin.Range, :query_dynamic_ranges, [contract, owner])`.
   """
   @spec query_dynamic_ranges(String.t(), String.t() | nil) :: {:ok, [map()]} | {:error, term()}
-  defmemo query_dynamic_ranges(contract, owner) do
-    fetch_dynamic_ranges(contract, owner, [])
-  end
+  def query_dynamic_ranges(contract, owner), do: query_dynamic_ranges(contract, owner, [])
 
-  @doc """
-  As `query_dynamic_ranges/2`, read at `opts[:height]` when one is given - a
-  height read is never cached. Without a `:height` this is
-  `query_dynamic_ranges/2`, so the other opts are not applied.
-  """
+  @doc "As `query_dynamic_ranges/2`, read at `opts[:height]` when given."
   @spec query_dynamic_ranges(String.t(), String.t() | nil, Node.opts()) ::
           {:ok, [map()]} | {:error, term()}
   def query_dynamic_ranges(contract, owner, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_dynamic_ranges(contract, owner, opts) end,
-      fn -> query_dynamic_ranges(contract, owner) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :query_dynamic_ranges, [contract, owner]},
+        [{:contract, contract}],
+        opts,
+        fn _height -> fetch_dynamic_ranges(contract, owner, opts) end
+      )
+    end
   end
 
-  @doc """
-  Memoized fetch of a single fixed range by `idx` on a contract.
-
-  Invalidate with `Memoize.invalidate(Rujira.Fin.Range, :query, [address, idx])`.
-  """
+  @doc "A single fixed range by `idx` on a contract."
   @spec query(String.t(), integer()) :: {:ok, map()} | {:error, term()}
-  defmemo query(address, idx) do
-    fetch_range(address, idx, [])
-  end
+  def query(address, idx), do: query(address, idx, [])
 
-  @doc """
-  As `query/2`, read at `opts[:height]` when one is given - a height read is
-  never cached. Without a `:height` this is `query/2`, so the other opts are not
-  applied.
-  """
+  @doc "As `query/2`, read at `opts[:height]` when given."
   @spec query(String.t(), integer(), Node.opts()) :: {:ok, map()} | {:error, term()}
   def query(address, idx, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_range(address, idx, opts) end,
-      fn -> query(address, idx) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :query, [address, idx]},
+        [{:contract, address}],
+        opts,
+        fn _height -> fetch_range(address, idx, opts) end
+      )
+    end
   end
 
-  @doc """
-  Memoized fetch of a single dynamic range by `idx` on a contract.
-
-  Invalidate with `Memoize.invalidate(Rujira.Fin.Range, :query_dynamic, [address, idx])`.
-  """
+  @doc "A single dynamic range by `idx` on a contract."
   @spec query_dynamic(String.t(), integer()) :: {:ok, map()} | {:error, term()}
-  defmemo query_dynamic(address, idx) do
-    fetch_dynamic_range(address, idx, [])
-  end
+  def query_dynamic(address, idx), do: query_dynamic(address, idx, [])
 
-  @doc """
-  As `query_dynamic/2`, read at `opts[:height]` when one is given - a height read
-  is never cached. Without a `:height` this is `query_dynamic/2`, so the other
-  opts are not applied.
-  """
+  @doc "As `query_dynamic/2`, read at `opts[:height]` when given."
   @spec query_dynamic(String.t(), integer(), Node.opts()) :: {:ok, map()} | {:error, term()}
   def query_dynamic(address, idx, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch_dynamic_range(address, idx, opts) end,
-      fn -> query_dynamic(address, idx) end
-    )
+    with {:ok, opts} <- Cache.pin(opts) do
+      Cache.fetch(
+        {__MODULE__, :query_dynamic, [address, idx]},
+        [{:contract, address}],
+        opts,
+        fn _height -> fetch_dynamic_range(address, idx, opts) end
+      )
+    end
   end
 
   # --- Private ---

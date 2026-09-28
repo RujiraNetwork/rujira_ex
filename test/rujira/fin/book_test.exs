@@ -1,9 +1,16 @@
 defmodule Rujira.Fin.BookTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  A book is read through `Rujira.Cache`, whose stores and head are global, so
+  this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Fin.Book
   alias Rujira.Fin.Pair
   alias Rujira.Test.MockNode
+
+  @height 500
+  @metadata %{"x-cosmos-block-height" => "500"}
 
   describe "new/2" do
     test "parses book from contract response" do
@@ -51,13 +58,6 @@ defmodule Rujira.Fin.BookTest do
   end
 
   describe "load/3" do
-    setup do
-      # `query` is memoized on the contract address.
-      Memoize.invalidate(Rujira.Fin.Book)
-      on_exit(fn -> Memoize.invalidate(Rujira.Fin.Book) end)
-      :ok
-    end
-
     test "a book that cannot be read is an error, not an empty book" do
       MockNode.expect(fn %{"book" => _} -> {:error, vm_error()} end)
 
@@ -80,12 +80,6 @@ defmodule Rujira.Fin.BookTest do
   end
 
   describe "from_id/2" do
-    setup do
-      Memoize.invalidate(Rujira.Fin.Book)
-      on_exit(fn -> Memoize.invalidate(Rujira.Fin.Book) end)
-      :ok
-    end
-
     test "queries the address in the id, without reading the pair's config" do
       MockNode.expect(fn
         %{"config" => _} -> flunk("the pair's config was read to resolve a book id")
@@ -94,6 +88,55 @@ defmodule Rujira.Fin.BookTest do
 
       assert {:ok, %Book{id: "thor1bookid", bids: [_, _], asks: [_, _]}} =
                Book.from_id("thor1bookid")
+    end
+  end
+
+  describe "query/2" do
+    test "a height read carries the block-height metadata into the book query" do
+      MockNode.expect(fn %{"book" => _} -> MockNode.ok(levels(1)) end)
+
+      assert {:ok, _} = Book.query("thor1pair", height: @height)
+      assert_received {:mock_node, _request, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"book" => _} -> MockNode.ok(levels(1)) end)
+
+      assert {:ok, _} = Book.query("thor1pair", height: @height)
+      assert {:ok, _} = Book.query("thor1pair", height: @height)
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
+    test "a book is only the book of its own height, so another height reads again" do
+      MockNode.expect(fn %{"book" => _} -> MockNode.ok(levels(1)) end)
+
+      assert {:ok, _} = Book.query("thor1pair", height: @height)
+      assert {:ok, _} = Book.query("thor1pair", height: @height - 1)
+
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
+    end
+
+    test "an error is never cached, so the next read retries it" do
+      MockNode.expect(fn %{"book" => _} -> {:error, vm_error()} end)
+
+      assert {:error, %GRPC.RPCError{}} = Book.query("thor1pair", height: @height)
+
+      MockNode.expect(fn %{"book" => _} -> MockNode.ok(levels(1)) end)
+
+      assert {:ok, _} = Book.query("thor1pair", height: @height)
+    end
+
+    test "a heightless read is at the head, and has none before the first advance" do
+      MockNode.expect(fn %{"book" => _} -> MockNode.ok(levels(1)) end)
+
+      assert {:ok, _} = Book.query("thor1pair")
+
+      reset_cache()
+      assert {:error, :no_head} = Book.query("thor1pair")
     end
   end
 

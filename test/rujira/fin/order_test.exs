@@ -1,10 +1,19 @@
 defmodule Rujira.Fin.OrderTest do
-  use ExUnit.Case, async: true
+  @moduledoc """
+  Every order read goes through `Rujira.Cache`, whose stores and head are
+  global, so this case runs sync and starts from an empty cache.
+  """
+  use Rujira.Test.CacheCase, async: false
 
   alias Rujira.Fin.Order
   alias Rujira.Fin.Pair
   alias Rujira.Fin.Price
   alias Rujira.Test.MockNode
+
+  @height 500
+  @metadata %{"x-cosmos-block-height" => "500"}
+  @fixed %Price.Fixed{value: Decimal.new("1")}
+  @oracle %Price.Oracle{deviation: 5}
 
   describe "new/2" do
     test "parses order with fixed price from pair context" do
@@ -144,35 +153,110 @@ defmodule Rujira.Fin.OrderTest do
   end
 
   describe "load/5" do
-    setup do
-      # `query` is memoized on (address, owner, side, price).
-      Memoize.invalidate(Rujira.Fin.Order)
-      on_exit(fn -> Memoize.invalidate(Rujira.Fin.Order) end)
-      :ok
-    end
-
     test "an order the pair does not hold is :not_found, not a placeholder" do
       MockNode.expect(fn _ -> {:error, not_found()} end)
 
-      assert {:error, :not_found} =
-               Order.load(pair(), :base, %Price.Fixed{value: Decimal.new("1")}, "thor1owner")
+      assert {:error, :not_found} = Order.load(pair(), :base, @fixed, "thor1owner")
     end
 
     test "any other failure propagates unchanged" do
       MockNode.expect(fn _ -> {:error, vm_error()} end)
 
       assert {:error, %GRPC.RPCError{status: 2}} =
-               Order.load(pair(), :base, %Price.Fixed{value: Decimal.new("1")}, "thor1owner")
+               Order.load(pair(), :base, @fixed, "thor1owner")
+    end
+  end
+
+  describe "query/5" do
+    test "a height read carries the block-height metadata into the order query" do
+      MockNode.expect(fn %{"order" => _} -> MockNode.ok(order_response()) end)
+
+      assert {:ok, _} = Order.query("thor1pair", "thor1owner", :base, @fixed, height: @height)
+      assert_received {:mock_node, _request, opts}
+      assert Keyword.get(opts, :metadata) == @metadata
+    end
+
+    test "a second read at the same height is served from the cache" do
+      MockNode.expect(fn %{"order" => _} -> MockNode.ok(order_response()) end)
+
+      assert {:ok, _} = Order.query("thor1pair", "thor1owner", :base, @fixed, height: @height)
+      assert {:ok, _} = Order.query("thor1pair", "thor1owner", :base, @fixed, height: @height)
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
+    test "the price is keyed by its wire form, so equal prices are the one read" do
+      MockNode.expect(fn %{"order" => _} -> MockNode.ok(order_response()) end)
+
+      {:ok, long} = Price.parse_order("fixed:1.50")
+      {:ok, short} = Price.parse_order("fixed:1.5")
+
+      assert {:ok, _} = Order.query("thor1pair", "thor1owner", :base, long, height: @height)
+      assert {:ok, _} = Order.query("thor1pair", "thor1owner", :base, short, height: @height)
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
+    test "an oracle price is read per block, so another height reads again" do
+      MockNode.expect(fn %{"order" => _} -> MockNode.ok(oracle_order_response()) end)
+
+      assert {:ok, _} = Order.query("thor1pair", "thor1owner", :base, @oracle, height: @height)
+      assert {:ok, _} = Order.query("thor1pair", "thor1owner", :base, @oracle, height: @height)
+
+      assert {:ok, _} =
+               Order.query("thor1pair", "thor1owner", :base, @oracle, height: @height - 1)
+
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
+    test "an error is never cached, so the next read retries it" do
+      MockNode.expect(fn %{"order" => _} -> {:error, vm_error()} end)
+
+      assert {:error, %GRPC.RPCError{}} =
+               Order.query("thor1pair", "thor1owner", :base, @fixed, height: @height)
+
+      MockNode.expect(fn %{"order" => _} -> MockNode.ok(order_response()) end)
+
+      assert {:ok, _} = Order.query("thor1pair", "thor1owner", :base, @fixed, height: @height)
+    end
+
+    test "a heightless read is at the head, and has none before the first advance" do
+      MockNode.expect(fn %{"order" => _} -> MockNode.ok(order_response()) end)
+
+      assert {:ok, _} = Order.query("thor1pair", "thor1owner", :base, @fixed)
+
+      reset_cache()
+      assert {:error, :no_head} = Order.query("thor1pair", "thor1owner", :base, @fixed)
+    end
+  end
+
+  describe "query_orders/3" do
+    test "a page is read per block, so a second read at the same height is cached" do
+      MockNode.expect(fn %{"orders" => _} -> MockNode.ok(%{"orders" => []}) end)
+
+      assert {:ok, []} = Order.query_orders("thor1pair", nil, height: @height)
+      assert {:ok, []} = Order.query_orders("thor1pair", nil, height: @height)
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
+    test "another height is another page" do
+      MockNode.expect(fn %{"orders" => _} -> MockNode.ok(%{"orders" => []}) end)
+
+      assert {:ok, []} = Order.query_orders("thor1pair", nil, height: @height)
+      assert {:ok, []} = Order.query_orders("thor1pair", nil, height: @height - 1)
+
+      assert_received {:mock_node, _, _}
+      assert_received {:mock_node, _, _}
     end
   end
 
   describe "from_id/2" do
-    setup do
-      Memoize.invalidate(Rujira.Fin.Order)
-      on_exit(fn -> Memoize.invalidate(Rujira.Fin.Order) end)
-      :ok
-    end
-
     test "resolves by the address in the id, without reading the pair's config" do
       MockNode.expect(fn
         %{"config" => _} -> flunk("the pair's config was read to resolve an order id")
@@ -215,4 +299,6 @@ defmodule Rujira.Fin.OrderTest do
       "filled" => "50000000"
     }
   end
+
+  defp oracle_order_response, do: %{order_response() | "price" => %{"oracle" => 5}}
 end

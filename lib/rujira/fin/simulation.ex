@@ -8,18 +8,21 @@ defmodule Rujira.Fin.Simulation do
   converted into. `rujira-fin`'s `contract.rs` builds both the query response
   (`QueryMsg::Simulate`) and the actual swap's transfer fee from
   `config.denoms.bid(&side)`, i.e. the ask-side token, not the offer token.
+
+  A simulation walks the book, which moves with the oracle and the market makers
+  it quotes, so `query/3,4` is cached per `Rujira.Cache` at its own height,
+  resolved at `opts[:height]` or - without one - at the head.
   """
 
   alias Rujira.Amount
   alias Rujira.Assets
   alias Rujira.Assets.Asset
+  alias Rujira.Cache
   alias Rujira.Coin
   alias Rujira.Contracts
   alias Rujira.Fin.Pair
   alias Rujira.Math
   alias Rujira.Node
-
-  use Memoize
 
   # --- Struct ---
 
@@ -68,7 +71,8 @@ defmodule Rujira.Fin.Simulation do
         %Coin{asset: offer_asset, amount: amount} = offer,
         opts
       ) do
-    with {:ok, offer_denom} <- Assets.to_native(offer_asset),
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, offer_denom} <- Assets.to_native(offer_asset),
          {:ok, ask} <- ask_asset(pair, offer_denom),
          {:ok, res} <- query(address, offer_asset, amount, opts),
          {:ok, simulation} <- new(%{pair: address, offer: offer, ask: ask}, res) do
@@ -77,37 +81,34 @@ defmodule Rujira.Fin.Simulation do
   end
 
   def simulate(address, %Coin{} = offer, opts) when is_binary(address) do
-    with {:ok, pair} <- Pair.get(address, opts) do
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, pair} <- Pair.get(address, opts) do
       simulate(pair, offer, opts)
     end
   end
 
-  @doc """
-  Memoized simulation query.
-
-  Keyed on the typed `(address, asset, amount)` tuple. The native denom is
-  resolved from `asset` only here, at the wire boundary.
-
-  Invalidate with `Memoize.invalidate(Rujira.Fin.Simulation, :query, [address, asset, amount])`.
-  """
+  @doc "The contract's answer for swapping `amount` of `asset` on the pair."
   @spec query(String.t(), Asset.t(), non_neg_integer()) :: {:ok, map()} | {:error, term()}
-  defmemo query(address, %Asset{} = asset, amount) do
-    fetch(address, asset, amount, [])
-  end
+  def query(address, %Asset{} = asset, amount), do: query(address, asset, amount, [])
 
   @doc """
-  As `query/3`, read at `opts[:height]` when one is given - a height read is
-  never cached. Without a `:height` this is `query/3`, so the other opts are not
-  applied.
+  As `query/3`, read at `opts[:height]` when given.
+
+  `asset` is resolved to its native denom before the cache is keyed, so two
+  assets that name the same denom are the one read.
   """
   @spec query(String.t(), Asset.t(), non_neg_integer(), Node.opts()) ::
           {:ok, map()} | {:error, term()}
   def query(address, %Asset{} = asset, amount, opts) do
-    Node.at_height(
-      opts,
-      fn -> fetch(address, asset, amount, opts) end,
-      fn -> query(address, asset, amount) end
-    )
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, denom} <- Assets.to_native(asset) do
+      Cache.fetch(
+        {__MODULE__, :query, [address, denom, amount]},
+        [:per_block],
+        opts,
+        fn _height -> fetch(address, denom, amount, opts) end
+      )
+    end
   end
 
   @spec from_id(String.t(), Node.opts()) :: {:ok, t()} | {:error, term()}
@@ -123,14 +124,12 @@ defmodule Rujira.Fin.Simulation do
 
   # --- Private ---
 
-  defp fetch(address, %Asset{} = asset, amount, opts) do
-    with {:ok, denom} <- Assets.to_native(asset) do
-      Contracts.query_state_smart_with_retry(
-        address,
-        %{simulate: %{denom: denom, amount: Integer.to_string(amount)}},
-        opts
-      )
-    end
+  defp fetch(address, denom, amount, opts) do
+    Contracts.query_state_smart_with_retry(
+      address,
+      %{simulate: %{denom: denom, amount: Integer.to_string(amount)}},
+      opts
+    )
   end
 
   @spec ask_asset(Pair.t(), String.t()) :: {:ok, Asset.t()} | {:error, :invalid_offer}
