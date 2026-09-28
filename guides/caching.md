@@ -51,11 +51,19 @@ Rujira.Node.advance(%Rujira.Thorchain.Block{} = block)  # no refetch
   never moves backwards.
 - **Concurrent callers.** Multiple processes may call `advance/1` at once
   (this matters once more than one BEAM node runs against the same chain —
-  see below). One caller does the work; the rest return `:ok` immediately.
-  That `:ok` means "the advance to this height is scheduled", not "applied,"
-  so a caller that needs the result to be visible before proceeding — an
-  indexer, for instance — must still pass `height:` on its own reads rather
-  than assume `advance/1` returning is enough.
+  see below). One caller does the work; the rest wait for it. Either way,
+  `:ok` means the head has reached the height that call asked for, so a
+  consumer may read heightless straight afterwards and be served the block it
+  just pushed. A waiting caller monitors the one doing the work — so a crash
+  is taken over at once — and otherwise re-reads the head on a short bounded
+  backoff; the caller doing the work publishes nothing, which is what keeps
+  the fill path free of a waiter list.
+- **Timeout.** A caller that never gets the lock, and whose height the head
+  never reaches, gives up with `{:error, :timeout}` after `lock_timeout`. The
+  advance itself is not abandoned: the target still holds the height, and
+  whoever has the lock is still filling towards it. Because `lock_timeout` is
+  also when a lock becomes takeable, reaching this needs a holder that keeps
+  reacquiring — a long catch-up — rather than one that is merely slow.
 
 ## Reads
 
@@ -100,6 +108,68 @@ config :rujira_ex, Rujira.Cache,
 | `sweep_per_block` | `1_000` | Bound on how many frontier rows `advance/1` sweeps per block it applies. |
 | `lock_timeout` | `30_000` | How long, in ms, an `advance/1` lock may be held before another caller may take it over. |
 | `max_block_failures` | `3` | Consecutive failures to apply the same block before `advance/1` resets to the target. |
+
+## Telemetry
+
+`rujira_ex` emits three `:telemetry` events. Attach to them with
+`Rujira.Cache.Telemetry.events/0`, or to one at a time:
+
+```elixir
+:telemetry.attach_many(
+  "rujira-cache",
+  Rujira.Cache.Telemetry.events(),
+  &MyApp.Metrics.handle/4,
+  nil
+)
+```
+
+Every `duration` is in `System.monotonic_time/0`'s native unit — pass it
+through `System.convert_time_unit(duration, :native, :millisecond)`.
+
+| Event | Measurements | Metadata |
+|---|---|---|
+| `[:rujira, :cache, :fetch]` | `duration` — serving the read, store lookup included | `store` (`:frontier`/`:exact`/`:identity`), `result` (`:hit`/`:miss`/`:error`), `module` and `function` of the query key |
+| `[:rujira, :cache, :advance]` | `from`, `to` — the head either side of the fill; `blocks` applied; `duration` | none |
+| `[:rujira, :cache, :reset]` | `from`, `to` | `reason` (`:catchup`/`:stuck_block`/`:upgrade`/`:invalidate_all`) |
+
+- A **fetch** is emitted once per `Rujira.Cache.fetch/4`, under the store that
+  actually served it: a read at a height the frontier cannot serve is reported
+  under `:exact`, not twice. `result: :miss` covers joining a node read already
+  in flight as well as running one. The query key's *arguments* are
+  deliberately not in the metadata — they carry addresses and denoms, which
+  would give the metric the cardinality of the chain.
+- An **advance** is emitted by the caller that took the lock and filled. A
+  caller that waited on another emits nothing of its own; the fill it waited
+  for emits.
+- A **reset** is emitted wherever everything is invalidated at once, alongside
+  a `Logger.warning`. `from` and `to` are equal for `invalidate_all/0`, which
+  does not move the head.
+
+## Testing against the cache
+
+A heightless read is `{:error, :no_head}` until something calls `advance/1`, so
+a consumer's own tests have to put a head in place. `Rujira.Cache.Testing` is
+the supported way — the tables themselves are an implementation detail:
+
+```elixir
+defmodule MyApp.SomeTest do
+  # The head and the stores are global.
+  use ExUnit.Case, async: false
+
+  setup do
+    Rujira.Cache.Testing.reset!()
+    Rujira.Cache.Testing.set_head(1_000_000)
+    on_exit(&Rujira.Cache.Testing.reset!/0)
+  end
+end
+```
+
+- `set_head/1` moves the head with no node fetch, by advancing an empty block
+  at that height. Only that one height is handed over, so jumping more than one
+  block above the current head still fetches the ones in between — set the head
+  from an empty cache, or one height at a time.
+- `reset!/0` empties every store and leaves no head at all, which is also what
+  a test asserting `{:error, :no_head}` needs.
 
 ## Multiple BEAM nodes
 

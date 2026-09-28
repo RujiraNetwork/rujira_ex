@@ -11,19 +11,31 @@ defmodule Rujira.Cache.Advance do
 
   Every caller raises the target to its own height, then races for the lock.
   The winner applies `head + 1`, `head + 2`, ... until the head reaches the
-  target; the losers return `:ok` at once. **A loser's `:ok` means scheduled,
-  not applied** - the head may still be behind when it returns, which is why an
-  indexer calls `advance/1` and then reads with `height:` pinned rather than
-  heightless.
+  target. **Either way, `:ok` means applied**: a caller that lost the race
+  returns only once the head has reached its own height, so a consumer can read
+  heightless straight after `advance/1` and be served the height it just
+  pushed.
+
+  A loser waits by monitoring the holder and re-reading the head on a bounded
+  backoff. It cannot be notified instead: the holder writes the head and
+  nothing else, and a holder that had to publish to a waiter list would pay for
+  every caller that is not there. The backoff is the cost of keeping the fill
+  path free of them.
+
+  The wait ends in `{:error, :timeout}` after `lock_timeout` - the same window
+  after which a lock is taken over, so the only way to reach it is a holder
+  that keeps the lock fresh by reacquiring it, which is what a long catch-up
+  does.
 
   After releasing the lock the holder re-reads the target and reacquires if it
-  moved, so a caller that raised the target and lost the race in the window
-  before the release cannot leave the head parked.
+  moved, so a caller that raised the target and then died cannot leave the head
+  parked.
 
   A lock whose holder is dead, or that is older than `lock_timeout`, is taken
-  over. That can leave two writers at once, which is safe because every write
-  is a max: the head moves by `compare_exchange` and can never go down, markers
-  are raised and never lowered, and applying a block twice is idempotent.
+  over - by a fresh caller, or by a waiter whose monitor fired. That can leave
+  two writers at once, which is safe because every write is a max: the head
+  moves by `compare_exchange` and can never go down, markers are raised and
+  never lowered, and applying a block twice is idempotent.
 
   ## Applying a block
 
@@ -49,12 +61,20 @@ defmodule Rujira.Cache.Advance do
   that order, and is always sound - it only makes the cache colder. Three
   things trigger one:
 
-    * the head is more than `max_catchup` blocks behind the target, where
-      filling one block at a time would cost more than starting over;
-    * the same block has failed `max_block_failures` times in a row, which
-      would otherwise hold the head - and every heightless read - at a stale
-      height until `max_catchup` rescued it;
-    * `Rujira.Cache.invalidate_all/0`.
+    * `:catchup` - the head is more than `max_catchup` blocks behind the
+      target, where filling one block at a time would cost more than starting
+      over;
+    * `:stuck_block` - the same block has failed `max_block_failures` times in
+      a row, which would otherwise hold the head - and every heightless read -
+      at a stale height until `max_catchup` rescued it;
+    * `:invalidate_all` - `Rujira.Cache.invalidate_all/0`.
+
+  An `:upgrade` block invalidates everything too, as of its own height, but by
+  raising the `:all` marker rather than by bumping the generation: the rows
+  below it stay readable at their own heights.
+
+  Each of the four logs a `Logger.warning` and emits
+  `[:rujira, :cache, :reset]` with its reason - see `Rujira.Cache`.
 
   A height at or below the head is a no-op, and the first `advance/1` of all
   simply sets the head: there is nothing cached yet to invalidate.
@@ -65,18 +85,25 @@ defmodule Rujira.Cache.Advance do
   alias Rujira.Cache.Markers
   alias Rujira.Cache.Store
   alias Rujira.Cache.Tables
+  alias Rujira.Cache.Telemetry
   alias Rujira.Logger
   alias Rujira.Thorchain.Block
 
   @min_height 1
   @max_height 9_223_372_036_854_775_807
   @fetch_timeout 15_000
+  @backoff_min 1
+  @backoff_max 50
 
   @doc """
   Advances the head to `height`, or to a block the consumer already holds.
 
-  Returns `:ok`, or `{:error, reason}` when this caller's own block fetch
-  failed. A caller that did not win the lock always returns `:ok`.
+  Returns `:ok` once the head has reached `height`, whether this caller applied
+  the blocks itself or waited for the caller that did.
+
+  `{:error, reason}` is this caller's own block fetch failing, and
+  `{:error, :timeout}` is `lock_timeout` passing while another caller held the
+  lock without the head reaching `height`.
   """
   @spec advance(pos_integer() | Block.t()) :: :ok | {:error, term()}
   def advance(%Block{height: height} = block)
@@ -94,10 +121,11 @@ defmodule Rujira.Cache.Advance do
   @doc "Bumps the generation and marks `:all`, making every stored row unreachable."
   @spec invalidate_all() :: :ok
   def invalidate_all do
+    head = Tables.head_at()
     Tables.bump_gen()
-    Tables.raise_all(Tables.head_at())
+    Tables.raise_all(head)
     :ets.delete_all_objects(Tables.identity())
-    :ok
+    announce(:invalidate_all, head, head)
   end
 
   # --- Private: scheduling ---
@@ -105,54 +133,112 @@ defmodule Rujira.Cache.Advance do
   defp schedule(height, block) do
     deposit(block, Tables.head_at())
     Tables.raise_target(height)
-    take_lock()
+    drive(height, deadline(), @backoff_min)
   end
 
-  defp take_lock do
+  defp deadline, do: System.monotonic_time(:millisecond) + Config.lock_timeout()
+
+  defp drive(height, deadline, backoff) do
     case lock() do
-      {:ok, token} -> drive(token)
-      :busy -> :ok
+      {:ok, token} -> hold(token, height, deadline)
+      :busy -> await(height, deadline, backoff)
     end
   end
 
-  defp drive(token) do
-    result = fill()
+  defp hold(token, height, deadline) do
+    from = Tables.head_at()
+    start = System.monotonic_time()
+    {applied, result} = fill()
     unlock(token)
-    settle(result)
+    Telemetry.advance(from, Tables.head_at(), applied, start)
+    settle(result, height, deadline)
   end
 
-  defp settle(:ok), do: recheck()
-  defp settle({:error, _reason} = error), do: error
+  defp settle({:error, _reason} = error, _height, _deadline), do: error
 
-  defp recheck do
+  # The target is at least this caller's own height, so a head that has caught
+  # up with it has caught up with `height` too. Where it has not, the target
+  # moved under this caller - another one raised it while the lock was being
+  # let go - and going round again is what keeps that from parking the head.
+  defp settle(:ok, height, deadline) do
     case Tables.target() > Tables.head_at() do
-      true -> take_lock()
+      true -> drive(height, deadline, @backoff_min)
       false -> :ok
     end
   end
 
-  # --- Private: the fill loop ---
+  # --- Private: waiting on another caller ---
 
-  defp fill, do: fill(Tables.head_at(), Tables.target())
-
-  defp fill(head, target) when target <= head, do: :ok
-
-  defp fill(0, target) do
-    Tables.raise_head(target)
-    :ok
-  end
-
-  defp fill(head, target) when target - head > 0 do
-    case target - head > Config.max_catchup() do
-      true -> reset(target)
-      false -> step(head + 1)
+  defp await(height, deadline, backoff) do
+    cond do
+      Tables.head_at() >= height -> :ok
+      remaining(deadline) == 0 -> {:error, :timeout}
+      true -> pause(height, deadline, backoff)
     end
   end
 
-  defp step(y) do
+  # The monitor is what makes a crashed holder cheap to notice - the backoff
+  # would find it too, a whole sleep later. Trying the lock again afterwards is
+  # also how a holder that went stale while this caller waited is taken over.
+  defp pause(height, deadline, backoff) do
+    linger(holder(), min(backoff, remaining(deadline)))
+    drive(height, deadline, next(backoff))
+  end
+
+  defp holder do
+    case :ets.lookup(Tables.lock(), :lock) do
+      [{:lock, pid, _at}] -> {:ok, pid}
+      _ -> :none
+    end
+  end
+
+  defp linger(:none, _timeout), do: :ok
+
+  defp linger({:ok, pid}, timeout) do
+    ref = Process.monitor(pid)
+
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+    after
+      timeout -> :ok
+    end
+
+    Process.demonitor(ref, [:flush])
+    :ok
+  end
+
+  defp next(backoff), do: min(backoff * 2, @backoff_max)
+
+  defp remaining(deadline), do: max(deadline - System.monotonic_time(:millisecond), 0)
+
+  # --- Private: the fill loop ---
+
+  defp fill, do: fill(Tables.head_at(), Tables.target(), 0)
+
+  defp fill(head, target, applied) when target <= head, do: {applied, :ok}
+
+  defp fill(0, target, applied) do
+    Tables.raise_head(target)
+    {applied, :ok}
+  end
+
+  defp fill(head, target, applied) when target - head > 0 do
+    case target - head > Config.max_catchup() do
+      true -> catchup(target, applied)
+      false -> step(head + 1, applied)
+    end
+  end
+
+  defp catchup(target, applied) do
+    reset(target, :catchup)
+    {applied, :ok}
+  end
+
+  defp step(y, applied) do
     case apply_block(y) do
-      :ok -> fill()
-      {:error, _reason} = error -> error
+      :applied -> fill(Tables.head_at(), Tables.target(), applied + 1)
+      :reset -> {applied, :ok}
+      {:error, _reason} = error -> {applied, error}
     end
   end
 
@@ -164,24 +250,38 @@ defmodule Rujira.Cache.Advance do
   end
 
   defp commit(block, y) do
-    block
-    |> Invalidator.sources()
-    |> Enum.each(&Markers.raise_source(&1, y))
+    sources = Invalidator.sources(block)
+    Enum.each(sources, &Markers.raise_source(&1, y))
+    upgrade(:all in sources, y)
 
     clear_failures()
     Tables.raise_head(y)
     drop_pushed(Tables.head_at())
     Store.sweep(Tables.head_at(), Tables.gen())
-    :ok
+    :applied
   end
 
-  defp reset(target) do
+  # The head is written last, so it is still the block before this one.
+  defp upgrade(true, y), do: announce(:upgrade, Tables.head_at(), y)
+  defp upgrade(false, _y), do: :ok
+
+  defp reset(target, reason) do
+    from = Tables.head_at()
     Tables.bump_gen()
     Tables.raise_all(target)
     Tables.raise_head(target)
     drop_pushed(Tables.head_at())
     clear_failures()
-    :ok
+    announce(reason, from, target)
+  end
+
+  defp announce(reason, from, to) do
+    Logger.warning(
+      __MODULE__,
+      "#{reason}: every cached value invalidated, head #{from} -> #{to}"
+    )
+
+    Telemetry.reset(reason, from, to)
   end
 
   # --- Private: blocks ---
@@ -247,7 +347,8 @@ defmodule Rujira.Cache.Advance do
       "block #{y} failed #{count} times (#{inspect(reason)}); resetting to the target"
     )
 
-    reset(Tables.target())
+    reset(Tables.target(), :stuck_block)
+    :reset
   end
 
   defp bump_failures(y) do

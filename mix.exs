@@ -72,6 +72,7 @@ defmodule RujiraEx.MixProject do
       {:decimal, "~> 2.4 or ~> 3.0"},
       {:grpc, "~> 0.9 or ~> 1.0"},
       {:protobuf, "~> 0.12"},
+      {:telemetry, "~> 1.0"},
       {:bech32, "~> 1.0"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},

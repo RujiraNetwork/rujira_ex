@@ -116,15 +116,23 @@ defmodule Rujira.Node do
   head never goes backwards.
 
   The work runs in the calling process, under a lock: one caller applies the
-  blocks while the others return at once. **`:ok` therefore means scheduled,
-  not applied** - the head may still be catching up when it returns. An indexer
-  calls `advance/1` and then reads that block with `height:` pinned, rather
-  than heightless.
+  blocks while the others wait. **`:ok` means applied** - the head has reached
+  `height` by the time it returns, whether this caller did the work or another
+  did. An indexer may therefore read the block it just pushed without
+  `height:`, though pinning it is still what keeps a composite read at one
+  height while the head moves on.
 
   `{:error, reason}` is this caller's own block fetch failing. The head is
   unchanged, and the next `advance/1` retries the same block; after
   `max_block_failures` of those in a row the head resets to the target rather
-  than staying stale. See `Rujira.Cache` for the configuration.
+  than staying stale.
+
+  `{:error, :timeout}` is `lock_timeout` passing while another caller held the
+  lock and the head never reached `height`. The advance is not abandoned - the
+  target keeps it, and the holder is still filling towards it.
+
+  See `Rujira.Cache` for the configuration, and for the telemetry each advance
+  emits.
   """
   @spec advance(pos_integer() | Block.t()) :: :ok | {:error, term()}
   defdelegate advance(height), to: Cache

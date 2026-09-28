@@ -11,7 +11,8 @@ defmodule Rujira.Test.CacheCase do
   is restored afterwards, so a test that moves the head or fills the cache
   cannot leak into the next one.
 
-  Two helpers do the setting up:
+  Two helpers do the setting up, both of them `Rujira.Cache.Testing` - the
+  same module a consumer's own suite uses:
 
     * `set_head/1` moves the head without a node fetch, by advancing with an
       empty block at that height - `Rujira.Node.advance/1` fetches every block
@@ -22,9 +23,7 @@ defmodule Rujira.Test.CacheCase do
 
   use ExUnit.CaseTemplate
 
-  alias Rujira.Cache
-  alias Rujira.Node
-  alias Rujira.Thorchain.Block
+  alias Rujira.Cache.Testing
 
   @default_head 1_000_000
 
@@ -45,7 +44,7 @@ defmodule Rujira.Test.CacheCase do
   def default_head, do: @default_head
 
   @doc "Empties the cache and puts the head back at `default_head/0`."
-  @spec reset!() :: :ok
+  @spec reset!() :: :ok | {:error, term()}
   def reset! do
     reset_cache()
     set_head(@default_head)
@@ -53,9 +52,9 @@ defmodule Rujira.Test.CacheCase do
 
   @doc "Empties every store, leaving no head."
   @spec reset_cache() :: :ok
-  def reset_cache, do: Cache.reset!()
+  defdelegate reset_cache(), to: Testing, as: :reset!
 
   @doc "Moves the head to `height` without fetching a block for it."
-  @spec set_head(pos_integer()) :: :ok
-  def set_head(height), do: Node.advance(%Block{height: height, events: []})
+  @spec set_head(pos_integer()) :: :ok | {:error, term()}
+  defdelegate set_head(height), to: Testing
 end

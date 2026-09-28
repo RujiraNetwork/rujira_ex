@@ -83,6 +83,54 @@ defmodule Rujira.Cache do
       `advance/1` accepts before resetting to the target rather than holding
       the head - and every heightless read - at a stale height.
 
+  ## Telemetry
+
+  Three `:telemetry` events, each executed in the calling process. Every
+  duration is in `System.monotonic_time/0`'s native unit -
+  `System.convert_time_unit/3` turns one into milliseconds. Nothing here can
+  raise into a read: see `Rujira.Cache.Telemetry`, whose `events/0` lists all
+  three for a consumer attaching to them at once.
+
+  ### `[:rujira, :cache, :fetch]`
+
+  One per `fetch/4`, once it has resolved.
+
+  | | Key | Is |
+  |---|---|---|
+  | Measurements | `duration` | How long serving the read took, the store lookup included |
+  | Metadata | `store` | `:frontier`, `:exact` or `:identity` - which store served it, or would have filed it |
+  | | `result` | `:hit` - served from the store; `:miss` - a node read ran, or joined one already in flight; `:error` - it failed, and nothing was stored |
+  | | `module`, `function` | The query key's module and function. Its arguments are left out: they carry addresses and denoms, which would give the metric the cardinality of the chain. Both `nil` for a key that is not `{module, function, args}` |
+
+  A read at a height the frontier cannot serve is reported once, under
+  `:exact` - the store it is actually served from - not twice.
+
+  ### `[:rujira, :cache, :advance]`
+
+  One per `Rujira.Node.advance/1` that took the lock and filled. A caller that
+  waited on another's fill emits nothing; the fill it waited for emits.
+
+  | | Key | Is |
+  |---|---|---|
+  | Measurements | `from`, `to` | The head before and after the fill |
+  | | `blocks` | How many blocks were applied - `0` for a reset, and for the first `advance/1` of all |
+  | | `duration` | How long the fill took |
+  | Metadata | | None |
+
+  ### `[:rujira, :cache, :reset]`
+
+  One per invalidation of everything, with a `Logger.warning` beside it.
+
+  | | Key | Is |
+  |---|---|---|
+  | Measurements | `from`, `to` | The head before and after. Equal for `invalidate_all/0`, which does not move it |
+  | Metadata | `reason` | `:catchup`, `:stuck_block`, `:upgrade` or `:invalidate_all` - see `Rujira.Cache.Advance` |
+
+  ## Testing
+
+  `Rujira.Cache.Testing` puts a head in place, and takes it away again, for a
+  consumer's own test suite.
+
   ## Generations
 
   `invalidate_all/0` bumps a generation that is part of every key. Old rows
@@ -96,6 +144,7 @@ defmodule Rujira.Cache do
   alias Rujira.Cache.Flight
   alias Rujira.Cache.Store
   alias Rujira.Cache.Tables
+  alias Rujira.Cache.Telemetry
   alias Rujira.Node
 
   @typedoc "What a cached read depends on."
@@ -155,7 +204,9 @@ defmodule Rujira.Cache do
   end
 
   @doc """
-  Advances the head. See `Rujira.Node.advance/1`.
+  Advances the head, returning once it has reached `height`.
+
+  See `Rujira.Node.advance/1`.
   """
   @spec advance(pos_integer() | Rujira.Thorchain.Block.t()) :: :ok | {:error, term()}
   defdelegate advance(height), to: Advance
@@ -181,17 +232,8 @@ defmodule Rujira.Cache do
   one failure.
   """
   @spec fetch(query_key(), sources(), Node.opts(), (pos_integer() | nil -> result())) :: result()
-  def fetch(query_key, :identity, opts, fun) do
-    gen = Tables.gen()
-
-    Flight.run(
-      {gen, query_key, :identity},
-      opts,
-      fn -> Store.identity_lookup(gen, query_key) end,
-      fn -> fun.(nil) end,
-      &Store.identity_put(gen, query_key, &1)
-    )
-  end
+  def fetch(query_key, :identity, opts, fun),
+    do: identity(query_key, Tables.gen(), opts, fun)
 
   def fetch(query_key, sources, opts, fun) do
     with {:ok, h} <- scope(opts) do
@@ -201,7 +243,7 @@ defmodule Rujira.Cache do
 
   @doc false
   @spec reset!() :: :ok
-  def reset!, do: Tables.reset!()
+  defdelegate reset!(), to: Rujira.Cache.Testing
 
   # --- Private ---
 
@@ -220,36 +262,89 @@ defmodule Rujira.Cache do
 
   defp per_block?(sources), do: is_list(sources) and :per_block in sources
 
+  defp identity(query_key, gen, opts, fun) do
+    lookup = fn -> Store.identity_lookup(gen, query_key) end
+
+    serve(:identity, query_key, lookup, fn ->
+      Flight.run(
+        {gen, query_key, :identity},
+        opts,
+        lookup,
+        fn -> fun.(nil) end,
+        &Store.identity_put(gen, query_key, &1)
+      )
+    end)
+  end
+
   defp frontier(query_key, sources, gen, h, head, opts, fun) do
+    start = System.monotonic_time()
+
     case Store.frontier_lookup(gen, query_key, h, head) do
-      {:ok, value} -> {:ok, value}
-      :miss -> frontier_miss(query_key, sources, gen, h, head, opts, fun)
+      {:ok, value} -> hit(:frontier, query_key, start, value)
+      :miss -> frontier_miss(query_key, sources, gen, h, head, opts, fun, start)
     end
   end
 
-  defp frontier_miss(query_key, sources, gen, h, head, opts, fun) when h == head do
-    Flight.run(
-      {gen, query_key, h},
-      opts,
-      fn -> Store.frontier_lookup(gen, query_key, h, Tables.head_at()) end,
-      fn -> fun.(h) end,
-      &Store.frontier_put(gen, query_key, h, resolve(sources, &1), &1)
+  defp frontier_miss(query_key, sources, gen, h, head, opts, fun, start) when h == head do
+    ran(
+      :frontier,
+      query_key,
+      start,
+      Flight.run(
+        {gen, query_key, h},
+        opts,
+        fn -> Store.frontier_lookup(gen, query_key, h, Tables.head_at()) end,
+        fn -> fun.(h) end,
+        &Store.frontier_put(gen, query_key, h, resolve(sources, &1), &1)
+      )
     )
   end
 
-  defp frontier_miss(query_key, _sources, gen, h, _head, opts, fun),
+  defp frontier_miss(query_key, _sources, gen, h, _head, opts, fun, _start),
     do: exact(query_key, gen, h, opts, fun)
 
   defp exact(query_key, gen, h, opts, fun) do
-    Flight.run(
-      {gen, query_key, h},
-      opts,
-      fn -> Store.exact_lookup(gen, query_key, h) end,
-      fn -> fun.(h) end,
-      &Store.exact_put(gen, query_key, h, &1)
-    )
+    lookup = fn -> Store.exact_lookup(gen, query_key, h) end
+
+    serve(:exact, query_key, lookup, fn ->
+      Flight.run(
+        {gen, query_key, h},
+        opts,
+        lookup,
+        fn -> fun.(h) end,
+        &Store.exact_put(gen, query_key, h, &1)
+      )
+    end)
   end
 
   defp resolve(sources, value) when is_function(sources, 1), do: sources.(value)
   defp resolve(sources, _value), do: sources
+
+  # --- Private: telemetry ---
+
+  # The store lookup that opens a read decides whether it was a hit, so the
+  # exact and identity paths take it before handing the miss to `Flight`,
+  # which re-reads the store itself. That is one extra ETS lookup on a miss -
+  # about to pay for a node read - and none at all on a hit.
+  defp serve(store, query_key, lookup, run) do
+    start = System.monotonic_time()
+
+    case lookup.() do
+      {:ok, value} -> hit(store, query_key, start, value)
+      :miss -> ran(store, query_key, start, run.())
+    end
+  end
+
+  defp hit(store, query_key, start, value) do
+    Telemetry.fetch(store, :hit, query_key, start)
+    {:ok, value}
+  end
+
+  defp ran(store, query_key, start, result) do
+    Telemetry.fetch(store, outcome(result), query_key, start)
+    result
+  end
+
+  defp outcome({:ok, _value}), do: :miss
+  defp outcome({:error, _reason}), do: :error
 end
