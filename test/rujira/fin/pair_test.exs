@@ -354,6 +354,48 @@ defmodule Rujira.Fin.PairTest do
       reset_cache()
       assert {:error, :no_head} = Pair.list()
     end
+
+    test "the configs are fetched concurrently, not one at a time" do
+      counter = :atomics.new(1, signed: false)
+
+      MockNode.expect(fn
+        %QueryContractInfosRequest{} ->
+          {:ok,
+           %{
+             infos: [
+               %ContractInfo{address: "thor1paira", contract: "rujira-fin", version: "1"},
+               %ContractInfo{address: "thor1pairb", contract: "rujira-fin", version: "1"}
+             ]
+           }}
+
+        %QueryDenomMetadataRequest{denom: denom} ->
+          {:error,
+           %GRPC.RPCError{status: 5, message: "client metadata for denom #{denom}: not found"}}
+
+        %{"config" => _} ->
+          :atomics.add(counter, 1, 1)
+          # A sequential fetch would deadlock here forever, since the second
+          # leg only starts once the first one returns.
+          await_both_legs(counter)
+          MockNode.ok(brune_pair_config())
+      end)
+
+      assert {:ok, [_, _]} = Pair.list(height: @height)
+    end
+  end
+
+  defp await_both_legs(counter, attempts \\ 100)
+
+  defp await_both_legs(_counter, 0),
+    do: flunk("second config leg never started - fetch is not concurrent")
+
+  defp await_both_legs(counter, attempts) do
+    if :atomics.get(counter, 1) >= 2 do
+      :ok
+    else
+      Process.sleep(5)
+      await_both_legs(counter, attempts - 1)
+    end
   end
 
   # Denom metadata is token identity, read at latest - it is the one query a

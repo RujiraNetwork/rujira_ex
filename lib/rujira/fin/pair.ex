@@ -250,7 +250,7 @@ defmodule Rujira.Fin.Pair do
   # that does not exist.
   defp fetch_list(opts) do
     with {:ok, targets} <- Deployments.list_targets(__MODULE__, opts) do
-      Rujira.Enum.reduce_while_ok(targets, &fetch_target(&1, opts))
+      Rujira.Enum.reduce_async_while_ok(targets, &fetch_target(&1, opts), opts, __MODULE__)
     end
   end
 

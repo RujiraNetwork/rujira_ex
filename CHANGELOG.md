@@ -196,6 +196,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `defdelegate`s (to the new `Rujira.Fin.Order.list_pair/2` and
   `Rujira.Fin.Range.list_pair/3`), matching every other protocol facade -
   names, arities and results are unchanged.
+- `Rujira.Fin.Pair.list/1` now resolves its pair configs concurrently, via
+  `Rujira.Enum.reduce_async_while_ok/4`, matching every other protocol list.
 
 ## 0.6.1
 
