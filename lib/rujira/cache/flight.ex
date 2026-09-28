@@ -35,6 +35,10 @@ defmodule Rujira.Cache.Flight do
   caller that arrives after the broadcast finds no row and fetches again - it
   arrived after the failure, so that is not a retry of it.
 
+  A `{:bypass, value}` is broadcast the same way and stored just as little: the
+  flight was still one node read shared between its callers, and every one of
+  them is handed the value.
+
   ## Runner deaths
 
   `Rujira.Enum` kills sibling tasks on the first error and on a timeout, so a
@@ -68,7 +72,7 @@ defmodule Rujira.Cache.Flight do
   @default_timeout 15_000
 
   @type key :: {non_neg_integer(), term(), term()}
-  @type result :: {:ok, term()} | {:error, term()}
+  @type outcome :: Rujira.Cache.outcome()
 
   @doc """
   Returns the stored value for `key`, joins the flight that is fetching it, or
@@ -77,8 +81,8 @@ defmodule Rujira.Cache.Flight do
   `lookup` re-reads the caller's own store, `fun` performs the node read and
   `store` files a successful result the way the caller's path files it.
   """
-  @spec run(key(), keyword(), (-> {:ok, term()} | :miss), (-> result()), (term() -> :ok)) ::
-          result()
+  @spec run(key(), keyword(), (-> {:ok, term()} | :miss), (-> outcome()), (term() -> :ok)) ::
+          outcome()
   def run(key, opts, lookup, fun, store) do
     attempt(key, lookup, fun, store, System.monotonic_time(:millisecond) + timeout(opts))
   end

@@ -101,7 +101,8 @@ defmodule Rujira.Fin.Range do
   Lists every range across pairs, optionally narrowed to an `owner` and to
   named `contracts`.
 
-  Each pair is read concurrently; `opts[:fan_out]` sets the per-pair timeout
+  Named `contracts` are resolved to their pairs concurrently, and every pair's
+  ranges are then read concurrently; `opts[:fan_out]` sets the per-pair timeout
   and how many run at once - see `Rujira.Enum`.
   """
   @spec list_all(String.t() | nil, [String.t()] | nil, Node.opts()) ::
@@ -278,7 +279,7 @@ defmodule Rujira.Fin.Range do
   defp resolve_pairs(nil, opts), do: Pair.list(opts)
 
   defp resolve_pairs(contracts, opts) when is_list(contracts),
-    do: Rujira.Enum.reduce_while_ok(contracts, &Pair.get(&1, opts))
+    do: Rujira.Enum.reduce_async_while_ok(contracts, &Pair.get(&1, opts), opts, __MODULE__)
 
   defp collect(pairs, owner, opts) do
     with {:ok, ranges} <-

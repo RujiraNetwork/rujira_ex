@@ -141,6 +141,26 @@ defmodule Rujira.Fin.RangeTest do
     end
   end
 
+  describe "list_all/3" do
+    test "the named pairs' configs are fetched concurrently, not one at a time" do
+      counter = :atomics.new(1, signed: false)
+
+      MockNode.expect(fn
+        %{"config" => _} ->
+          :atomics.add(counter, 1, 1)
+          # A sequential fetch would deadlock here forever, since the second
+          # leg only starts once the first one returns.
+          await_both_legs(counter)
+          MockNode.ok(pair_config())
+
+        %{"ranges" => _} ->
+          MockNode.ok(%{"ranges" => []})
+      end)
+
+      assert {:ok, []} = Range.list_all(nil, ["thor1paira", "thor1pairb"], height: @height)
+    end
+  end
+
   describe "load/2" do
     test "a bare index asks only the fixed query" do
       MockNode.expect(fn
@@ -333,7 +353,36 @@ defmodule Rujira.Fin.RangeTest do
     end
   end
 
+  defp await_both_legs(counter, attempts \\ 100)
+
+  defp await_both_legs(_counter, 0),
+    do: flunk("second config leg never started - fetch is not concurrent")
+
+  defp await_both_legs(counter, attempts) do
+    if :atomics.get(counter, 1) >= 2 do
+      :ok
+    else
+      Process.sleep(5)
+      await_both_legs(counter, attempts - 1)
+    end
+  end
+
   # --- Fixtures ---
+
+  # The pair's own address is filled in by `Rujira.Contracts.get/2`, so one
+  # config serves every pair the test names.
+  defp pair_config do
+    %{
+      "address" => "thor1pair",
+      "market_makers" => [],
+      "denoms" => ["gaia-atom", "eth-usdc-0xabc"],
+      "oracles" => [],
+      "tick" => 6,
+      "fee_taker" => "0.0015",
+      "fee_maker" => "0.00075",
+      "fee_address" => "thor1fee"
+    }
+  end
 
   # What a build without dynamic ranges answers for `{"range": {"dynamic": "5"}}`,
   # which it reads as a bare index: its own `StdError::ParseErr`, carrying the

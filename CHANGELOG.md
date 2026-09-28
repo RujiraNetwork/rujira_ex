@@ -234,6 +234,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   names, arities and results are unchanged.
 - `Rujira.Fin.Pair.list/1` now resolves its pair configs concurrently, via
   `Rujira.Enum.reduce_async_while_ok/4`, matching every other protocol list.
+- `Rujira.Fin.Range.list_all/3` now resolves the pairs it was given by name
+  concurrently too, via `Rujira.Enum.reduce_async_while_ok/4` - the ranges of
+  those pairs already were.
 
 ## 0.6.1
 

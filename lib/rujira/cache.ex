@@ -19,7 +19,9 @@ defmodule Rujira.Cache do
       changes.
 
   Errors are never stored, and a failed fetch hands its error to every caller
-  waiting on it. A domain `:not_found` is a fact, not an error.
+  waiting on it. A domain `:not_found` is a fact, not an error. A fetch may also
+  return `{:bypass, value}`, for a value its caller must be served but this
+  store must not keep - see `fetch/4`.
 
   ## Sources
 
@@ -100,7 +102,7 @@ defmodule Rujira.Cache do
   |---|---|---|
   | Measurements | `duration` | How long serving the read took, the store lookup included |
   | Metadata | `store` | `:frontier`, `:exact` or `:identity` - which store served it, or would have filed it |
-  | | `result` | `:hit` - served from the store; `:miss` - a node read ran, or joined one already in flight; `:error` - it failed, and nothing was stored |
+  | | `result` | `:hit` - served from the store; `:miss` - a node read ran, or joined one already in flight; `:bypass` - a node read ran and its value was served without being stored, because the fetch asked for that; `:error` - it failed, and nothing was stored |
   | | `module`, `function` | The query key's module and function. Its arguments are left out: they carry addresses and denoms, which would give the metric the cardinality of the chain. Both `nil` for a key that is not `{module, function, args}` |
 
   A read at a height the frontier cannot serve is reported once, under
@@ -170,6 +172,13 @@ defmodule Rujira.Cache do
 
   @type result :: {:ok, term()} | {:error, term()}
 
+  @typedoc """
+  What a fetch may return: a value to store and serve, a value to serve without
+  storing it, or a failure. `{:bypass, value}` reaches the caller as
+  `{:ok, value}`.
+  """
+  @type outcome :: {:ok, term()} | {:bypass, term()} | {:error, term()}
+
   # --- Head ---
 
   @doc "The head: the last height `Rujira.Node.advance/1` reached, or `nil` before the first."
@@ -232,8 +241,14 @@ defmodule Rujira.Cache do
   identity read, which has none. Its result is stored only if it succeeded.
   Concurrent callers of the same key at the same height share one fetch, and
   one failure.
+
+  A `fun` that returns `{:bypass, value}` is served that value - the caller gets
+  `{:ok, value}` - and nothing is stored under `query_key`. It is for a read
+  whose node query can answer something other than the fact this key caches: the
+  answer is still the caller's, so the read is reported as `:bypass` rather than
+  as an error.
   """
-  @spec fetch(query_key(), sources(), Node.opts(), (pos_integer() | nil -> result())) :: result()
+  @spec fetch(query_key(), sources(), Node.opts(), (pos_integer() | nil -> outcome())) :: result()
   def fetch(query_key, :identity, opts, fun),
     do: identity(query_key, Tables.gen(), opts, fun)
 
@@ -343,10 +358,14 @@ defmodule Rujira.Cache do
   end
 
   defp ran(store, query_key, start, result) do
-    Telemetry.fetch(store, outcome(result), query_key, start)
-    result
+    Telemetry.fetch(store, reported(result), query_key, start)
+    served(result)
   end
 
-  defp outcome({:ok, _value}), do: :miss
-  defp outcome({:error, _reason}), do: :error
+  defp reported({:ok, _value}), do: :miss
+  defp reported({:bypass, _value}), do: :bypass
+  defp reported({:error, _reason}), do: :error
+
+  defp served({:bypass, value}), do: {:ok, value}
+  defp served(result), do: result
 end

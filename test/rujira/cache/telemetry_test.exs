@@ -9,7 +9,12 @@ defmodule Rujira.Cache.TelemetryTest do
 
   import ExUnit.CaptureLog
 
+  alias Cosmos.Bank.V1beta1.Metadata, as: DenomMetadata
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataResponse
+  alias Rujira.Assets.Metadata
   alias Rujira.Cache
+  alias Rujira.Test.MockNode
 
   @event [:rujira, :cache, :fetch]
   @key {__MODULE__, :thing, ["thor1a"]}
@@ -53,6 +58,30 @@ defmodule Rujira.Cache.TelemetryTest do
 
     assert {:ok, 1} = Cache.fetch(@key, @contract, [], fn _height -> {:ok, 1} end)
     assert_receive {:telemetry, _measurements, %{store: :frontier, result: :miss}}
+  end
+
+  test "a read whose value is not stored is a bypass, not an error" do
+    assert {:ok, 1} = Cache.fetch(@key, @contract, [], fn _height -> {:bypass, 1} end)
+    assert_receive {:telemetry, _measurements, %{store: :frontier, result: :bypass}}
+
+    assert {:ok, 2} = Cache.fetch(@key, @contract, [], fn _height -> {:ok, 2} end)
+    assert_receive {:telemetry, _measurements, %{store: :frontier, result: :miss}}
+  end
+
+  # The absence of a denom's metadata and the metadata itself come out of one
+  # node read, and only one of them belongs in the store that read it.
+  test "a first read of a denom the node holds metadata for reports no error" do
+    denom = "x/telemetry-metadata-test"
+
+    MockNode.expect(fn %QueryDenomMetadataRequest{denom: ^denom} ->
+      {:ok, %QueryDenomMetadataResponse{metadata: %DenomMetadata{symbol: "TELE"}}}
+    end)
+
+    assert {:ok, %Metadata{symbol: "TELE"}} = Metadata.load_metadata(denom)
+
+    assert_receive {:telemetry, _measurements, %{store: :frontier, result: :bypass}}
+    assert_receive {:telemetry, _measurements, %{store: :identity, result: :miss}}
+    refute_receive {:telemetry, _measurements, %{result: :error}}
   end
 
   test "a read below the head is reported once, under the store that served it" do

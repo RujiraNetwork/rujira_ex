@@ -82,13 +82,12 @@ defmodule Rujira.Assets.Metadata do
   #
   # Metadata the node holds can never change, so it is this function's own
   # result and lands in the identity store above. The node holding none lasts
-  # only until a block creates the denom, so `absence/1` caches it under its
-  # own key - and hands metadata back as `{:present, _}`, an error, so that the
-  # absence cache stores nothing for a denom that does exist.
+  # only until a block creates the denom, so `absence/1` caches it under its own
+  # key - and hands metadata back unstored, which is what `:bypass` is for.
   defp read(denom) do
     case absence(denom) do
       {:ok, :none} -> {:error, :not_found}
-      {:error, {:present, metadata}} -> {:ok, metadata}
+      {:ok, metadata} -> {:ok, metadata}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -107,16 +106,23 @@ defmodule Rujira.Assets.Metadata do
 
   defp cached_absence(denom) do
     Cache.fetch({__MODULE__, :absence, [denom]}, [{:denom_metadata, denom}], [], fn _height ->
-      fetch_metadata(denom)
+      unstored_if_present(fetch_metadata(denom))
     end)
   end
+
+  # Metadata the node does hold is not the fact this key caches, so the absence
+  # store must keep nothing for it - `{:bypass, _}` serves it to the caller,
+  # which files it in the identity store instead, and leaves the read reported
+  # as what it was: a node read that answered, not one that failed.
+  defp unstored_if_present({:ok, %__MODULE__{} = metadata}), do: {:bypass, metadata}
+  defp unstored_if_present(result), do: result
 
   defp fetch_metadata(denom) do
     q = %QueryDenomMetadataRequest{denom: denom}
 
     case Node.query(&Stub.denom_metadata/3, q) do
       {:ok, %QueryDenomMetadataResponse{metadata: metadata}} ->
-        {:error, {:present, new(metadata)}}
+        {:ok, new(metadata)}
 
       {:error, %RPCError{status: 5, message: "client metadata for denom" <> _}} ->
         {:ok, :none}

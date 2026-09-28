@@ -62,8 +62,10 @@ Rujira.Node.advance(%Rujira.Thorchain.Block{} = block)  # no refetch
   never reaches, gives up with `{:error, :timeout}` after `lock_timeout`. The
   advance itself is not abandoned: the target still holds the height, and
   whoever has the lock is still filling towards it. Because `lock_timeout` is
-  also when a lock becomes takeable, reaching this needs a holder that keeps
-  reacquiring — a long catch-up — rather than one that is merely slow.
+  also when a lock becomes takeable, reaching this needs a lock that was taken
+  no earlier than the wait began — one that only goes stale after the waiter's
+  deadline — whether its holder keeps reacquiring through a long catch-up or
+  won the race a moment ahead and is slow to finish.
 
 ## Reads
 

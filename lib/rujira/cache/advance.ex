@@ -23,9 +23,11 @@ defmodule Rujira.Cache.Advance do
   path free of them.
 
   The wait ends in `{:error, :timeout}` after `lock_timeout` - the same window
-  after which a lock is taken over, so the only way to reach it is a holder
-  that keeps the lock fresh by reacquiring it, which is what a long catch-up
-  does.
+  after which a lock is taken over. A waiter therefore reaches it only when the
+  lock it keeps finding was taken no earlier than its own wait began, because
+  such a lock goes stale after the waiter's deadline rather than before it -
+  whether the holder kept it fresh by reacquiring it, as a long catch-up does,
+  or simply won the race a moment ahead and is slow.
 
   After releasing the lock the holder re-reads the target and reacquires if it
   moved, so a caller that raised the target and then died cannot leave the head
