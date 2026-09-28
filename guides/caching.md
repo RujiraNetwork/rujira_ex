@@ -154,3 +154,18 @@ uncached error depends on whether the entity has an empty form:
   are identified by address or key and have no empty form. They are cached
   as facts (see [Model](#model)) until their contract's event invalidates
   them.
+
+## Why these reads carry over
+
+| Read | Source | Evidence |
+|---|---|---|
+| Staking account `pending_revenue` | `{:contract, staking}` | Computed from stored `POOL_ACCOUNTS` (rujira-rs `account_pool.rs:63`) using `(sum - account.sum_snapshot) x amount`; only the staking `status` query reads the bank balance and also carries `{:balance, pool}`. |
+| FIN dynamic ranges | `{:contract, fin}` | Range query handlers take only storage with no env or oracle (rujira-fin `ranges/query.rs` on the dynamic-range branch); the struct exposes only the stored `aep`. |
+| Revenue `status` | `{:contract, revenue}` | Reads `Action::last(deps.storage)` (rujira-revenue `src/contract.rs:201-203`). |
+| ThorchainSwap `markets` / `vaults` | `{:contract, thorchain-swap}` | Storage ranges over `MARKETS` / `VAULTS` (rujira-thorchain-swap `src/contract.rs:257-273`); only `quote` reads the vault through the querier and is refreshed every block. |
+
+Each of these reads depends on a single contract; the `{:contract, address}` source is complete — no oracle, environment, or per-block dependency lies hidden in its implementation.
+
+## Why configs are not reused across backfilled heights
+
+With blocks pushed in order, the frontier already carries every config forward until an event from its contract changes it. Keying a config by code id would be wrong, because an `update_config` execute changes the config without changing its code. Heights read outside the pushed sequence (backfill) have no change history, so they are cached per exact height only.
