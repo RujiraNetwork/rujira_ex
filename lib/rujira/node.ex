@@ -155,20 +155,7 @@ defmodule Rujira.Node do
 
   def height_unavailable?(_), do: false
 
-  @doc """
-  Runs `fetch` when `opts` requests a historical height, `cached` otherwise.
-
-  The one place the `:height` check lives, so a memoized query can keep its
-  cached path for live reads and take an uncached one for a height read - a
-  height read is never cached.
-  """
-  @spec at_height(opts(), (-> result), (-> result)) :: result when result: var
-  def at_height(opts, fetch, cached), do: dispatch(Keyword.get(opts, :height), fetch, cached)
-
   # --- Private ---
-
-  defp dispatch(nil, _fetch, cached), do: cached.()
-  defp dispatch(_height, fetch, _cached), do: fetch.()
 
   defp do_height_query(fun, _request, _opts, _height) when is_function(fun, 2) do
     {:error, :height_not_supported}

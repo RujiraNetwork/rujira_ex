@@ -93,7 +93,7 @@ defmodule Rujira.Ghost.VaultTest do
         {:error, %GRPC.RPCError{status: 2, message: "codespace wasm code 22: no such contract"}}
       end)
 
-      assert {:error, :not_found} = Vault.from_id("thor1missing")
+      assert {:error, :not_found} = Vault.from_id("thor1missing", height: 12_345)
     end
   end
 

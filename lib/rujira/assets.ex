@@ -82,9 +82,9 @@ defmodule Rujira.Assets do
 
   An `x/…` id is a bank denom, and resolves exactly as `from_denom/2` does, so
   one id always yields one asset. That **reads the denom's metadata from the
-  node** - at latest and memoized, ignoring `opts[:height]` - and returns the
-  node's error unchanged when the read fails for any reason other than the
-  denom having no metadata.
+  node** - always at latest and cached as an identity fact, ignoring
+  `opts[:height]` - and returns the node's error unchanged when the read
+  fails for any reason other than the denom having no metadata.
   """
   @spec from_id(String.t(), Node.opts()) :: {:ok, Asset.t()} | {:error, term()}
   def from_id(id, opts \\ [])

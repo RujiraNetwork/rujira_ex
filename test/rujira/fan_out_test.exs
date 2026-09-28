@@ -32,12 +32,9 @@ defmodule Rujira.FanOutTest do
       else
         Application.delete_env(:rujira_ex, :fan_out)
       end
-
-      Memoize.invalidate()
     end)
 
     Application.delete_env(:rujira_ex, :fan_out)
-    Memoize.invalidate()
     :ok
   end
 

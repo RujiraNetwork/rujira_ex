@@ -23,38 +23,8 @@ defmodule Rujira do
       config :rujira_ex,
         node: MyApp.Node,
         prices: Rujira.Prices.Default,
-        cache_ttl: 15_000,
         fan_out: [timeout: 15_000, max_concurrency: 16]
   """
-
-  @doc """
-  Returns the global cache TTL in milliseconds.
-
-  Used by all `defmemo` calls with expiration. Configurable via:
-
-      config :rujira_ex, cache_ttl: 15_000
-
-  Defaults to 15 seconds. Set to 0 to disable expiration.
-  """
-  @spec cache_ttl() :: non_neg_integer()
-  def cache_ttl do
-    Application.get_env(:rujira_ex, :cache_ttl, 15_000)
-  end
-
-  @doc """
-  Returns the TTL in milliseconds for a memoized block read.
-
-  A block at a height never changes, so this bounds how long one is kept in
-  memory rather than how stale it may be. Configurable via:
-
-      config :rujira_ex, block_cache_ttl: 60_000
-
-  Defaults to `cache_ttl/0`. Set to 0 to disable expiration.
-  """
-  @spec block_cache_ttl() :: non_neg_integer()
-  def block_cache_ttl do
-    Application.get_env(:rujira_ex, :block_cache_ttl, cache_ttl())
-  end
 
   @doc """
   Returns the configured concurrent fan-out policy.

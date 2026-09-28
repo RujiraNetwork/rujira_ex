@@ -70,6 +70,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - `Rujira.Thorchain.Block.get/2` no longer expires a cached block on the
       `block_cache_ttl` window; a block is held at its own height, and how
       many are held is the cache's `retention`.
+    - `Rujira.Node.at_height` is removed - there is no more uncached height
+      path to dispatch to; every read, at any height, goes through
+      `Rujira.Cache`.
+    - `Rujira.cache_ttl` and `Rujira.block_cache_ttl`, and their
+      `cache_ttl`/`block_cache_ttl` app-env keys, are removed along with the
+      `Memoize` dependency - nothing expires on a TTL any more.
   - **Group B** - `Rujira.Fin` and `Rujira.Prices.Default`:
     - `Rujira.Fin.Pair.list/0,1` is cached against the code registry and every
       pair it resolved. `denom_for_ticker`, `find_stable`, `find_default`,
@@ -89,7 +95,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
       denoms plus `min_price`'s wire form, rather than on the structs they
       arrive in.
     - `Rujira.Prices.Default.oracle_price/1,2` and `fin_price/1,2` no longer
-      expire on `Rujira.cache_ttl/0`; a price is held at its own height.
+      expire on the `cache_ttl`; a price is held at its own height.
     - `Rujira.Fin.denom_for_ticker/1,2` and `get_pair_from_denoms/2,3` keep
       both arities, now as one function with a default `opts`.
   - **Group C** - `Rujira.Ghost.Vault.Status`, `.Borrower`, `.Delegate`,
@@ -115,6 +121,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
       `Bank.Holder.holders/1,2` drops its 1-hour TTL.
     - `Bank.Supply.list/1` (every denom's supply) has no single invalidation
       tag, so it is cached against `:per_block` rather than carried over.
+  - **Not-found and heights, across the groups:**
+    - `Rujira.Fin.Order.query/4,5`, `Rujira.Fin.Range.query/2,3` and
+      `query_dynamic/2,3`, and `Rujira.Ghost.Credit.Account`'s account reads
+      cache a domain not-found as the fact it is, under the read's own
+      sources, and still return `{:error, :not_found}`. `Rujira.Prices.Default`
+      does the same for `{:error, :no_price}`, per height.
+    - `Rujira.Staking.Pool.Account.load/3` answers an owner the contract holds
+      no record for with an empty account (`bonded` and `pending_revenue`
+      zero) instead of `{:error, :not_found}`. The staking contract never
+      removes an account, so a missing row means a fully unbonded one.
+    - Every public opts-taking entry point resolves its height once with
+      `Rujira.Cache.pin/1`, so a `list` fan-out reads every item at one
+      height even if the head moves under it.
+    - `Rujira.Brune.LoggedEvent.list/1-4` returns
+      `{:error, :invalid_response}` for a reply missing `events`, rather than
+      the raw reply.
 - A token-factory (`x/…`) denom takes its symbol, ticker and decimals from the
   denom metadata THORChain holds for it, and the `Asset` carries that metadata.
   A denom the node holds no metadata for is still named here: `x/brune` is

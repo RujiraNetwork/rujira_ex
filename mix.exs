@@ -73,7 +73,6 @@ defmodule RujiraEx.MixProject do
       {:grpc, "~> 0.9 or ~> 1.0"},
       {:protobuf, "~> 0.12"},
       {:bech32, "~> 1.0"},
-      {:memoize, "~> 1.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: [:test], runtime: false},

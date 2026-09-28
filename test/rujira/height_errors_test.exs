@@ -37,11 +37,8 @@ defmodule Rujira.HeightErrorsTest do
       else
         Application.delete_env(:rujira_ex, :protocol_modules)
       end
-
-      Memoize.invalidate()
     end)
 
-    Memoize.invalidate()
     :ok
   end
 

@@ -152,7 +152,7 @@ mult/div/round/to_integer/from_float` directly outside `Rujira.Math` itself.
 
 `Asset.t()` is the single token identity. Consumers pass a token in as an `Asset` and
 get a quantity of one back as a `Coin` (asset + amount). Denom strings exist only at
-the wire boundary — inside the memoized query that talks to the node.
+the wire boundary — inside the cached query that talks to the node.
 
 | Type | Use | Example |
 |------|-----|---------|
@@ -183,7 +183,7 @@ not bank denoms, so `to_native/1` on one is `{:error, :no_native_denom}` rather 
 secured denom of the same token.
 
 A token-factory (`x/…`) denom is identity the chain holds, so resolving one reads the
-denom metadata — always at latest and memoized, ignoring `opts[:height]`:
+denom metadata — always at latest and cached as an identity fact, ignoring `opts[:height]`:
 
 | Order | Source | Symbol and ticker | Decimals |
 |-------|--------|-------------------|----------|
@@ -232,22 +232,19 @@ defstruct [:id, :items, :total, :price, :book]
 
 Public query functions take and return **domain types**, never wire strings. If a
 function hands back a typed value (an enum atom, a struct), callers must be able to
-query — and therefore invalidate — with that same typed value.
+query with that same typed value.
 
 - Wire serialization happens in exactly one place per query: the gRPC call inside
-  the `defmemo`. Keep `Atom.to_string/1`, struct→map encoders, etc. there.
-- `defmemo` cache keys are domain types (e.g. `Range.query(address, idx)` keys on
+  the function passed to `Cache.fetch/4`. Keep `Atom.to_string/1`, struct→map
+  encoders, etc. there.
+- `Cache.fetch/4` cache keys are domain types (e.g. `Range.query(address, idx)` keys on
   the integer `idx`; `Order.query/4` keys on `:base | :quote` + `Price.order()`).
 - Construction **canonicalizes** so equal values are equal terms — otherwise a typed
   cache key can miss (e.g. `1.5` vs `1.50`). `Price.parse/1` normalizes decimals for
   this reason.
 
-Because keys are typed, invalidation needs no special API — invalidate with the same
-typed values you query with:
-
-```elixir
-Memoize.invalidate(Rujira.Fin.Order, :query, [pair, owner, side, price])
-```
+Because keys are typed, invalidation needs no special API — see "Caching" for how
+`sources` drives it automatically from chain events.
 
 ## Visibility
 
@@ -308,7 +305,7 @@ whole composite at one height. Pure functions take no `opts`.
 
 The one documented exception is denom metadata (`Rujira.Assets.Metadata`,
 `Rujira.Assets.load_metadata/2`): it is token identity, not chain state, so it
-is always read at latest and memoized, and a `:height` in `opts` is accepted
+is always read at latest and cached as an identity fact, and a `:height` in `opts` is accepted
 (for arity parity) but ignored. An admin metadata change shows the current
 symbol even in a historical read; every other field of that read still
 reflects the requested height.
@@ -346,9 +343,8 @@ options, unlike `:height`, which `Rujira.Node.query/3` turns into an
 
 Every cached read goes through `Rujira.Cache`, keyed by height — a value at
 height `h` is cached under `h`, not thrown away because it isn't "now". There
-is no more `defmemo`/`use Memoize`, no `expires_in:`/TTL, and no uncached
-height path via `Rujira.Node.at_height/3`: every read, at any height, goes through
-the cache.
+is no `defmemo`/`use Memoize`, no `expires_in:`/TTL, and no uncached height
+path: every read, at any height, goes through the cache.
 
 ```elixir
 @spec list(Node.opts()) :: {:ok, [t()]} | {:error, term()}
