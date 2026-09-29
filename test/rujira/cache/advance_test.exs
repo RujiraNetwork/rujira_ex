@@ -460,29 +460,14 @@ defmodule Rujira.Cache.AdvanceTest do
     pid
   end
 
-  # A process that holds the lock and keeps reacquiring it, the way a holder in
-  # a long catch-up does, so it never goes stale enough to be taken over.
+  # A process that holds the lock and never goes stale, by construction rather
+  # than by reacquiring it often enough: its timestamp is set far enough in
+  # the future that no `lock_timeout` in these tests can ever make `at - held`
+  # exceed it, however long the holder is descheduled for.
   defp hold_lock do
-    pid = spawn(&refresh_lock/0)
-    on_exit(fn -> Process.exit(pid, :kill) end)
-
-    await_lock(pid)
+    pid = idle()
+    :ets.insert(Tables.lock(), {:lock, pid, System.monotonic_time(:millisecond) + 3_600_000})
     pid
-  end
-
-  defp refresh_lock do
-    :ets.insert(Tables.lock(), {:lock, self(), System.monotonic_time(:millisecond)})
-    Process.sleep(10)
-    refresh_lock()
-  end
-
-  defp await_lock(pid), do: eventually(&locked_by/0, {:ok, pid})
-
-  defp locked_by do
-    case :ets.lookup(Tables.lock(), :lock) do
-      [{:lock, pid, _at}] -> {:ok, pid}
-      _ -> :none
-    end
   end
 
   defp await_target(target), do: eventually(&Tables.target/0, target)
