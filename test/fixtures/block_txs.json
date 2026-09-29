@@ -1,0 +1,626 @@
+{
+  "/types.MsgObservedTxQuorum:outbound": {
+    "height": 27976460,
+    "hash": "14FCC6471CA6CAA9DAF081FC5E328326AEA463B73F867A0ACC088D78B6267014",
+    "code": 0,
+    "tx": {
+      "messages": [
+        {
+          "@type": "/types.MsgObservedTxQuorum",
+          "quoTx": {
+            "obsTx": {
+              "tx": {
+                "id": "F345E0D6735508C60580D18D74BBDE2B583183D5C6576F447DEE6FFEC38EE1B9",
+                "chain": "BTC",
+                "from_address": "bc1qp0jus87dalh7xku22tx3uhyhlf8cjuc0vvkhjz",
+                "to_address": "bc1qhe5w8tswjkc3cmzzp7dmenczvx2kpmr3ef5yh5",
+                "coins": [
+                  {
+                    "asset": "BTC.BTC",
+                    "amount": "28839028",
+                    "decimals": "0"
+                  }
+                ],
+                "gas": [
+                  {
+                    "asset": "BTC.BTC",
+                    "amount": "1000",
+                    "decimals": "0"
+                  }
+                ],
+                "memo": "OUT:A9BB7371A180B3FD875E660DFE93FA6E414723EEDAAEA9F396A59DB2C6C70324"
+              },
+              "status": "incomplete",
+              "out_hashes": [],
+              "block_height": "968533",
+              "signers": [],
+              "observed_pub_key": "thorpub1addwnpepqf8q4hqnlw9ghvqxgf8hy7q0awan4h268fr44q7ps3lq7ajll8lvj82fe8s",
+              "keysign_ms": "0",
+              "finalise_height": "968533",
+              "aggregator": "",
+              "aggregator_target": "",
+              "aggregator_target_limit": null,
+              "spent_output_refs": [],
+              "xmr_tx_key": ""
+            },
+            "attestations": [
+              {
+                "PubKey": "AsF+POwhvM9OOykU4LkIXZdCHipZ6rFAt1OSWy1LERqO",
+                "Signature": "K1o1cvQQ/tOX4gT2DG+c3BwuXFZeRoRSaRah+5OVZmw2evdB4tRMwbT8JHby/HAu/a4HKMGNPOhY0Feod/+ozw=="
+              },
+              {
+                "PubKey": "A8OHDE+4UbznfLuJnBDG+7QMtxGJ+oemqGxMZXv4MFPp",
+                "Signature": "1CQfx12iBChY7G+MwNZ0QEMMYl6psiGfvADxCDrscaRNGM0TBG1fBBiq/HOMKAKWfBltU4FSMhYbnwCHp2HBWA=="
+              }
+            ],
+            "inbound": false,
+            "allow_future_observation": false
+          },
+          "signer": "thor1zxhfu0qmmq6gmgq4sgz0xgq69h0nhqx5yrseu5"
+        }
+      ]
+    }
+  },
+  "/types.MsgObservedTxQuorum:inbound": {
+    "height": 27976460,
+    "hash": "DC65E13B811952E4F9D1EDD748EBDA4D9DFC3AED1EA621B7DF2350AAFBA07402",
+    "code": 0,
+    "tx": {
+      "messages": [
+        {
+          "@type": "/types.MsgObservedTxQuorum",
+          "quoTx": {
+            "obsTx": {
+              "tx": {
+                "id": "C371A9ED5AF3DBEAD6246A7F5CDC6D8FF15296022EAB1A300EAEBC9BA47D6DD4",
+                "chain": "ETH",
+                "from_address": "0x793129bc90f958069429f43f42df2f8365549f36",
+                "to_address": "0x0db14a0288f4637f60b46690f1971b756c58a47e",
+                "coins": [
+                  {
+                    "asset": "ETH.ETH",
+                    "amount": "156962078",
+                    "decimals": "0"
+                  }
+                ],
+                "gas": [
+                  {
+                    "asset": "ETH.ETH",
+                    "amount": "4260",
+                    "decimals": "0"
+                  }
+                ],
+                "memo": "=:b:bc1p2e3l03h5n0tkskg9hh2869wp0m7tjmlz7mvl8lk7zu34uzufhz0qlgfk2u:4978111"
+              },
+              "status": "incomplete",
+              "out_hashes": [],
+              "block_height": "26053603",
+              "signers": [],
+              "observed_pub_key": "thorpub1addwnpepqf8q4hqnlw9ghvqxgf8hy7q0awan4h268fr44q7ps3lq7ajll8lvj82fe8s",
+              "keysign_ms": "0",
+              "finalise_height": "26053603",
+              "aggregator": "",
+              "aggregator_target": "",
+              "aggregator_target_limit": null,
+              "spent_output_refs": [],
+              "xmr_tx_key": ""
+            },
+            "attestations": [
+              {
+                "PubKey": "Aqgaqiv/8egHTMuDUyR+yG9x84vp7dK4CY2cfvrTKqHY",
+                "Signature": "LQCAWpk5mfDUcc4sLgPT7MeiAzbXyKCwCjqbYTlfgcdL0vEufWGSuNqyGKBPuR4qUxe/Fnaippx+4tEH8tMWKw=="
+              },
+              {
+                "PubKey": "AsF+POwhvM9OOykU4LkIXZdCHipZ6rFAt1OSWy1LERqO",
+                "Signature": "U1K3Q3jqxzI+t26lJwJyeoMTPIG8hSbnTJCR3dqL9tBUHHYaCbIKe2+/vbCNIycJuc9fPV8WJciS0Ux7dusfww=="
+              }
+            ],
+            "inbound": true,
+            "allow_future_observation": false
+          },
+          "signer": "thor1zxhfu0qmmq6gmgq4sgz0xgq69h0nhqx5yrseu5"
+        }
+      ]
+    }
+  },
+  "/types.MsgSolvencyQuorum": {
+    "height": 27976460,
+    "hash": "A1F772E9CC45924F697747C1FADBF70663359D46451236023A52179299E72B52",
+    "code": 0,
+    "tx": {
+      "messages": [
+        {
+          "@type": "/types.MsgSolvencyQuorum",
+          "quoSolvency": {
+            "solvency": {
+              "id": "8A4713F6779198FF51FDB5A8D41C7A0993FB0B9258F79C8B83E05612185C195F",
+              "chain": "TRON",
+              "pub_key": "thorpub1addwnpepqf8q4hqnlw9ghvqxgf8hy7q0awan4h268fr44q7ps3lq7ajll8lvj82fe8s",
+              "coins": [
+                {
+                  "asset": "TRON.TRX",
+                  "amount": "21537677060300",
+                  "decimals": "6"
+                },
+                {
+                  "asset": "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T",
+                  "amount": "1086048639100",
+                  "decimals": "6"
+                }
+              ],
+              "height": "86552141"
+            },
+            "attestations": [
+              {
+                "PubKey": "AsF+POwhvM9OOykU4LkIXZdCHipZ6rFAt1OSWy1LERqO",
+                "Signature": "D9Ab8xlcS5iGMmskcbYxyzDyOlsKR8fZ7FkWyNLyB9ZrYO4EXye5Tep9u4jzF1GkEKmzfp/Mw4VoEEtIbSklNQ=="
+              },
+              {
+                "PubKey": "A2BFSDLOFuvgtelm69BG0H6ddOmpu0AiIseVTcwwg4vy",
+                "Signature": "YazOZ1aM+zimzJZkCpQKqdcwFMelYS0qTfvKcos02Ns4e+BKYXV6j2v+47Z6DmXEfee8Rp6KmsMwUysg9JpTHA=="
+              }
+            ]
+          },
+          "signer": "thor1zxhfu0qmmq6gmgq4sgz0xgq69h0nhqx5yrseu5"
+        }
+      ]
+    }
+  },
+  "/types.MsgPriceFeedQuorumBatch": {
+    "height": 27976460,
+    "hash": "09849EAA70DE7DDD81D590FC8EDE6099F7B42B1E64D9DE47D764DB30703B34BB",
+    "code": 0,
+    "tx": {
+      "messages": [
+        {
+          "@type": "/types.MsgPriceFeedQuorumBatch",
+          "quoPriceFeeds": [
+            {
+              "price_feed": {
+                "version": "4nZFPgzLi8Q=",
+                "time": "1790328899603",
+                "rates": [
+                  {
+                    "amount": "18084",
+                    "decimals": 4
+                  },
+                  {
+                    "amount": "104372",
+                    "decimals": 4
+                  },
+                  {
+                    "amount": "3385553",
+                    "decimals": 4
+                  }
+                ]
+              },
+              "attestations": [
+                {
+                  "PubKey": "A2/SgQcEOW0x21edPVa6gt0VKX9Ss145MTbBYh/zbhOh",
+                  "Signature": "Dj8W+WzVqBKUgPLYhKF4ye0hqtnIt/RoQ2Pb+wLM5xksJr8iLHda/p1EgB5yfvb13rKLvB2aDH1JveKeG47yVw=="
+                }
+              ]
+            }
+          ],
+          "signer": "thor1zxhfu0qmmq6gmgq4sgz0xgq69h0nhqx5yrseu5"
+        }
+      ]
+    }
+  },
+  "/types.MsgTssKeysignFail": {
+    "height": 27976460,
+    "hash": "0CC9D646E9F2D814705EFA292227952183F51C54C3743C6D7C3D9C6D72209AED",
+    "code": 0,
+    "tx": {
+      "body": {
+        "messages": [
+          {
+            "@type": "/types.MsgTssKeysignFail",
+            "id": "647ab65f1e158b133f08d1f80e119a1ffd4436181885db514dcb1e921d27cb08",
+            "height": "27976332",
+            "blame": {
+              "fail_reason": "signers fail to sync before keygen/keysign",
+              "is_unicast": false,
+              "blame_nodes": [
+                {
+                  "pubkey": "thorpub1addwnpepqw3dljmjmskmrfdplvjupursj2hgvrejqjyfqdn4d9k0r5chjrlsx9v6vgg",
+                  "blame_data": null,
+                  "blame_signature": null
+                }
+              ],
+              "round": ""
+            },
+            "memo": "OUT:DCAAA107FBCD007F8094C47B74866F2122DA97F545465C07D24FB2BED1A73B85",
+            "coins": [
+              {
+                "asset": "ETH.ETH",
+                "amount": "549651",
+                "decimals": "0"
+              }
+            ],
+            "pub_key": "thorpub1addwnpepqtt32g77xuj7wmmwjnnzhqdjkt6luay7vec3ttt77ymhw9gpehcrzxslmgc",
+            "signer": "thor1rp6ll4p2qrj5k9mfelzmwv7ht0gv26pqxka8py"
+          }
+        ],
+        "memo": "",
+        "timeout_height": "0",
+        "unordered": false,
+        "timeout_timestamp": null,
+        "extension_options": [],
+        "non_critical_extension_options": []
+      },
+      "auth_info": {
+        "signer_infos": [
+          {
+            "public_key": {
+              "@type": "/cosmos.crypto.secp256k1.PubKey",
+              "key": "ArDL3mnSMtV2I3ZgvjjtYn7h53fzji9rMjOQTRXhqA8+"
+            },
+            "mode_info": {
+              "single": {
+                "mode": "SIGN_MODE_DIRECT"
+              }
+            },
+            "sequence": "499582"
+          }
+        ],
+        "fee": {
+          "amount": [],
+          "gas_limit": "4000000000",
+          "payer": "",
+          "granter": ""
+        },
+        "tip": null
+      },
+      "signatures": [
+        "4TUt0+0BRXwwS/7FXz4PwjeKUimEakabxGlysghydesBCrmI/TW3V8CfZS7c2GD4uOeWPtCayeDDiEOSWnBu7g=="
+      ]
+    }
+  },
+  "/types.MsgDeposit": {
+    "height": 27976460,
+    "hash": "00000000168BFF0AC22B20464475B0AC6A28B405E80C49A92392DDB6AA2E19B0",
+    "code": 0,
+    "tx": {
+      "body": {
+        "messages": [
+          {
+            "@type": "/types.MsgDeposit",
+            "coins": [
+              {
+                "asset": "BTC~BTC",
+                "amount": "2758084",
+                "decimals": "0"
+              }
+            ],
+            "memo": "=:ETH~USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7:thor166n4w5039meulfa3p6ydg60ve6ueac7tlt0jws:233733251966/0/2",
+            "signer": "thor166n4w5039meulfa3p6ydg60ve6ueac7tlt0jws",
+            "salt": null
+          }
+        ],
+        "memo": "",
+        "timeout_height": "0",
+        "unordered": false,
+        "timeout_timestamp": null,
+        "extension_options": [],
+        "non_critical_extension_options": []
+      },
+      "auth_info": {
+        "signer_infos": [
+          {
+            "public_key": {
+              "@type": "/cosmos.crypto.secp256k1.PubKey",
+              "key": "A7VxzkjhsKwIhSplx5IldREa8uckxsXrfALsMQoFeqmY"
+            },
+            "mode_info": {
+              "single": {
+                "mode": "SIGN_MODE_DIRECT"
+              }
+            },
+            "sequence": "8947130"
+          }
+        ],
+        "fee": {
+          "amount": [],
+          "gas_limit": "0",
+          "payer": "",
+          "granter": ""
+        },
+        "tip": null
+      },
+      "signatures": [
+        "FPrdPE6XBpydNPpdrd+pRvFqjl46R67F7l0ywHOB+MBDAYB7yea+aTQYCnBbTq8XsdVuSyNCpCAppix0nNCD1w=="
+      ]
+    }
+  },
+  "/cosmwasm.wasm.v1.MsgExecuteContract": {
+    "height": 27976460,
+    "hash": "B3E2A6992FEB4C985A624C417EFF274B6FA1BDAD58EF84F4A138BFF14043EEA0",
+    "code": 0,
+    "tx": {
+      "body": {
+        "messages": [
+          {
+            "@type": "/cosmwasm.wasm.v1.MsgExecuteContract",
+            "sender": "thor1qr7xydzury7yuvuvc47qtll95a7nqxut8400l6",
+            "contract": "thor1s4jpxtz0jsh6elyqcdujd303ptefz53gknmcp437rm9ykxnfhysqrm5hze",
+            "msg": {
+              "arb": {}
+            },
+            "funds": []
+          },
+          {
+            "@type": "/cosmwasm.wasm.v1.MsgExecuteContract",
+            "sender": "thor1qr7xydzury7yuvuvc47qtll95a7nqxut8400l6",
+            "contract": "thor1dwsnlqw3lfhamc5dz3r57hlsppx3a2n2d7kppccxfdhfazjh06rs5077sz",
+            "msg": {
+              "arb": {}
+            },
+            "funds": []
+          }
+        ],
+        "memo": "",
+        "timeout_height": "27976469",
+        "unordered": false,
+        "timeout_timestamp": null,
+        "extension_options": [],
+        "non_critical_extension_options": []
+      },
+      "auth_info": {
+        "signer_infos": [
+          {
+            "public_key": {
+              "@type": "/cosmos.crypto.secp256k1.PubKey",
+              "key": "AtkF9rgz8jVypIwglZ//xguBQkgvNDaCylGtJXNZGliA"
+            },
+            "mode_info": {
+              "single": {
+                "mode": "SIGN_MODE_DIRECT"
+              }
+            },
+            "sequence": "28565"
+          }
+        ],
+        "fee": {
+          "amount": [
+            {
+              "denom": "rune",
+              "amount": "0"
+            }
+          ],
+          "gas_limit": "48211334",
+          "payer": "",
+          "granter": ""
+        },
+        "tip": null
+      },
+      "signatures": [
+        "nzTo3luo3kHkQkhdphKckXjdqb5IjKX6cEWwM7uXz3Y1zuDpoKSFAkbNJ7cBW6rUF6waMUhv5kT94/uMBXhQiQ=="
+      ]
+    }
+  },
+  "/cosmwasm.wasm.v1.MsgExecuteContract:failed": {
+    "height": 27977808,
+    "hash": "62E671758A3ADB24DA7729F588D35F5DEB1D41053A1F6C2FAFEDAA502E835EFE",
+    "code": 5,
+    "tx": {
+      "body": {
+        "messages": [
+          {
+            "@type": "/cosmwasm.wasm.v1.MsgExecuteContract",
+            "sender": "thor1kr08pw3rtng29tj63jgwx22vp4e447mhrcvxyd",
+            "contract": "thor1efrmwk6fzhaugu056mz3nkq4vl0fgpfacm3gp6fhgrdkm4q8rrmsd5a6r5",
+            "msg": {
+              "swap": {
+                "affiliate_code": "arb",
+                "min_return": {
+                  "amount": "8000800000",
+                  "denom": "eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                },
+                "stages": [
+                  {
+                    "address": "thor1dwsnlqw3lfhamc5dz3r57hlsppx3a2n2d7kppccxfdhfazjh06rs5077sz",
+                    "denom": "btc-btc"
+                  },
+                  {
+                    "address": "thor1dwsnlqw3lfhamc5dz3r57hlsppx3a2n2d7kppccxfdhfazjh06rs5077sz",
+                    "denom": "eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                  }
+                ]
+              }
+            },
+            "funds": [
+              {
+                "denom": "eth-usdc-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                "amount": "8000000000"
+              }
+            ]
+          }
+        ],
+        "memo": "Rujira Arb",
+        "timeout_height": "0",
+        "unordered": false,
+        "timeout_timestamp": null,
+        "extension_options": [],
+        "non_critical_extension_options": []
+      },
+      "auth_info": {
+        "signer_infos": [
+          {
+            "public_key": {
+              "@type": "/cosmos.crypto.secp256k1.PubKey",
+              "key": "AqPQcoZ0xYrr/KNzm/PB6yBc02WchmFjlhVWuG7bKgBO"
+            },
+            "mode_info": {
+              "single": {
+                "mode": "SIGN_MODE_DIRECT"
+              }
+            },
+            "sequence": "30320"
+          }
+        ],
+        "fee": {
+          "amount": [
+            {
+              "denom": "rune",
+              "amount": "0"
+            }
+          ],
+          "gas_limit": "400000",
+          "payer": "",
+          "granter": ""
+        },
+        "tip": null
+      },
+      "signatures": [
+        "z8esT3h3unXPUxxVt3oDHCZuNan2HNHlmh3En/jZUZA+DPRQ5eQcXaMnpYWUM0ceesm6vrT+KGo+ZFa1hNS92g=="
+      ]
+    }
+  },
+  "/types.MsgSend": {
+    "height": 27978145,
+    "hash": "75621DCABEB651FBA8B61DF682EEF7BFB18CDF79A448AA8474D177FFFB2CA892",
+    "code": 0,
+    "tx": {
+      "body": {
+        "messages": [
+          {
+            "@type": "/types.MsgSend",
+            "from_address": "thor1t60f02r8jvzjrhtnjgfj4ne6rs5wjnejwmj7fh",
+            "to_address": "thor166n4w5039meulfa3p6ydg60ve6ueac7tlt0jws",
+            "amount": [
+              {
+                "denom": "rune",
+                "amount": "807428200000"
+              }
+            ]
+          }
+        ],
+        "memo": "",
+        "timeout_height": "0",
+        "unordered": false,
+        "timeout_timestamp": null,
+        "extension_options": [],
+        "non_critical_extension_options": []
+      },
+      "auth_info": {
+        "signer_infos": [
+          {
+            "public_key": {
+              "@type": "/cosmos.crypto.secp256k1.PubKey",
+              "key": "AvnLuECUQ8zwQ/Jtj5HCVQ0leOzEm7OtidTiGniCvx4j"
+            },
+            "mode_info": {
+              "single": {
+                "mode": "SIGN_MODE_DIRECT"
+              }
+            },
+            "sequence": "369521"
+          }
+        ],
+        "fee": {
+          "amount": [],
+          "gas_limit": "8000000",
+          "payer": "",
+          "granter": ""
+        },
+        "tip": null
+      },
+      "signatures": [
+        "n1Z9GaCwpjcHimQrJLMwijwMGcG8F93Ar78/E/hP6A4lL3owybZa6BRpkQ2f69uEvg4KD+3f/ZYpPM9HpPJMrA=="
+      ]
+    }
+  },
+  "/types.MsgNetworkFeeQuorum": {
+    "height": 27978482,
+    "hash": "5EE72F0E2A108F42EF00A4CF6E7F1AE9758DD991C4A22E09231C56B43E8D1B50",
+    "code": 0,
+    "tx": {
+      "messages": [
+        {
+          "@type": "/types.MsgNetworkFeeQuorum",
+          "quoNetFee": {
+            "network_fee": {
+              "height": "968552",
+              "chain": "BTC",
+              "transaction_size": "1000",
+              "transaction_rate": "4"
+            },
+            "attestations": [
+              {
+                "PubKey": "AuCaOjvjoqtLeAyPM0C4ZEYk0hkr+qV6hwQgRS5JrPK8",
+                "Signature": "kxFAZNawdvqs05TA795+f+LYPz+p56y7pMazEFVoOwVgmgwyoHEfGGr2wrutP9PNRn7r4DBilKnDmj0/0T+vGA=="
+              },
+              {
+                "PubKey": "A/ripqBLzSHE0J4xLyPxXiWMa5shroI5ozmsJx2QE8u5",
+                "Signature": "z/KKPGgdmvkGAkgvdYqRQdVcgyT61pgIEGAMuXTNTPlKdxmhMTYzUJi4GaCBRWWWfr6Ok0WUTXHDxzkfetaB/w=="
+              }
+            ]
+          },
+          "signer": "thor1zxhfu0qmmq6gmgq4sgz0xgq69h0nhqx5yrseu5"
+        }
+      ]
+    }
+  },
+  "/types.MsgDeposit:failed": {
+    "height": 27983874,
+    "hash": "C8347AA158DB64C36E68F0A8B74FA0A6B3680CC5A82EE5C8F3BF3CC1B45FDF1A",
+    "code": 99,
+    "tx": {
+      "body": {
+        "messages": [
+          {
+            "@type": "/types.MsgDeposit",
+            "coins": [
+              {
+                "asset": "THOR.RUNE",
+                "amount": "0",
+                "decimals": "8"
+              }
+            ],
+            "memo": "REFERENCE:BTC.BTC:=:e:sthor1v8ppstuf6e3x0r4glqc68d5jqcs2tf38v3kkv6:3091141304/0/20:sto/uws:0/1",
+            "signer": "thor1uszfy2dyd2rcjxxpy6wjuv450muljac6ssr70k",
+            "salt": null
+          }
+        ],
+        "memo": "REFERENCE:BTC.BTC:=:e:sthor1v8ppstuf6e3x0r4glqc68d5jqcs2tf38v3kkv6:3091141304/0/20:sto/uws:0/1",
+        "timeout_height": "0",
+        "unordered": false,
+        "timeout_timestamp": null,
+        "extension_options": [],
+        "non_critical_extension_options": []
+      },
+      "auth_info": {
+        "signer_infos": [
+          {
+            "public_key": {
+              "@type": "/cosmos.crypto.secp256k1.PubKey",
+              "key": "Al+lK+7b+40BQMwJIoHBL105UcRE/p6h8ySRcMm/KcKD"
+            },
+            "mode_info": {
+              "single": {
+                "mode": "SIGN_MODE_DIRECT"
+              }
+            },
+            "sequence": "31903"
+          }
+        ],
+        "fee": {
+          "amount": [
+            {
+              "denom": "rune",
+              "amount": "2000000"
+            }
+          ],
+          "gas_limit": "50000000",
+          "payer": "",
+          "granter": ""
+        },
+        "tip": null
+      },
+      "signatures": [
+        "CgNn2+TKHkOSo5gCSchZJ7FgY2mYoHY5XxOICFhwcdARhbI/M7Nk+iiGrxsNEgJz/6ljLnBP65Tu+S/csVHcaw=="
+      ]
+    }
+  }
+}

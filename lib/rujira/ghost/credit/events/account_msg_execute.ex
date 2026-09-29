@@ -11,6 +11,8 @@ defmodule Rujira.Ghost.Credit.Events.AccountMsgExecute do
   Upstream is fixing the rendering.
   """
 
+  alias Rujira.String
+
   defstruct contract: nil, msg: nil
 
   @type t :: %__MODULE__{contract: String.t(), msg: binary()}
@@ -24,12 +26,6 @@ defmodule Rujira.Ghost.Credit.Events.AccountMsgExecute do
 
   def new(_), do: {:error, :invalid_attrs}
 
-  defp decode_msg(msg) when is_binary(msg) do
-    case Base.decode64(msg) do
-      {:ok, decoded} -> {:ok, decoded}
-      :error -> {:error, :invalid_msg}
-    end
-  end
-
+  defp decode_msg(msg) when is_binary(msg), do: String.decode_base64(msg)
   defp decode_msg(_), do: {:error, :invalid_msg}
 end

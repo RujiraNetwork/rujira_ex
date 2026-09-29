@@ -24,6 +24,7 @@ defmodule Rujira.Thorchain do
   # --- Block ---
 
   defdelegate block(height \\ :latest, opts \\ []), to: Block, as: :get
+  defdelegate block_observed_txs(block), to: Block, as: :observed_txs
 
   # --- Network ---
 

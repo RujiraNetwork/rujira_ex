@@ -20,6 +20,7 @@ defmodule Rujira.Revenue.Converter do
   alias Rujira.Deployments
   alias Rujira.Math
   alias Rujira.Node
+  alias Rujira.String
 
   defmodule TargetDenom do
     @moduledoc "A target denom distributed to target_addresses each run, capped at max_per_second times the seconds elapsed since last_executed. `max_per_second` is nil on a v1.1.0 converter, which has no per-denom cap."
@@ -293,13 +294,7 @@ defmodule Rujira.Revenue.Converter do
 
   defp action(_), do: {:error, :invalid_attrs}
 
-  defp decode_msg(msg) when is_binary(msg) do
-    case Base.decode64(msg) do
-      {:ok, decoded} -> {:ok, decoded}
-      :error -> {:error, :invalid_msg}
-    end
-  end
-
+  defp decode_msg(msg) when is_binary(msg), do: String.decode_base64(msg)
   defp decode_msg(_), do: {:error, :invalid_msg}
 
   defp parse_timestamp(nil), do: {:error, :invalid_integer}

@@ -50,7 +50,8 @@ defmodule Rujira.HeightCoverageTest do
     ThorchainSwap => %{},
     Thorchain => %{
       module_address: "pure - hashes a module name into an address, no node read",
-      block: "takes its height as an argument - it travels in the request, not in metadata"
+      block: "takes its height as an argument - it travels in the request, not in metadata",
+      block_observed_txs: "pure - reads the observations off an already-read block"
     },
     Rujira.Bank => %{}
   }

@@ -74,6 +74,37 @@ defmodule Rujira.Thorchain.BlockTest do
              ]
     end
 
+    test "a block parsed in parallel keeps its transactions and events in block order" do
+      count = 24
+      suffixes = ~w(a b c)
+
+      txs =
+        for i <- 0..(count - 1),
+            do: tx("HASH#{i}", Enum.map(suffixes, &event("tx#{i}_#{&1}")))
+
+      assert {:ok, %Block{txs: parsed, events: events}} =
+               Block.new(
+                 response(100_010,
+                   finalize_events: [event("pre_a")],
+                   begin_events: [event("begin_a")],
+                   end_events: [event("end_a")],
+                   txs: txs
+                 )
+               )
+
+      assert Enum.map(parsed, &{&1.idx, &1.hash}) ==
+               Enum.map(0..(count - 1), &{&1, "HASH#{&1}"})
+
+      tx_order =
+        for i <- 0..(count - 1),
+            {suffix, event_idx} <- Enum.with_index(suffixes),
+            do: {:tx, i, event_idx, "HASH#{i}", "tx#{i}_#{suffix}"}
+
+      assert Enum.map(events, &{&1.stage, &1.tx_idx, &1.event_idx, &1.txhash, &1.event.type}) ==
+               [{:pre_block, -2, 0, nil, "pre_a"}, {:begin, -1, 0, nil, "begin_a"}] ++
+                 tx_order ++ [{:end, 2_147_483_647, 0, nil, "end_a"}]
+    end
+
     test "the stage sentinels bracket every transaction index" do
       assert Block.pre_block_tx_idx() < Block.begin_block_tx_idx()
       assert Block.begin_block_tx_idx() < 0

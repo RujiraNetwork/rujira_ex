@@ -48,8 +48,46 @@ defmodule Rujira.Coin do
     end
   end
 
-  @spec new(%{denom: String.t(), amount: String.t()}) :: {:ok, t()} | {:error, term()}
-  def new(%{denom: denom, amount: amount}), do: new(denom, amount)
+  @doc """
+  Builds a coin from a map naming its asset by THORChain id (`:asset`/`"asset"`)
+  or by bank denom (`:denom`/`"denom"`), with amount as an integer or a string.
+
+  Extra keys - a coin's `decimals` hint, say - are ignored. Anything else is
+  `{:error, :invalid_attrs}`.
+  """
+  @spec new(map()) :: {:ok, t()} | {:error, term()}
+  def new(%{asset: id, amount: amount}) when is_binary(id), do: new_from_map(:id, id, amount)
+
+  def new(%{"asset" => id, "amount" => amount}) when is_binary(id),
+    do: new_from_map(:id, id, amount)
+
+  def new(%{denom: denom, amount: amount}) when is_binary(denom),
+    do: new_from_map(:denom, denom, amount)
+
+  def new(%{"denom" => denom, "amount" => amount}) when is_binary(denom),
+    do: new_from_map(:denom, denom, amount)
+
+  def new(_attrs), do: {:error, :invalid_attrs}
+
+  defp new_from_map(kind, ref, amount) when is_binary(amount) or is_integer(amount) do
+    case Amount.new(amount) do
+      {:ok, parsed} when is_integer(parsed) and parsed >= 0 ->
+        with {:ok, asset} <- resolve_ref(kind, ref) do
+          {:ok, new(asset, parsed)}
+        end
+
+      {:ok, nil} ->
+        {:error, :invalid_attrs}
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  defp new_from_map(_kind, _ref, _amount), do: {:error, :invalid_attrs}
+
+  defp resolve_ref(:id, id), do: Assets.from_id(id)
+  defp resolve_ref(:denom, denom), do: Assets.from_denom(denom)
 
   @doc """
   Parse a comma-separated coin string into a list of coins.

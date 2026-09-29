@@ -8,6 +8,7 @@ defmodule Rujira.Ghost.Credit.LiquidateMsg.Execute do
   """
 
   alias Rujira.Coin
+  alias Rujira.String
 
   # --- Struct ---
 
@@ -34,13 +35,7 @@ defmodule Rujira.Ghost.Credit.LiquidateMsg.Execute do
 
   # --- Private ---
 
-  defp decode_msg(msg) when is_binary(msg) do
-    case Base.decode64(msg) do
-      {:ok, decoded} -> {:ok, decoded}
-      :error -> {:error, :invalid_msg}
-    end
-  end
-
+  defp decode_msg(msg) when is_binary(msg), do: String.decode_base64(msg)
   defp decode_msg(_), do: {:error, :invalid_msg}
 
   defp coin(%{"denom" => denom, "amount" => amount})

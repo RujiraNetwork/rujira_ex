@@ -6,8 +6,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- `Rujira.String.decode_base64/1`.
+- `Rujira.Thorchain.Block` now carries the block's transactions: `txs` holds a
+  `Rujira.Thorchain.Block.Tx` per transaction, with its `idx` (the `tx_idx` its
+  events carry), `hash`, result `code`, `memo` and its messages decoded into
+  typed structs - `MsgDeposit`, `Rujira.Thorchain.Block.Messages.Send` (both
+  `/types.MsgSend` and `/cosmos.bank.v1beta1.MsgSend` render the same shape,
+  so one struct covers either), the CosmWasm messages (`MsgExecuteContract`'s
+  payload decoded to a map, `MsgStoreCode` without the wasm binary) and the
+  three observation messages - each observed tx carrying its `status`,
+  `out_hashes`, and any aggregator swap (`aggregator`, `aggregator_target`,
+  `aggregator_target_limit`). Every other type is kept whole as a
+  `Rujira.Thorchain.Block.Messages.Message` with its `@type` and the map the
+  node sent - or, for a message that carried no map at all, the raw value
+  under `"value"` - and so is a known type whose body does not parse, after a
+  warning: a message the library cannot read never fails the block. Events are
+  unchanged.
+- `Rujira.Thorchain.Block.observed_txs/1`, delegated as
+  `Rujira.Thorchain.block_observed_txs/1`: every layer-1 observation the block
+  made, in block order, each carrying its direction and the `tx_idx` it was
+  made in. Only successful transactions are read - a transaction whose `code`
+  is not `0` had no effect.
+
+### Changed
+
+- `Rujira.Thorchain.Block.new/1` now builds a block concurrently: each
+  transaction - its messages and its own events together - is one unit of work,
+  as is each of the three block-level event stages, and the units run over
+  `Task.async_stream/3` in one chunk per scheduler. The result is unchanged -
+  transactions stay in block order and events still sort by
+  `{tx_idx, event_idx}` - and so is the behaviour on failure: an unparsable
+  event or message still degrades to a generic one with a warning, and an
+  exception, throw or exit is re-raised in the caller with its original kind,
+  reason and stacktrace. What this buys is the denom-metadata
+  reads a message naming an `x/` asset makes: on a cold cache a block of 60
+  such transactions parses ~7x faster. A block of at most four units is parsed
+  inline, where the fan-out has nothing to overlap.
+
 ### Fixed
 
+- `Rujira.Coin.new/1` now accepts asset-id and bank-denom maps with either
+  atom or string keys and an integer or numeric-string amount, resolving the
+  asset and normalizing the amount through one path instead of raising on an
+  empty-string amount; a negative amount or non-numeric string returns
+  `{:error, :invalid_amount}`, while empty, nil, or non-integer amounts (including floats)
+  or missing asset/denom keys return `{:error, :invalid_attrs}`.
 - `THOR.RUJI` now carries the chain's own denom metadata: `Assets.from_denom/2`
   reads `x/ruji`'s metadata the same way every other token-factory denom does,
   and `Assets.load_metadata/2` and `Assets.from_id/2` do the same for a

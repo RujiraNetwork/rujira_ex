@@ -16,4 +16,16 @@ defmodule Rujira.StringTest do
       assert String.nil_if_empty("thor1abc") == "thor1abc"
     end
   end
+
+  describe "decode_base64/1" do
+    test "decodes valid base64" do
+      assert String.decode_base64("aGVsbG8=") == {:ok, "hello"}
+      assert String.decode_base64("d29ybGQ=") == {:ok, "world"}
+    end
+
+    test "returns error for invalid base64" do
+      assert String.decode_base64("!!!") == {:error, :invalid_msg}
+      assert String.decode_base64("not-valid-base64!") == {:error, :invalid_msg}
+    end
+  end
 end

@@ -65,6 +65,87 @@ defmodule Rujira.CoinTest do
       assert {:ok, %Coin{amount: 99, asset: %Asset{id: "THOR.RUNE"}}} =
                Coin.new(%{denom: "rune", amount: "99"})
     end
+
+    test "accepts a denom map with string keys" do
+      assert {:ok, %Coin{amount: 99, asset: %Asset{id: "THOR.RUNE"}}} =
+               Coin.new(%{"denom" => "rune", "amount" => "99"})
+    end
+
+    test "accepts an asset map with atom keys" do
+      assert {:ok, %Coin{amount: 100_000_000, asset: %Asset{id: "BTC.BTC"}}} =
+               Coin.new(%{asset: "BTC.BTC", amount: "100000000"})
+    end
+
+    test "accepts an asset map with string keys" do
+      assert {:ok, %Coin{amount: 100_000_000, asset: %Asset{id: "BTC.BTC"}}} =
+               Coin.new(%{"asset" => "BTC.BTC", "amount" => "100000000"})
+    end
+
+    test "accepts an integer amount" do
+      assert {:ok, %Coin{amount: 5, asset: %Asset{id: "BTC.BTC"}}} =
+               Coin.new(%{"asset" => "BTC.BTC", "amount" => 5})
+    end
+
+    test "ignores extra keys such as decimals" do
+      assert {:ok, %Coin{amount: 5, asset: %Asset{id: "BTC.BTC"}}} =
+               Coin.new(%{"asset" => "BTC.BTC", "amount" => "5", "decimals" => "8"})
+    end
+
+    test "rejects an invalid asset id" do
+      assert {:error, _} = Coin.new(%{"asset" => "NOTANASSET", "amount" => "1"})
+    end
+
+    test "rejects anything that is not a recognized coin shape" do
+      assert {:error, :invalid_attrs} = Coin.new(%{"foo" => "bar"})
+    end
+
+    test "rejects a nil denom instead of raising, with atom keys" do
+      assert {:error, :invalid_attrs} = Coin.new(%{denom: nil, amount: "5"})
+    end
+
+    test "rejects a nil denom instead of raising, with string keys" do
+      assert {:error, :invalid_attrs} = Coin.new(%{"denom" => nil, "amount" => "5"})
+    end
+
+    test "rejects a numeric denom instead of raising, with atom keys" do
+      assert {:error, :invalid_attrs} = Coin.new(%{denom: 1, amount: "5"})
+    end
+
+    test "rejects a numeric denom instead of raising, with string keys" do
+      assert {:error, :invalid_attrs} = Coin.new(%{"denom" => 1, "amount" => "5"})
+    end
+
+    test "rejects a nil amount instead of raising, with atom keys" do
+      assert {:error, :invalid_attrs} = Coin.new(%{denom: "rune", amount: nil})
+    end
+
+    test "rejects a nil amount instead of raising, with string keys" do
+      assert {:error, :invalid_attrs} = Coin.new(%{"denom" => "rune", "amount" => nil})
+    end
+
+    test "rejects an empty string amount instead of raising, with a denom map" do
+      assert {:error, :invalid_attrs} = Coin.new(%{"denom" => "rune", "amount" => ""})
+    end
+
+    test "rejects an empty string amount instead of raising, with an asset map" do
+      assert {:error, :invalid_attrs} = Coin.new(%{"asset" => "BTC.BTC", "amount" => ""})
+    end
+
+    test "rejects a negative integer amount, with a denom map" do
+      assert {:error, :invalid_amount} = Coin.new(%{"denom" => "rune", "amount" => -1})
+    end
+
+    test "rejects a negative integer amount, with an asset map" do
+      assert {:error, :invalid_amount} = Coin.new(%{"asset" => "BTC.BTC", "amount" => -1})
+    end
+
+    test "rejects a float amount, with a denom map" do
+      assert {:error, :invalid_attrs} = Coin.new(%{"denom" => "rune", "amount" => 1.5})
+    end
+
+    test "rejects a float amount, with an asset map" do
+      assert {:error, :invalid_attrs} = Coin.new(%{"asset" => "BTC.BTC", "amount" => 1.5})
+    end
   end
 
   describe "parse/1" do

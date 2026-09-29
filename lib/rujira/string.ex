@@ -27,4 +27,13 @@ defmodule Rujira.String do
   def nil_if_empty(nil), do: nil
   def nil_if_empty(""), do: nil
   def nil_if_empty(value), do: value
+
+  @doc "Decodes a base64 string, returning the raw bytes or an error for invalid encoding."
+  @spec decode_base64(binary()) :: {:ok, binary()} | {:error, :invalid_msg}
+  def decode_base64(msg) when is_binary(msg) do
+    case Base.decode64(msg) do
+      {:ok, decoded} -> {:ok, decoded}
+      :error -> {:error, :invalid_msg}
+    end
+  end
 end
