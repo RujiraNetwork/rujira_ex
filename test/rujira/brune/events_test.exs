@@ -1,6 +1,9 @@
 defmodule Rujira.Brune.EventsTest do
-  use ExUnit.Case, async: true
+  # x/ruji reads its denom metadata, which is cached globally, so this case
+  # runs sync and starts from an empty cache.
+  use Rujira.Test.CacheCase, async: false
 
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Rujira.Brune.Events
   alias Rujira.Brune.Events.Burn
   alias Rujira.Brune.Events.Event, as: BruneEvent
@@ -14,6 +17,7 @@ defmodule Rujira.Brune.EventsTest do
   alias Rujira.Brune.Events.NodeUnbond
   alias Rujira.Brune.Events.Warn
   alias Rujira.Events.Event
+  alias Rujira.Test.MockNode
 
   defp parse(type, attrs) do
     Events.parse(Event.new(type, Map.put(attrs, "_contract_address", "thor1abc")))
@@ -21,6 +25,10 @@ defmodule Rujira.Brune.EventsTest do
 
   describe "mint" do
     test "parses recipient and coin" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/ruji"} ->
+        {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom x/ruji"}}
+      end)
+
       assert {:ok, %BruneEvent{address: "thor1abc", data: data}} =
                parse("wasm-rujira-brune/mint", %{
                  "recipient" => "thor1r",

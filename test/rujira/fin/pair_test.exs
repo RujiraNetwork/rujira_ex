@@ -127,6 +127,10 @@ defmodule Rujira.Fin.PairTest do
     end
 
     test "picks native x/ruji for RUJI when it is the only base denom" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/ruji"} ->
+        {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom x/ruji"}}
+      end)
+
       assert {:ok, "x/ruji"} = Pair.pick_denom(["x/ruji", "x/ruji"], "RUJI")
     end
   end

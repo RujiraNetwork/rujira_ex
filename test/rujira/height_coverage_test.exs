@@ -57,7 +57,18 @@ defmodule Rujira.HeightCoverageTest do
 
   # Every node-reaching function is exercised against a node that answers
   # nothing: the assertion is on the opts that reached it, not on the reply.
+  #
+  # The `ruji/0` fixture reads x/ruji's denom metadata, which - unlike every
+  # other node call here - ignores `height:` and is cached as an identity
+  # fact. Warm that cache once, upfront, so building a facade's `covered/1`
+  # table never makes it the first node call a test observes.
   setup do
+    MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/ruji"} ->
+      {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom x/ruji"}}
+    end)
+
+    {:ok, _} = Assets.from_denom("x/ruji")
+
     MockNode.expect(fn _request -> {:error, :no_reply_scripted} end)
     :ok
   end

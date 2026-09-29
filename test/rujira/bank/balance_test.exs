@@ -13,10 +13,11 @@ defmodule Rujira.Bank.BalanceTest do
   alias Rujira.Assets.Asset
   alias Rujira.Bank.Balance
   alias Rujira.Coin
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Rujira.Test.MockNode
 
   @rune elem(Assets.from_denom("rune"), 1)
-  @ruji elem(Assets.from_denom("x/ruji"), 1)
+  @ruji %Asset{id: "THOR.RUJI", type: :native, chain: "THOR", symbol: "RUJI", ticker: "RUJI"}
   @btc elem(Assets.from_denom("btc-btc"), 1)
   @non_native %Asset{id: "RUNE", type: :native, chain: "THOR", symbol: "RUNE", ticker: "RUNE"}
 
@@ -66,6 +67,9 @@ defmodule Rujira.Bank.BalanceTest do
              balances: [%ChainCoin{denom: "x/ruji", amount: "500"}],
              pagination: %PageResponse{next_key: ""}
            }}
+
+        %QueryDenomMetadataRequest{denom: "x/ruji"} ->
+          {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom x/ruji"}}
       end)
 
       assert {:ok,
@@ -160,6 +164,9 @@ defmodule Rujira.Bank.BalanceTest do
              balances: [%ChainCoin{denom: "x/ruji", amount: "500"}],
              pagination: %PageResponse{next_key: ""}
            }}
+
+        %QueryDenomMetadataRequest{denom: "x/ruji"} ->
+          {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom x/ruji"}}
       end)
 
       assert {:ok, [%Coin{amount: 1000}, %Coin{amount: 500}]} =

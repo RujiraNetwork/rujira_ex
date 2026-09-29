@@ -1,9 +1,19 @@
 defmodule Rujira.CoinTest do
-  use ExUnit.Case, async: true
+  # x/ruji reads its denom metadata, which is cached globally, so this case
+  # runs sync and starts from an empty cache.
+  use Rujira.Test.CacheCase, async: false
 
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Rujira.Assets
   alias Rujira.Assets.Asset
   alias Rujira.Coin
+  alias Rujira.Test.MockNode
+
+  defp stub_ruji_metadata do
+    MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/ruji"} ->
+      {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom x/ruji"}}
+    end)
+  end
 
   describe "new/2 with Asset struct" do
     test "creates coin directly" do
@@ -26,6 +36,7 @@ defmodule Rujira.CoinTest do
     end
 
     test "resolves x/ denoms" do
+      stub_ruji_metadata()
       assert {:ok, %Coin{amount: 500, asset: %Asset{id: "THOR.RUJI"}}} = Coin.new("x/ruji", 500)
     end
 
@@ -74,6 +85,8 @@ defmodule Rujira.CoinTest do
     end
 
     test "parses x/ denoms" do
+      stub_ruji_metadata()
+
       assert {:ok, [%Coin{amount: 250, asset: %Asset{id: "THOR.RUJI"}}]} =
                Coin.parse("250x/ruji")
     end

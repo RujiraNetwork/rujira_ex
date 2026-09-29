@@ -311,6 +311,55 @@ defmodule Rujira.AssetsTest do
       assert {:ok, %Asset{id: "THOR.TCY", symbol: "TCY"}} = Assets.from_denom("tcy")
     end
 
+    test "x/ruji is named THOR.RUJI but carries the chain's own metadata for it" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/ruji"} ->
+        {:ok,
+         %QueryDenomMetadataResponse{
+           metadata: %DenomMetadata{
+             description: "",
+             display: "RUJI",
+             name: "Rujira",
+             symbol: "RUJI",
+             uri: "",
+             uri_hash: "",
+             denom_units: [
+               %DenomUnit{denom: "x/ruji", exponent: 0},
+               %DenomUnit{denom: "RUJI", exponent: 8}
+             ]
+           }
+         }}
+      end)
+
+      assert {:ok,
+              %Asset{
+                id: "THOR.RUJI",
+                type: :native,
+                chain: "THOR",
+                symbol: "RUJI",
+                ticker: "RUJI",
+                metadata: %Metadata{name: "Rujira", display: "RUJI", decimals: 8}
+              } = asset} = Assets.from_denom("x/ruji")
+
+      assert Assets.decimals(asset) == 8
+    end
+
+    test "x/ruji falls back to today's name when the node holds no metadata for it" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/ruji"} ->
+        no_denom_metadata("x/ruji")
+      end)
+
+      assert {:ok, %Asset{id: "THOR.RUJI", symbol: "RUJI", ticker: "RUJI", metadata: nil}} =
+               Assets.from_denom("x/ruji")
+    end
+
+    test "x/ruji returns the node's error unchanged for any other failure" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/ruji"} ->
+        {:error, %GRPC.RPCError{status: 13, message: "boom"}}
+      end)
+
+      assert {:error, %GRPC.RPCError{status: 13, message: "boom"}} = Assets.from_denom("x/ruji")
+    end
+
     test "prefixes staking denoms with s" do
       assert {:ok, %Asset{id: "x/staking-rune", symbol: "sRUNE", ticker: "sRUNE"}} =
                Assets.from_denom("x/staking-rune")
@@ -617,6 +666,49 @@ defmodule Rujira.AssetsTest do
     test "uses the 8-decimal default for a native asset" do
       asset = Assets.from_string("THOR.RUNE")
       assert {:ok, %{symbol: "RUNE", decimals: 8}} = Assets.load_metadata(asset)
+    end
+
+    test "reads x/ruji's own metadata for THOR.RUJI" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/ruji"} ->
+        {:ok,
+         %QueryDenomMetadataResponse{
+           metadata: %DenomMetadata{
+             description: "",
+             display: "RUJI",
+             name: "Rujira",
+             symbol: "RUJI",
+             uri: "",
+             uri_hash: "",
+             denom_units: [
+               %DenomUnit{denom: "x/ruji", exponent: 0},
+               %DenomUnit{denom: "RUJI", exponent: 8}
+             ]
+           }
+         }}
+      end)
+
+      asset = Assets.from_string("THOR.RUJI")
+
+      assert {:ok, %Metadata{name: "Rujira", symbol: "RUJI", decimals: 8}} =
+               Assets.load_metadata(asset)
+    end
+
+    test "falls back to the derived name and decimals when THOR.RUJI has no chain metadata" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/ruji"} ->
+        no_denom_metadata("x/ruji")
+      end)
+
+      asset = Assets.from_string("THOR.RUJI")
+      assert {:ok, %{symbol: "RUJI", decimals: 8}} = Assets.load_metadata(asset)
+    end
+
+    test "returns the node's error unchanged for THOR.RUJI" do
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/ruji"} ->
+        {:error, %GRPC.RPCError{status: 13, message: "boom"}}
+      end)
+
+      asset = Assets.from_string("THOR.RUJI")
+      assert {:error, %GRPC.RPCError{status: 13, message: "boom"}} = Assets.load_metadata(asset)
     end
   end
 

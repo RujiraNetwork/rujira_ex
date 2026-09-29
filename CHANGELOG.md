@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Fixed
+
+- `THOR.RUJI` now carries the chain's own denom metadata: `Assets.from_denom/2`
+  reads `x/ruji`'s metadata the same way every other token-factory denom does,
+  and `Assets.load_metadata/2` and `Assets.from_id/2` do the same for a
+  `THOR.RUJI` asset, so the id round-trips through `from_id/2` to the same
+  asset `from_denom/2` builds. Naming (`id`, `chain`, `symbol`, `ticker`) is
+  still fixed and never taken from the metadata.
+
 ## 0.7.0
 
 ### Added

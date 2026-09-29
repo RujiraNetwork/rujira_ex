@@ -5,9 +5,24 @@ defmodule Rujira.Revenue.ConverterTest do
   alias Rujira.Revenue.Converter.Action
   alias Rujira.Revenue.Converter.TargetAddress
   alias Rujira.Revenue.Converter.TargetDenom
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Rujira.Test.MockNode
   alias Thorchain.Types.ContractInfo
   alias Thorchain.Types.QueryContractInfosRequest
+
+  # config()'s target_denoms includes "x/ruji", which now reads the chain's
+  # metadata for it - stub the node holding none, the pre-existing behaviour.
+  defp ruji_metadata_not_found(%QueryDenomMetadataRequest{denom: "x/ruji"}),
+    do: {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom x/ruji"}}
+
+  defp stub_ruji_metadata, do: MockNode.expect(&ruji_metadata_not_found/1)
+
+  defp expect_with_ruji_metadata(primary) do
+    MockNode.expect(fn
+      %QueryDenomMetadataRequest{denom: "x/ruji"} = req -> ruji_metadata_not_found(req)
+      other -> primary.(other)
+    end)
+  end
 
   defp config do
     %{
@@ -36,6 +51,8 @@ defmodule Rujira.Revenue.ConverterTest do
 
   describe "new/1" do
     test "parses a v2.0.1 converter config" do
+      stub_ruji_metadata()
+
       assert {:ok,
               %Converter{
                 id: "thor1revenue",
@@ -61,6 +78,7 @@ defmodule Rujira.Revenue.ConverterTest do
     end
 
     test "a null schedule is nil" do
+      stub_ruji_metadata()
       assert {:ok, %Converter{schedule: nil}} = Converter.new(%{config() | "schedule" => nil})
     end
 
@@ -79,29 +97,39 @@ defmodule Rujira.Revenue.ConverterTest do
     end
 
     test "an invalid target address weight is an error" do
+      stub_ruji_metadata()
+
       assert {:error, :invalid_integer} =
                Converter.new(%{config() | "target_addresses" => [["thor1a", "abc"]]})
     end
 
     test "an invalid schedule is an error" do
+      stub_ruji_metadata()
       assert {:error, :invalid_integer} = Converter.new(%{config() | "schedule" => "abc"})
     end
 
     test "an invalid last_executed is an error" do
+      stub_ruji_metadata()
+
       assert {:error, :invalid_integer} =
                Converter.new(%{config() | "last_executed" => "abc"})
     end
 
     test "a nil last_executed is an error" do
+      stub_ruji_metadata()
       assert {:error, :invalid_integer} = Converter.new(%{config() | "last_executed" => nil})
     end
 
     test "a nil target address weight is an error" do
+      stub_ruji_metadata()
+
       assert {:error, :invalid_integer} =
                Converter.new(%{config() | "target_addresses" => [["thor1a", nil]]})
     end
 
     test "a non-binary target address is an error" do
+      stub_ruji_metadata()
+
       assert {:error, :invalid_attrs} =
                Converter.new(%{config() | "target_addresses" => [[123, 60]]})
     end
@@ -141,10 +169,10 @@ defmodule Rujira.Revenue.ConverterTest do
 
   describe "get/2 and from_id/2" do
     test "round-trips on the converter's id" do
-      MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(config()) end)
+      expect_with_ruji_metadata(fn %{"config" => %{}} -> MockNode.ok(config()) end)
       assert {:ok, %Converter{id: "thor1revenue"} = converter} = Converter.get("thor1revenue")
 
-      MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(config()) end)
+      expect_with_ruji_metadata(fn %{"config" => %{}} -> MockNode.ok(config()) end)
       assert {:ok, ^converter} = Converter.from_id(converter.id)
     end
 
@@ -162,7 +190,7 @@ defmodule Rujira.Revenue.ConverterTest do
       parent = self()
       pinned = default_head()
 
-      MockNode.expect(fn
+      expect_with_ruji_metadata(fn
         %QueryContractInfosRequest{} ->
           {:ok, %{infos: [info("thor1revenuea"), info("thor1revenueb")]}}
 
@@ -196,7 +224,7 @@ defmodule Rujira.Revenue.ConverterTest do
     test "resolves one v1.1.0 and one v2.x target" do
       counter = :atomics.new(1, [])
 
-      MockNode.expect(fn
+      expect_with_ruji_metadata(fn
         %QueryContractInfosRequest{} ->
           {:ok,
            %{
