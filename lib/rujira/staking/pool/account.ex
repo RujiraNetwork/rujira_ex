@@ -76,8 +76,16 @@ defmodule Rujira.Staking.Pool.Account do
   def from_id(id, opts \\ []) do
     with {:ok, opts} <- Cache.pin(opts),
          [address, owner] <- String.split(id, "/"),
-         {:ok, pool} <- Pool.get(address, opts) do
-      load(pool, owner, opts)
+         {:ok, [pool, res]} <-
+           Rujira.Enum.all_async_while_ok(
+             [
+               fn -> Pool.get(address, opts) end,
+               fn -> account(address, owner, opts) end
+             ],
+             opts,
+             __MODULE__
+           ) do
+      build(pool, owner, res)
     else
       {:error, _} = err -> err
       _ -> {:error, :invalid_id}

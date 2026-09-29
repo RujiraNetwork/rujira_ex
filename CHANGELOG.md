@@ -24,6 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   under `"value"` - and so is a known type whose body does not parse, after a
   warning: a message the library cannot read never fails the block. Events are
   unchanged.
+- `Rujira.Enum.all_async_while_ok/3`: runs a fixed list of independent
+  zero-arity reads concurrently through the same `:fan_out` policy as
+  `reduce_async_while_ok/4`, returning their values positionally or the first
+  error in the funs' own argument order.
 - `Rujira.Thorchain.Block.observed_txs/1`, delegated as
   `Rujira.Thorchain.block_observed_txs/1`: every layer-1 observation the block
   made, in block order, each carrying its direction and the `tx_idx` it was
@@ -44,6 +48,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reads a message naming an `x/` asset makes: on a cold cache a block of 60
   such transactions parses ~7x faster. A block of at most four units is parsed
   inline, where the fan-out has nothing to overlap.
+- `Fin.Range.list/4`, `ThorchainSwap.Strategy.load/2`,
+  `Revenue.Converter.load/2`, `Staking.Pool.Account.from_id/2`,
+  `Fin.Simulation.simulate/3` (the address arm) and `Contracts.by_codes/2` now
+  run their independent reads concurrently, through
+  `Rujira.Enum.all_async_while_ok/3` or `reduce_async_while_ok/4`, instead of
+  one after another. Results and error precedence are unchanged.
 
 ### Fixed
 

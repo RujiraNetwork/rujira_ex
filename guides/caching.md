@@ -251,6 +251,21 @@ Library authors: call `pin/1` at the top of every function that accepts
 `opts` and performs a cached read, before any nested call, rather than
 threading `opts[:height]` by hand or resolving the head more than once.
 
+### Fan-out concurrency
+
+`opts[:fan_out]` bounds one fan-out's own `max_concurrency` - see
+`Rujira.Enum`. It does not bound the total number of reads in flight at once:
+a fan-out nested inside another multiplies, since the outer's `opts` (and
+whatever `:fan_out` it carries) is what the inner fan-out reads too. `Fin`'s
+`Range.list_all/2`, for instance, fans out over pairs and, per pair, over
+that pair's own ranges - `max_concurrency` pairs at once, each running its own
+`max_concurrency`-wide read.
+
+The library places no ceiling above that. A consumer that wants one, across
+every fan-out and every direct read together, sizes it at the edges it
+controls: the `Rujira.Node`/gRPC connection pool a query ultimately runs
+through, and, per call, `opts[:fan_out][:max_concurrency]`.
+
 ## Absent entities
 
 Whether a domain "not found" is cached as a fact or returned as an

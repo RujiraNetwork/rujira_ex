@@ -119,8 +119,15 @@ defmodule Rujira.ThorchainSwap.Strategy do
   @spec load(t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def load(%__MODULE__{address: address} = strategy, opts \\ []) do
     with {:ok, opts} <- Cache.pin(opts),
-         {:ok, markets} <- query_markets(address, opts),
-         {:ok, vaults} <- query_vaults(address, opts) do
+         {:ok, [markets, vaults]} <-
+           Rujira.Enum.all_async_while_ok(
+             [
+               fn -> query_markets(address, opts) end,
+               fn -> query_vaults(address, opts) end
+             ],
+             opts,
+             __MODULE__
+           ) do
       {:ok, %{strategy | markets: markets, vaults: vaults}}
     end
   end

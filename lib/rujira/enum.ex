@@ -109,6 +109,27 @@ defmodule Rujira.Enum do
     end
   end
 
+  @doc """
+  Runs a fixed list of zero-arity `funs` concurrently, each an independent
+  read, and returns their results positionally as `{:ok, [r1, r2, ...]}`.
+
+  Built on `reduce_async_while_ok/4`, so it shares the same `:fan_out` policy,
+  `opts` and `label` - see the moduledoc. `Task.async_stream/3` is ordered by
+  default, so the first error returned is the first one in `funs`' own order,
+  not the first to finish: a fun later in the list that fails before an
+  earlier one still yields the earlier fun's outcome first.
+
+  Each fun returns `{:ok, value}` or `{:error, reason}`, as the reads it
+  wraps do. Use this only when the funs are independent of each other's
+  result - a fun that needs another's value first is a dependency, not a
+  fan-out.
+  """
+  @spec all_async_while_ok([(-> {:ok, term()} | {:error, term()})], Node.opts(), module() | nil) ::
+          {:ok, [term()]} | {:error, term()}
+  def all_async_while_ok(funs, opts \\ [], label \\ nil) when is_list(funs) do
+    reduce_async_while_ok(funs, & &1.(), opts, label)
+  end
+
   defp fan_out(opts) do
     with {:ok, config} <- fan_out_keyword(Rujira.fan_out()),
          {:ok, per_call} <- fan_out_keyword(Keyword.get(opts, :fan_out, [])) do

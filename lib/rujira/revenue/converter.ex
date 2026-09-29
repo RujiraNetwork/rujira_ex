@@ -167,8 +167,15 @@ defmodule Rujira.Revenue.Converter do
   @spec load(t(), Node.opts()) :: {:ok, t()} | {:error, term()}
   def load(%__MODULE__{address: address} = converter, opts \\ []) do
     with {:ok, opts} <- Cache.pin(opts),
-         {:ok, actions} <- query_actions(address, opts),
-         {:ok, last_action} <- query_status(address, opts) do
+         {:ok, [actions, last_action]} <-
+           Rujira.Enum.all_async_while_ok(
+             [
+               fn -> query_actions(address, opts) end,
+               fn -> query_status(address, opts) end
+             ],
+             opts,
+             __MODULE__
+           ) do
       {:ok, %{converter | actions: actions, last_action: last_action}}
     end
   end

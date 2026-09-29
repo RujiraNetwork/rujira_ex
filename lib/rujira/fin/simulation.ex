@@ -74,16 +74,26 @@ defmodule Rujira.Fin.Simulation do
     with {:ok, opts} <- Cache.pin(opts),
          {:ok, offer_denom} <- Assets.to_native(offer_asset),
          {:ok, ask} <- ask_asset(pair, offer_denom),
-         {:ok, res} <- query(address, offer_asset, amount, opts),
-         {:ok, simulation} <- new(%{pair: address, offer: offer, ask: ask}, res) do
-      {:ok, %{simulation | id: id(address, offer_denom, amount)}}
+         {:ok, res} <- query(address, offer_asset, amount, opts) do
+      build_result(address, offer, offer_denom, ask, res)
     end
   end
 
-  def simulate(address, %Coin{} = offer, opts) when is_binary(address) do
+  def simulate(address, %Coin{asset: offer_asset, amount: amount} = offer, opts)
+      when is_binary(address) do
     with {:ok, opts} <- Cache.pin(opts),
-         {:ok, pair} <- Pair.get(address, opts) do
-      simulate(pair, offer, opts)
+         {:ok, [pair, res]} <-
+           Rujira.Enum.all_async_while_ok(
+             [
+               fn -> Pair.get(address, opts) end,
+               fn -> query(address, offer_asset, amount, opts) end
+             ],
+             opts,
+             __MODULE__
+           ),
+         {:ok, offer_denom} <- Assets.to_native(offer_asset),
+         {:ok, ask} <- ask_asset(pair, offer_denom) do
+      build_result(address, offer, offer_denom, ask, res)
     end
   end
 
@@ -138,6 +148,12 @@ defmodule Rujira.Fin.Simulation do
       Assets.to_native(base) == {:ok, offer_denom} -> {:ok, quote}
       Assets.to_native(quote) == {:ok, offer_denom} -> {:ok, base}
       true -> {:error, :invalid_offer}
+    end
+  end
+
+  defp build_result(address, offer, offer_denom, ask, res) do
+    with {:ok, simulation} <- new(%{pair: address, offer: offer, ask: ask}, res) do
+      {:ok, %{simulation | id: id(address, offer_denom, offer.amount)}}
     end
   end
 

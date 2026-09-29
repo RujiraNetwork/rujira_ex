@@ -70,8 +70,15 @@ defmodule Rujira.Fin.Range do
           {:ok, [t()]} | {:error, term()}
   def list(pair, owner \\ nil, limit \\ nil, opts \\ []) do
     with {:ok, opts} <- Cache.pin(opts),
-         {:ok, fixed} <- query_ranges(pair.address, owner, opts),
-         {:ok, dynamic} <- query_dynamic_ranges(pair.address, owner, opts) do
+         {:ok, [fixed, dynamic]} <-
+           Rujira.Enum.all_async_while_ok(
+             [
+               fn -> query_ranges(pair.address, owner, opts) end,
+               fn -> query_dynamic_ranges(pair.address, owner, opts) end
+             ],
+             opts,
+             __MODULE__
+           ) do
       (fixed ++ dynamic)
       |> take(limit)
       |> Rujira.Enum.reduce_while_ok(&new(pair, &1))

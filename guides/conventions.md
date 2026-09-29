@@ -318,6 +318,15 @@ one item may take and how many run at once - not the individual call site.
 A call site passes its query `opts` straight through and names itself as the
 `label`.
 
+A function with a fixed, small number of independent reads - not a list -
+uses `Rujira.Enum.all_async_while_ok/3` instead, built on the same helper: it
+runs each of a list of zero-arity funs concurrently and returns their values
+positionally, `{:ok, [r1, r2, ...]}`, or the first error in the funs' own
+argument order (not the first to finish). Reach for it when a function would
+otherwise chain two or more reads through `with` that do not actually depend
+on each other's result - e.g. loading a resource's several independent
+fields in one call.
+
 The policy is read from the `:fan_out` keyword, by key, in this precedence:
 
 1. `opts[:fan_out]` - the caller's query opts, per call.

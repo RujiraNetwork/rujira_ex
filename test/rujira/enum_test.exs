@@ -156,4 +156,43 @@ defmodule Rujira.EnumTest do
                )
     end
   end
+
+  describe "all_async_while_ok/3" do
+    test "returns every fun's value positionally, not in finishing order" do
+      funs = [
+        fn ->
+          Process.sleep(30)
+          {:ok, :first}
+        end,
+        fn -> {:ok, :second} end
+      ]
+
+      assert {:ok, [:first, :second]} = Rujira.Enum.all_async_while_ok(funs)
+    end
+
+    test "returns the first error in argument order, even when a later fun fails first" do
+      funs = [
+        fn ->
+          Process.sleep(30)
+          {:error, :slow_but_first}
+        end,
+        fn -> {:error, :fast_but_second} end
+      ]
+
+      assert {:error, :slow_but_first} = Rujira.Enum.all_async_while_ok(funs)
+    end
+
+    test "handles an empty list of funs" do
+      assert {:ok, []} = Rujira.Enum.all_async_while_ok([])
+    end
+
+    test "surfaces a timeout as an error, labelled with the calling module" do
+      assert {:error, {:timeout, __MODULE__}} =
+               Rujira.Enum.all_async_while_ok(
+                 [fn -> Process.sleep(500) end],
+                 [fan_out: [timeout: 1]],
+                 __MODULE__
+               )
+    end
+  end
 end

@@ -189,8 +189,10 @@ defmodule Rujira.Contracts do
   @spec by_codes(list(integer()), Node.opts()) ::
           {:ok, list(t())} | {:error, Node.rpc_error()}
   def by_codes(code_ids, opts \\ []) do
-    with {:ok, opts} <- Cache.pin(opts) do
-      Enum.reduce(code_ids, {:ok, []}, &append_by_code(&1, &2, opts))
+    with {:ok, opts} <- Cache.pin(opts),
+         {:ok, results} <-
+           Rujira.Enum.reduce_async_while_ok(code_ids, &by_code(&1, opts), opts, __MODULE__) do
+      {:ok, List.flatten(results)}
     end
   end
 
@@ -592,12 +594,6 @@ defmodule Rujira.Contracts do
       Rujira.Enum.reduce_async_while_ok(contracts, &get({module, &1}, opts), opts, __MODULE__)
     end
   end
-
-  defp append_by_code(code_id, {:ok, agg}, opts) do
-    with {:ok, contracts} <- by_code(code_id, opts), do: {:ok, agg ++ contracts}
-  end
-
-  defp append_by_code(_code_id, err, _opts), do: err
 
   defp page_request(nil), do: nil
   defp page_request(key), do: %PageRequest{key: key}

@@ -22,7 +22,10 @@ defmodule Rujira.Test.MockNode do
   `$callers`, so those legs are scriptable too.
 
   Every query also sends `{:mock_node, request, opts}` to the calling process,
-  so a test can assert on the opts a height-aware caller passed down.
+  so a test can assert on the opts a height-aware caller passed down, and - if
+  that differs, as it does from inside a fan-out `Task` - also to its root
+  `$callers` ancestor, so the test process observes every leg of a fan-out,
+  not only a leg it happens to run on its own process.
   """
   @behaviour Rujira.Node
 
@@ -45,16 +48,32 @@ defmodule Rujira.Test.MockNode do
   def query(fun, request, opts \\ [])
 
   def query(_fun, %QuerySmartContractStateRequest{query_data: query_data} = request, opts) do
-    send(self(), {:mock_node, request, opts})
+    notify(request, opts)
     respond(script(), JSON.decode!(query_data), opts)
   end
 
   def query(_fun, request, opts) do
-    send(self(), {:mock_node, request, opts})
+    notify(request, opts)
     respond(script(), request, opts)
   end
 
+  defp notify(request, opts) do
+    message = {:mock_node, request, opts}
+    send(self(), message)
+    root = root_caller()
+    if root != self(), do: send(root, message)
+  end
+
   defp script, do: Process.get(@key) || Enum.find_value(callers(), &caller_script/1)
+
+  # The root ancestor across `$callers` - `self()` when not running inside a
+  # fan-out `Task`.
+  defp root_caller do
+    case callers() do
+      [] -> self()
+      callers -> List.last(callers)
+    end
+  end
 
   defp callers, do: Process.get(:"$callers", [])
 
