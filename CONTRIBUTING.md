@@ -54,13 +54,19 @@ On top of the five, CI also runs a few checks that need no local discipline:
 | Check | Why |
 | --- | --- |
 | `mix deps.unlock --check-unused` | Catches `mix.lock` entries left behind by a removed dependency. |
-| `mix hex.audit` | Flags retired packages and security advisories — this library is published to Hex. Non-blocking while #10 is open. |
+| `mix hex.audit` | Flags retired packages and security advisories — this library is published to Hex. Blocking; accepted advisories are listed with their reasons under `ignore_advisories` in `mix.exs`. |
 | `mix docs` | Build check only; a hard failure here would break a release. |
 
-> **Note:** `mix hex.audit` only reports security advisories on Hex 2.5 and
-> later. On older Hex it checks retired packages alone and prints
-> `No retired packages found` — a false all-clear. Trust the CI run, not a
-> local audit, unless you have checked your Hex version with `mix hex --version`.
+> **Note:** CI pins Hex 2.5.1 (`mix local.hex 2.5.1 --force`). Hex is a Mix
+> archive, so neither `mix.lock` nor `.tool-versions` pins it; each Elixir
+> install carries its own. Hex < 2.5.0 does not report advisories — it checks
+> retired packages alone and prints `No retired packages found`, a false
+> all-clear — and Hex < 2.5.1 ignores `ignore_advisories`, so the audit fails
+> on accepted advisories. Check `mix hex --version` before trusting a local run.
+>
+> To accept an advisory, add one of its IDs (CVE, GHSA or EEF) to
+> `ignore_advisories` in `mix.exs` with a comment saying why. Remove the entry
+> once the audit reports it as no longer matching.
 
 ## Test coverage
 

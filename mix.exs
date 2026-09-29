@@ -16,7 +16,8 @@ defmodule RujiraEx.MixProject do
       package: package(),
       source_url: @source_url,
       docs: docs(),
-      test_coverage: [tool: ExCoveralls]
+      test_coverage: [tool: ExCoveralls],
+      hex: hex()
     ]
   end
 
@@ -48,6 +49,25 @@ defmodule RujiraEx.MixProject do
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
       files: ~w(lib config .formatter.exs mix.exs README.md LICENSE CONTRIBUTING.md guides)
+    ]
+  end
+
+  # Advisories `mix hex.audit` reports but that are accepted, each with its reason.
+  # An entry that stops matching is reported as stale by the audit; remove it then.
+  defp hex do
+    [
+      ignore_advisories: [
+        # gun 2.4.1 / cowlib 2.20.0: HTTP request/response splitting (MEDIUM).
+        # Dev-only (never in the Hex package): gun is the gRPC adapter for
+        # scripts/refresh_chain_assets.exs, whose only inputs (endpoint, bearer
+        # token) come from the operator's own environment. No fixed cowlib exists
+        # and grpc 1.0.5 pins gun ~> 2.4.0; gun >= 2.4.0 raises on CR/LF in
+        # outgoing request headers.
+        "CVE-2026-43966",
+        # cowlib 2.20.0: cookie header injection via cow_cookie:cookie/1 (LOW).
+        # Same dev-only path; the script sets no cookies. No fixed version exists.
+        "CVE-2026-43969"
+      ]
     ]
   end
 

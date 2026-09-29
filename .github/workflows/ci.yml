@@ -63,15 +63,18 @@ jobs:
       - name: Static analysis
         run: mix dialyzer
 
-      # Reports retired packages and known security advisories.
-      #
-      # Non-blocking for now: the current dependency tree carries open
-      # advisories (#10), so a hard gate would make CI red on
-      # every PR regardless of its contents. The findings are written to the run
-      # summary so they stay visible instead of being buried in a log. Flip this
-      # to a blocking step once the advisories are resolved.
+      # Hex is a Mix archive, not a dependency: neither mix.lock nor
+      # .tool-versions pins it, and setup-beam installs whatever is latest. Hex
+      # < 2.5.0 reports no advisories and 2.5.1 adds ignore_advisories, so pin it
+      # explicitly or the audit below can change meaning between runs (#10).
+      - name: Pin Hex
+        run: mix local.hex 2.5.1 --force
+
+      # Reports retired packages and known security advisories. Blocking:
+      # accepted advisories are listed, with their reasons, under
+      # ignore_advisories in mix.exs, and the audit prints them in a separate
+      # section without failing. The output also goes to the run summary.
       - name: Audit dependencies
-        continue-on-error: true
         shell: bash
         run: |
           set +e
@@ -81,16 +84,14 @@ jobs:
           cat audit.log
           {
             if [ "$status" -eq 0 ]; then
-              echo "## Dependency audit: clean"
+              echo "## Dependency audit: passed"
             else
-              echo "## Dependency audit: findings"
-              echo
-              echo "Non-blocking while #10 is open."
-              echo
-              echo '```'
-              cat audit.log
-              echo '```'
+              echo "## Dependency audit: failed"
             fi
+            echo
+            echo '```'
+            cat audit.log
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
 
