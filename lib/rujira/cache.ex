@@ -58,6 +58,7 @@ defmodule Rujira.Cache do
       config :rujira_ex, Rujira.Cache,
         retention: 100,
         max_catchup: 100,
+        catchup_concurrency: 4,
         frontier_max_rows: 100_000,
         max_markers: 100_000,
         sweep_per_block: 1_000,
@@ -70,6 +71,10 @@ defmodule Rujira.Cache do
       `advance/1` resets to the target instead of filling block by block.
       Filling costs one block fetch each; a reset costs nothing and only makes
       the cache colder.
+    * `catchup_concurrency` - how many block fetches `advance/1` keeps in
+      flight while it fills a gap. Blocks are still applied one at a time, in
+      height order; only the waiting is overlapped. Anything that is not a
+      positive integer reads as `1`, which is a fill with no window at all.
     * `frontier_max_rows` - the frontier's row cap. Over it, the sweep evicts
       by oldest `as_of`. A cold but valid row - a balance read once and never
       touched again - is never invalidated, so without a cap the frontier grows

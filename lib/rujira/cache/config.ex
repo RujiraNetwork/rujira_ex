@@ -5,6 +5,7 @@ defmodule Rujira.Cache.Config do
       config :rujira_ex, Rujira.Cache,
         retention: 100,
         max_catchup: 100,
+        catchup_concurrency: 4,
         frontier_max_rows: 100_000,
         max_markers: 100_000,
         sweep_per_block: 1_000,
@@ -18,6 +19,7 @@ defmodule Rujira.Cache.Config do
   @defaults [
     retention: 100,
     max_catchup: 100,
+    catchup_concurrency: 4,
     frontier_max_rows: 100_000,
     max_markers: 100_000,
     sweep_per_block: 1_000,
@@ -32,6 +34,23 @@ defmodule Rujira.Cache.Config do
   @doc "How far behind the target the head may fall before `advance/1` resets instead of filling."
   @spec max_catchup() :: pos_integer()
   def max_catchup, do: get(:max_catchup)
+
+  @doc """
+  How many block fetches `advance/1` keeps in flight while filling a gap.
+
+  Unlike the other keys, this one is checked: it sizes a range of heights to
+  fetch ahead of the head, where a zero, a negative or a non-integer would
+  fetch backwards from the head or raise inside the fill. Anything that is not
+  a positive integer reads as `1` - one fetch at a time, a fill with no window
+  at all - rather than either.
+  """
+  @spec catchup_concurrency() :: pos_integer()
+  def catchup_concurrency do
+    case get(:catchup_concurrency) do
+      concurrency when is_integer(concurrency) and concurrency > 0 -> concurrency
+      _invalid -> 1
+    end
+  end
 
   @doc "How many rows the frontier holds before the sweep evicts by oldest `as_of`."
   @spec frontier_max_rows() :: pos_integer()

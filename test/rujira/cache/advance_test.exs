@@ -365,6 +365,274 @@ defmodule Rujira.Cache.AdvanceTest do
     end
   end
 
+  describe "the prefetch window" do
+    test "fetches run ahead of the head, bounded by catchup_concurrency, and slide" do
+      configure(catchup_concurrency: 3)
+      gate()
+
+      assert :ok = Node.advance(4000)
+      fill = Task.async(fn -> Node.advance(4008) end)
+
+      # Three at once for the three coming heights, and no fourth until one of
+      # them has been applied.
+      window = collect_fetches(3)
+      assert Enum.sort(Map.keys(window)) == [4001, 4002, 4003]
+      refute_receive {:fetching, _height, _pid}, 100
+
+      send(window[4001], :release)
+      assert_receive {:fetching, 4004, next}, 5_000
+
+      Enum.each([window[4002], window[4003], next], &send(&1, :release))
+      assert :ok = drain(fill)
+      assert Cache.head() == 4008
+    end
+
+    test "blocks are applied in order however their fetches complete" do
+      configure(catchup_concurrency: 4)
+      attach([:rujira, :cache, :reset])
+
+      # The later the height, the sooner its fetch returns.
+      MockNode.expect(fn %QueryBlockRequest{height: height} ->
+        height = String.to_integer(height)
+        Process.sleep((4105 - height) * 20)
+        {:ok, response(height, [event("version", %{"version" => "3.10.0"})])}
+      end)
+
+      assert :ok = Node.advance(4100)
+      assert :ok = Node.advance(4105)
+
+      # Every block is an upgrade, and an upgrade reports the head it found:
+      # the reported sequence is the order the blocks were applied in.
+      applied =
+        for _y <- 4101..4105 do
+          assert_receive {:telemetry, %{from: from, to: to}, %{reason: :upgrade}}
+          {from, to}
+        end
+
+      assert applied == [{4100, 4101}, {4101, 4102}, {4102, 4103}, {4103, 4104}, {4104, 4105}]
+      assert Cache.head() == 4105
+    end
+
+    test "a failure in the window is counted once, and only for the height being applied" do
+      configure(catchup_concurrency: 4, max_block_failures: 3)
+
+      count_blocks(fn
+        4202 -> {:error, @error}
+        4203 -> {:error, @error}
+        _height -> :ok
+      end)
+
+      assert :ok = Node.advance(4200)
+      assert {:error, @error} = Node.advance(4205)
+
+      # 4203 failed in flight too, and is not held against it: the count
+      # belongs to the height being applied, and moves only when it does.
+      assert Cache.head() == 4201
+      assert :ets.lookup(Tables.meta(), :failures) == [{:failures, 4202, 1}]
+
+      assert {:error, @error} = Node.advance(4205)
+      assert :ets.lookup(Tables.meta(), :failures) == [{:failures, 4202, 2}]
+    end
+
+    test "a height already pushed is not fetched, even from inside the window" do
+      configure(catchup_concurrency: 4, lock_timeout: 60_000)
+      counter = count_blocks()
+
+      assert :ok = Node.advance(4300)
+
+      # The lock is held, so the deposit is provably in before the window that
+      # would have fetched 4302 opens.
+      row = {:lock, idle(), System.monotonic_time(:millisecond)}
+      :ets.insert(Tables.lock(), row)
+
+      pusher = Task.async(fn -> Node.advance(block(4302)) end)
+      await_pushed(1)
+
+      filler = Task.async(fn -> Node.advance(4304) end)
+      await_target(4304)
+      :ets.delete_object(Tables.lock(), row)
+
+      assert :ok = Task.await(pusher, 10_000)
+      assert :ok = Task.await(filler, 10_000)
+
+      assert Cache.head() == 4304
+      assert :counters.get(counter, 1) == 3
+    end
+
+    test "a block pushed after its own fetch started still wins" do
+      configure(catchup_concurrency: 4)
+      gate()
+
+      assert :ok = Node.advance(4400)
+      filler = Task.async(fn -> Node.advance(4403) end)
+
+      window = collect_fetches(3)
+      assert Enum.sort(Map.keys(window)) == [4401, 4402, 4403]
+
+      # 4402 is already in flight when its block is deposited on top of it.
+      pushed = block(4402, [event("wasm", %{"_contract_address" => "thor1pushed"})])
+      pusher = Task.async(fn -> Node.advance(pushed) end)
+      await_pushed(1)
+
+      Enum.each(Map.values(window), &send(&1, :release))
+      assert :ok = drain(filler)
+      assert :ok = Task.await(pusher, 10_000)
+
+      assert Cache.head() == 4403
+      assert Markers.marker({:contract, "thor1pushed"}) == 4402
+    end
+
+    test "a target raised mid-fill catches up instead, and drops the window" do
+      configure(max_catchup: 3, catchup_concurrency: 4)
+      gen = Tables.gen()
+      links = links()
+
+      # Fetching 4501 is what raises the target, so the fill meets a gap it
+      # will not fill block by block the next time round.
+      MockNode.expect(fn %QueryBlockRequest{height: height} ->
+        height = String.to_integer(height)
+        if height == 4501, do: Tables.raise_target(4600)
+        {:ok, response(height)}
+      end)
+
+      assert :ok = Node.advance(4500)
+      assert :ok = Node.advance(4503)
+
+      assert Cache.head() == 4600
+      assert Tables.gen() == gen + 1
+      assert leaks() == %{monitors: [], task_messages: []}
+      assert links() == links
+    end
+
+    test "an applied fill leaves no task, monitor or reply behind" do
+      configure(catchup_concurrency: 4)
+      count_blocks()
+      links = links()
+
+      assert :ok = Node.advance(4700)
+      assert :ok = Node.advance(4706)
+
+      assert Cache.head() == 4706
+      assert leaks() == %{monitors: [], task_messages: []}
+      assert links() == links
+    end
+
+    test "a failed fill leaves no task, monitor or reply behind" do
+      configure(catchup_concurrency: 4)
+      links = links()
+
+      count_blocks(fn
+        4801 -> {:error, @error}
+        _height -> :ok
+      end)
+
+      assert :ok = Node.advance(4800)
+      assert {:error, @error} = Node.advance(4806)
+
+      assert Cache.head() == 4800
+      assert leaks() == %{monitors: [], task_messages: []}
+      assert links() == links
+    end
+
+    test "an unusable catchup_concurrency fetches one at a time, and nothing behind the head" do
+      for {concurrency, base} <- [{0, 5000}, {-3, 5010}, {"4", 5020}, {nil, 5030}, {1.5, 5040}] do
+        Cache.reset!()
+        configure(catchup_concurrency: concurrency)
+        record_blocks()
+
+        assert :ok = Node.advance(base)
+        assert :ok = Node.advance(base + 3)
+
+        assert Cache.head() == base + 3
+        assert Enum.sort(fetched_heights()) == [base + 1, base + 2, base + 3]
+        assert leaks() == %{monitors: [], task_messages: []}
+      end
+    end
+
+    test "a prefetch that crashes is that height's failure, not the caller's" do
+      configure(catchup_concurrency: 4, max_block_failures: 3)
+
+      count_blocks(fn
+        5103 -> raise "boom"
+        _height -> :ok
+      end)
+
+      assert :ok = Node.advance(5100)
+
+      # 5103 is fetched while 5101 is being applied, and crashing there does
+      # not take the caller with it: it is 5103's fetch result, once 5103 is
+      # the height being applied.
+      assert {:error, {:fetch_crashed, :error, %RuntimeError{message: "boom"}}} =
+               Node.advance(5106)
+
+      assert Cache.head() == 5102
+      assert :ets.lookup(Tables.meta(), :failures) == [{:failures, 5103, 1}]
+      assert leaks() == %{monitors: [], task_messages: []}
+    end
+
+    test "a prefetch that crashes for a height never applied is never counted" do
+      configure(catchup_concurrency: 4, max_block_failures: 3)
+
+      count_blocks(fn
+        5202 -> {:error, @error}
+        5203 -> raise "boom"
+        _height -> :ok
+      end)
+
+      assert :ok = Node.advance(5200)
+      assert {:error, @error} = Node.advance(5205)
+
+      # The fill stopped at 5202, so the crash of 5203 - in flight beside it -
+      # is nobody's failure.
+      assert Cache.head() == 5201
+      assert :ets.lookup(Tables.meta(), :failures) == [{:failures, 5202, 1}]
+      assert leaks() == %{monitors: [], task_messages: []}
+    end
+
+    test "a head moved past the window by another writer drops those fetches at once" do
+      configure(catchup_concurrency: 4)
+      gate()
+
+      assert :ok = Node.advance(5300)
+      filler = Task.async(fn -> Node.advance(5305) end)
+
+      window = collect_fetches(4)
+      assert Enum.sort(Map.keys(window)) == [5301, 5302, 5303, 5304]
+
+      # A second writer takes the head past three of the four heights in
+      # flight, while the first of them is still being fetched.
+      Tables.raise_head(5303)
+      send(window[5301], :release)
+
+      # 5302 and 5303 are behind the next height to apply, and go as soon as
+      # the fill knows what that is, rather than at the end of the fill.
+      await_dead(window[5302])
+      await_dead(window[5303])
+      assert Process.alive?(window[5304])
+
+      send(window[5304], :release)
+      assert :ok = drain(filler)
+      assert Cache.head() == 5305
+    end
+
+    test "a reset fill leaves no task, monitor or reply behind" do
+      configure(catchup_concurrency: 4, max_block_failures: 1)
+      links = links()
+
+      count_blocks(fn
+        4901 -> {:error, @error}
+        _height -> :ok
+      end)
+
+      assert :ok = Node.advance(4900)
+      capture_log(fn -> assert :ok = Node.advance(4906) end)
+
+      assert Cache.head() == 4906
+      assert leaks() == %{monitors: [], task_messages: []}
+      assert links() == links
+    end
+  end
+
   describe "telemetry" do
     test "a fill reports the head it moved and the blocks it applied" do
       count_blocks()
@@ -493,6 +761,98 @@ defmodule Rujira.Cache.AdvanceTest do
       _other ->
         Process.sleep(5)
         eventually(read, expected, attempts - 1)
+    end
+  end
+
+  # Scripts every fetch to announce itself and wait, so the shape of the
+  # prefetch window is observed rather than timed.
+  defp gate do
+    test = self()
+
+    MockNode.expect(fn %QueryBlockRequest{height: height} ->
+      height = String.to_integer(height)
+      send(test, {:fetching, height, self()})
+
+      receive do
+        :release -> {:ok, response(height)}
+      end
+    end)
+  end
+
+  # Records every height fetched, wherever the fetch ran.
+  defp record_blocks do
+    test = self()
+
+    MockNode.expect(fn %QueryBlockRequest{height: height} ->
+      height = String.to_integer(height)
+      send(test, {:fetched, height})
+      {:ok, response(height)}
+    end)
+  end
+
+  defp fetched_heights do
+    receive do
+      {:fetched, height} -> [height | fetched_heights()]
+    after
+      0 -> []
+    end
+  end
+
+  defp await_dead(pid), do: eventually(fn -> Process.alive?(pid) end, false)
+
+  defp collect_fetches(count), do: Map.new(1..count, fn _ -> receive_fetch() end)
+
+  defp receive_fetch do
+    receive do
+      {:fetching, height, pid} -> {height, pid}
+    after
+      5_000 -> flunk("no fetch was announced")
+    end
+  end
+
+  # Releases every gated fetch as it announces itself, until the fill returns.
+  defp drain(task, attempts \\ 500)
+
+  defp drain(_task, 0), do: flunk("the fill never finished")
+
+  defp drain(task, attempts) do
+    receive do
+      {:fetching, _height, pid} ->
+        send(pid, :release)
+        drain(task, attempts)
+    after
+      0 -> yield_or_drain(task, attempts)
+    end
+  end
+
+  defp yield_or_drain(task, attempts) do
+    case Task.yield(task, 20) do
+      {:ok, result} -> result
+      _pending -> drain(task, attempts - 1)
+    end
+  end
+
+  # The fill runs in this process, so whatever it started has to be gone by
+  # the time it returns: no monitor, and no task reply or `:DOWN` waiting.
+  defp leaks, do: %{monitors: monitors(), task_messages: task_messages()}
+
+  defp monitors do
+    {:monitors, monitors} = Process.info(self(), :monitors)
+    monitors
+  end
+
+  defp links do
+    {:links, links} = Process.info(self(), :links)
+    links
+  end
+
+  defp task_messages do
+    receive do
+      {ref, _reply} when is_reference(ref) -> [:reply | task_messages()]
+      {:DOWN, ref, :process, _pid, _reason} when is_reference(ref) -> [:down | task_messages()]
+      _other -> task_messages()
+    after
+      0 -> []
     end
   end
 

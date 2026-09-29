@@ -37,7 +37,16 @@ Rujira.Node.advance(%Rujira.Thorchain.Block{} = block)  # no refetch
 
 - **Gap fill.** If the new height is more than one past the current head, the
   library fetches and applies every intervening block in order, oldest
-  first, before the head moves past them.
+  first, before the head moves past them. The fetches run ahead of the head —
+  up to `catchup_concurrency` of them in flight at once, the window sliding on
+  by one as each block is applied — but the order of application is untouched,
+  so `head + 1` still lands before `head + 2` whichever fetch finished first.
+  A single-height advance, which is what an indexer calling on every height
+  does, starts nothing ahead of itself. A block the consumer pushed is never
+  fetched, and wins over a fetch of its height that was already in flight;
+  a fetch that failed - including one that crashed, which never reaches the
+  consumer as an exit - is counted against its own height, when that height is
+  the one being applied, and never before.
 - **Catch-up reset.** If the gap exceeds `max_catchup`, filling block by
   block is abandoned: the library resets instead — bumps the generation,
   invalidates everything, and jumps the head straight to the target.
@@ -125,6 +134,7 @@ read).
 config :rujira_ex, Rujira.Cache,
   retention: 100,
   max_catchup: 100,
+  catchup_concurrency: 4,
   frontier_max_rows: 100_000,
   max_markers: 100_000,
   sweep_per_block: 1_000,
@@ -136,6 +146,7 @@ config :rujira_ex, Rujira.Cache,
 |---|---|---|
 | `retention` | `100` | Distinct heights kept in the exact store; the least-recently-inserted height is dropped when this limit is reached. |
 | `max_catchup` | `100` | Largest gap `advance/1` will fill block by block before resetting instead. |
+| `catchup_concurrency` | `4` | Block fetches `advance/1` keeps in flight while filling a gap. Blocks are still applied one at a time, in height order. Anything that is not a positive integer reads as `1`. |
 | `frontier_max_rows` | `100_000` | Frontier rows kept before the sweep evicts by oldest `as_of`. |
 | `max_markers` | `100_000` | Marker-table rows kept before the sweep collapses the table to the frontier's oldest `as_of`. |
 | `sweep_per_block` | `1_000` | Bound on how many frontier rows `advance/1` sweeps per block it applies. |

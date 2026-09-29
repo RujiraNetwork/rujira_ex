@@ -24,6 +24,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   under `"value"` - and so is a known type whose body does not parse, after a
   warning: a message the library cannot read never fails the block. Events are
   unchanged.
+- `catchup_concurrency` cache config key (default `4`): how many block fetches
+  `Rujira.Node.advance/1` keeps in flight while filling a gap. Anything that is
+  not a positive integer reads as `1`.
 - `Rujira.Enum.all_async_while_ok/3`: runs a fixed list of independent
   zero-arity reads concurrently through the same `:fan_out` policy as
   `reduce_async_while_ok/4`, returning their values positionally or the first
@@ -36,6 +39,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `Rujira.Node.advance/1` now fetches ahead while it fills a gap: up to
+  `catchup_concurrency` block fetches are kept in flight for the coming
+  heights, and the window slides on by one every time a block is applied.
+  Blocks are still applied strictly in order, one at a time - `head + 1`
+  before `head + 2`, whichever fetch finished first - and the head, the
+  markers and the sweeps move exactly as before. A single-height advance, the
+  usual indexer call, starts nothing ahead of itself and fetches its block
+  where it applies it. A pushed block is still never fetched, and now also
+  wins over a fetch of its height already in flight; a failed fetch is counted
+  against its own height only when that height is the one being applied, and a
+  fetch that crashes is one of those failures rather than an exit into the
+  caller. A window entry is given up as soon as the head passes its height,
+  this fill's doing or another writer's. Every way out of the fill - the target
+  reached, an error, a reset, an exception - gives up the rest of the window,
+  leaving no task running and no reply or `:DOWN` in the caller's mailbox.
+  Filling a 50-block gap against a node answering in 20ms drops from a
+  median 1049ms to 272ms at the default concurrency of 4, and 146ms at 8.
 - `Rujira.Thorchain.Block.new/1` now builds a block concurrently: each
   transaction - its messages and its own events together - is one unit of work,
   as is each of the three block-level event stages, and the units run over

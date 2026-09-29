@@ -51,6 +51,32 @@ defmodule Rujira.Cache.Advance do
   because a fetch that blocks forever would freeze the head with no error.
   Blocks are not stored: `advance/1` needs their events, not their text.
 
+  Where more than one block is left to apply, those fetches run ahead of the
+  head: up to `catchup_concurrency` of them are kept in flight for the coming
+  heights, and the window slides by one every time a block is applied. The
+  order of application is untouched - `head + 1` is still applied before
+  `head + 2`, whichever fetch finishes first - so the window takes out the
+  waiting, not the sequence. A single advance, which is what an indexer
+  calling on every height does, starts nothing ahead of itself and fetches its
+  block where it applies it.
+
+  A height the consumer has already pushed is never fetched, and a block
+  pushed after its fetch started still wins: the fetch is given up rather than
+  waited for. A prefetched failure belongs to its own height and is counted
+  there, as the height being applied, never before - and a fetch that raises,
+  throws or exits is one of those failures rather than an exit signal into the
+  caller, which would otherwise take down a consumer busy applying an earlier
+  block over a height it may never reach.
+
+  Each fetch's deadline runs from where it was started, not from where it is
+  waited on, so a prefetch has already spent whatever of the deadline passed
+  while the blocks before it were being applied; running out of it is that
+  height's failure, counted like any other. A window entry is given up as soon
+  as the head passes its height, whether this fill applied it or another writer
+  moved the head past it. Every way out of the fill - the head reaching the
+  target, an error, a reset, an exception - gives up the rest of the window, so
+  neither a task nor a reply outlives it.
+
   A pushed block is deposited under its own height, and only if that height is
   still ahead of the head, so two consumers pushing different blocks at once
   cannot overwrite each other and a block that arrived too late is dropped
@@ -215,41 +241,66 @@ defmodule Rujira.Cache.Advance do
 
   # --- Private: the fill loop ---
 
-  defp fill, do: fill(Tables.head_at(), Tables.target(), 0)
+  defp fill, do: fill(Tables.head_at(), Tables.target(), 0, %{})
 
-  defp fill(head, target, applied) when target <= head, do: {applied, :ok}
+  defp fill(head, target, applied, window) when target <= head, do: done(window, applied, :ok)
 
-  defp fill(0, target, applied) do
+  defp fill(0, target, applied, window) do
     Tables.raise_head(target)
-    {applied, :ok}
+    done(window, applied, :ok)
   end
 
-  defp fill(head, target, applied) when target - head > 0 do
+  defp fill(head, target, applied, window) when target - head > 0 do
     case target - head > Config.max_catchup() do
-      true -> catchup(target, applied)
-      false -> step(head + 1, applied)
+      true -> catchup(target, applied, window)
+      false -> step(head + 1, target, applied, window)
     end
   end
 
-  defp catchup(target, applied) do
+  defp catchup(target, applied, window) do
     reset(target, :catchup)
-    {applied, :ok}
+    done(window, applied, :ok)
   end
 
-  defp step(y, applied) do
-    case apply_block(y) do
-      :applied -> fill(Tables.head_at(), Tables.target(), applied + 1)
-      :reset -> {applied, :ok}
-      {:error, _reason} = error -> {applied, error}
+  # The window is read from the live target each time round, so a target
+  # raised under the fill is seen by the `max_catchup` decision before another
+  # fetch is started for it.
+  defp step(y, target, applied, window) do
+    case take(y, prefetch(y, target, behind(y, window))) do
+      {:applied, window} -> fill(Tables.head_at(), Tables.target(), applied + 1, window)
+      {:reset, window} -> done(window, applied, :ok)
+      {{:error, _reason} = error, window} -> done(window, applied, error)
     end
   end
 
-  defp apply_block(y) do
-    case block(y) do
-      {:ok, block} -> commit(block, y)
-      {:error, reason} -> failed(y, reason)
-    end
+  defp done(window, applied, result) do
+    discard(window)
+    {applied, result}
   end
+
+  # Another writer may have moved the head past heights this window is still
+  # fetching. Those fetches are given up here, where the next height to apply
+  # is known, rather than left to run to the end of the fill.
+  defp behind(y, window) do
+    {passed, rest} = Map.split_with(window, fn {height, _entry} -> height < y end)
+    discard(passed)
+    rest
+  end
+
+  # Whatever applying `y` raises, the rest of the window goes with it: the
+  # fill runs in the consumer's own process, where a task left behind would
+  # outlive the call that started it.
+  defp take(y, window) do
+    {entry, rest} = Map.pop(window, y)
+    {apply_block(collect(y, entry), y), rest}
+  catch
+    kind, reason ->
+      discard(Map.delete(window, y))
+      :erlang.raise(kind, reason, __STACKTRACE__)
+  end
+
+  defp apply_block({:ok, block}, y), do: commit(block, y)
+  defp apply_block({:error, reason}, y), do: failed(y, reason)
 
   defp commit(block, y) do
     sources = Invalidator.sources(block)
@@ -288,11 +339,39 @@ defmodule Rujira.Cache.Advance do
 
   # --- Private: blocks ---
 
-  defp block(y) do
-    case pushed(y) do
-      {:ok, _block} = ok -> ok
-      :none -> fetch(y)
+  # Up to `catchup_concurrency` fetches are kept in flight, for `y` and the
+  # heights after it, and only while more than one block is left. The last block
+  # of a fill is fetched where it is applied only in a one-block fill; in a
+  # longer fill the last height is prefetched with the others.
+  defp prefetch(y, target, window) when target > y,
+    do: Enum.reduce(y..min(target, y + Config.catchup_concurrency() - 1)//1, window, &open/2)
+
+  defp prefetch(_y, _target, window), do: window
+
+  # A height the consumer has already pushed is not fetched: the deposit is
+  # the block that height will be applied with.
+  defp open(y, window) do
+    case Map.has_key?(window, y) or deposited?(y) do
+      true -> window
+      false -> Map.put(window, y, start_fetch(y))
     end
+  end
+
+  defp deposited?(y), do: :ets.member(Tables.meta(), {:pushed, y})
+
+  # A block pushed after its own fetch was started still wins - the fetch is
+  # abandoned rather than waited for - so the deposit always beats the network,
+  # whenever it arrived.
+  defp collect(y, entry) do
+    case pushed(y) do
+      {:ok, _block} = ok -> abandon(entry, ok)
+      :none -> settle_fetch(entry || start_fetch(y))
+    end
+  end
+
+  defp abandon(entry, result) do
+    shutdown(entry)
+    result
   end
 
   defp deposit(nil, _head), do: :ok
@@ -322,14 +401,40 @@ defmodule Rujira.Cache.Advance do
     {:ok, block}
   end
 
-  defp fetch(y) do
-    task = Task.async(fn -> Block.fetch_uncached(y) end)
+  defp start_fetch(y), do: {Task.async(fn -> fetch(y) end), now()}
 
-    case Task.yield(task, @fetch_timeout) || Task.shutdown(task, :brutal_kill) do
+  # The task is linked to the consumer, and a prefetch of `y + 3` must not take
+  # it down while `y` is being applied - least of all over a height the fill
+  # may never reach. So the body never crashes: every way out is this height's
+  # fetch result, handed to `failed/2` if and when the height is applied.
+  defp fetch(y) do
+    Block.fetch_uncached(y)
+  catch
+    kind, reason -> {:error, {:fetch_crashed, kind, reason}}
+  end
+
+  # The deadline is the fetch's own, counted from where it was started rather
+  # than from where it is waited on: a prefetch has already spent whatever of
+  # it passed while the blocks before it were being applied.
+  defp settle_fetch({task, started}) do
+    case Task.yield(task, patience(started)) || Task.shutdown(task, :brutal_kill) do
       {:ok, result} -> result
       {:exit, reason} -> {:error, reason}
       nil -> {:error, {:timeout, __MODULE__}}
     end
+  end
+
+  defp patience(started), do: max(@fetch_timeout - (now() - started), 0)
+
+  defp now, do: System.monotonic_time(:millisecond)
+
+  defp discard(window), do: Enum.each(window, fn {_y, entry} -> shutdown(entry) end)
+
+  defp shutdown(nil), do: :ok
+
+  defp shutdown({task, _started}) do
+    Task.shutdown(task, :brutal_kill)
+    :ok
   end
 
   # --- Private: failures ---
