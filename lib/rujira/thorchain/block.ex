@@ -264,7 +264,7 @@ defmodule Rujira.Thorchain.Block do
 
   defp time(value) do
     case DateTime.from_iso8601(value) do
-      {:ok, time, _offset} -> {:ok, time}
+      {:ok, time, _offset} -> {:ok, DateTime.add(time, 0, :microsecond)}
       {:error, _} -> {:error, :invalid_time}
     end
   end

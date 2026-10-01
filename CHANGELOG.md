@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Fixed
+
+- `Rujira.Thorchain.Block.time` is always microsecond precision. The node
+  renders RFC3339Nano and trims trailing zeros, so a header time such as
+  `14:29:59.85054Z` parsed to a five-digit `DateTime` that
+  `:utc_datetime_usec` columns reject.
+
 ## 0.7.1
 
 ### Added

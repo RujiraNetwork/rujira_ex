@@ -32,6 +32,18 @@ defmodule Rujira.Thorchain.BlockTest do
                Block.new(response(7))
 
       assert time == ~U[2026-09-26 12:00:00.123456Z]
+      assert time.microsecond == {123_456, 6}
+    end
+
+    test "a time the node rendered with trailing zeros trimmed is still microsecond precision" do
+      for {rendered, microsecond} <- [
+            {"2026-09-29T14:29:59.85054Z", {850_540, 6}},
+            {"2026-09-29T14:29:59.5Z", {500_000, 6}},
+            {"2026-09-29T14:29:59Z", {0, 6}}
+          ] do
+        assert {:ok, %Block{time: time}} = Block.new(response(7, time: rendered))
+        assert time.microsecond == microsecond
+      end
     end
 
     test "an unparsable time is an error, an absent one is nil" do
