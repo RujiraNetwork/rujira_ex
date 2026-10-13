@@ -17,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `fee_address` are now `nil` on a strategy whose contract version does not
   carry them, and default to `nil`; see the `Rujira.ThorchainSwap.Strategy`
   moduledoc for which version carries which (#24).
+- The `Rujira.Enum.reduce_async_while_ok/4` docs no longer say a crashing
+  item is returned as `{:error, reason}`. A crash takes the caller down
+  through the task link, as it always has; only a caller trapping exits gets
+  it back as an error (#13).
 
 ## 0.7.2
 

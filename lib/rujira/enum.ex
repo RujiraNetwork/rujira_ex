@@ -94,10 +94,14 @@ defmodule Rujira.Enum do
   order.
 
   Per item, `fun` may return `{:ok, value}`, a bare value, `{:error, reason}`
-  or `:skip`. An item that outlives the resolved `:timeout` is killed and the
-  whole fan-out returns `{:error, {:timeout, label}}` - or `{:error, :timeout}`
-  when no `label` was given. Any other exit or error is returned as
-  `{:error, reason}`.
+  or `:skip`. An `{:error, reason}` halts the fan-out and is returned. An item
+  that outlives the resolved `:timeout` is killed and the whole fan-out
+  returns `{:error, {:timeout, label}}` - or `{:error, :timeout}` when no
+  `label` was given.
+
+  An item that raises or exits is a bug, not an error: its task is linked to
+  the caller, so the crash takes the caller down with it. A caller that traps
+  exits gets the crash back as `{:error, reason}` instead.
   """
   @spec reduce_async_while_ok(Enumerable.t(), (term() -> term()), Node.opts(), module() | nil) ::
           {:ok, list()} | {:error, term()}

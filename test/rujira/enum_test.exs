@@ -102,11 +102,8 @@ defmodule Rujira.EnumTest do
       assert {:ok, [1, 3]} = result
     end
 
-    # Documents current behaviour rather than desired behaviour. `Task.async_stream`
-    # links its tasks to the caller, so a task that exits abnormally brings the
-    # caller down instead of being reported as `{:error, reason}` — the
-    # `{:exit, reason}` clause in `handle_async_result/1` is only reachable via the
-    # timeout path below. See #13 before "fixing" this test.
+    # Intended: a crash is a bug, and the linked task takes the caller down
+    # with it rather than becoming an error tuple. See #13.
     @tag :capture_log
     test "a crashing task propagates the exit to the caller instead of returning an error" do
       Process.flag(:trap_exit, true)
@@ -122,6 +119,22 @@ defmodule Rujira.EnumTest do
 
       assert_receive {:EXIT, ^pid, :killed}, 1_000
       refute_receive {:result, _}, 50
+    end
+
+    @tag :capture_log
+    test "a caller trapping exits gets a crashing task back as an error" do
+      parent = self()
+
+      spawn(fn ->
+        Process.flag(:trap_exit, true)
+
+        send(
+          parent,
+          {:result, Rujira.Enum.reduce_async_while_ok([1], fn _ -> exit(:boom) end)}
+        )
+      end)
+
+      assert_receive {:result, {:error, :boom}}, 1_000
     end
 
     test "surfaces a timeout as an error, unlabelled when no label is given" do
