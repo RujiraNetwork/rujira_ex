@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Fixed
+
+- `Rujira.ThorchainSwap.Strategy.new/1` parses every config shape the
+  contract has served, not only the v1.2.0 one. Three mainnet strategies run
+  pre-v0.0.6 code and were never migrated, so `list/1` (and
+  `Rujira.ThorchainSwap.list_strategies/1`) returned
+  `{:error, :invalid_attrs}` at every height. Adds `min_slip_bps`, set only on
+  pre-v0.0.6 strategies. `spread_bps`, `min_borrow_amount`, `fee` and
+  `fee_address` are now `nil` on a strategy whose contract version does not
+  carry them, and default to `nil`; see the `Rujira.ThorchainSwap.Strategy`
+  moduledoc for which version carries which (#24).
+
 ## 0.7.2
 
 ### Fixed

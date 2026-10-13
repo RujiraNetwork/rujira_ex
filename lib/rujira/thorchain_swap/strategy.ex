@@ -3,6 +3,21 @@ defmodule Rujira.ThorchainSwap.Strategy do
   A rujira-thorchain-swap streaming market-maker strategy.
 
   Struct, construction, and queries. Use `Rujira.ThorchainSwap` as the public API.
+
+  Parses every config shape the contract has served. Strategies instantiated
+  on early code are never migrated, and a migrated strategy read at an older
+  height serves the shape of the code it ran then. Fields a shape does not
+  carry are `nil`:
+
+  | Contract          | `min_slip_bps` | `fee`, `fee_address` | `min_borrow_amount` | `spread_bps` |
+  | ----------------- | -------------- | -------------------- | ------------------- | ------------ |
+  | before v0.0.6     | set            | `nil`                | `nil`               | `nil`        |
+  | v0.0.6 to v0.x    | `nil`          | `nil`                | `nil`               | `nil`        |
+  | v1.0.x            | `nil`          | set                  | `nil`               | `nil`        |
+  | v1.1.x            | `nil`          | set                  | set                 | `nil`        |
+  | v1.2.0 and later  | `nil`          | set                  | set                 | set          |
+
+  `Rujira.Contracts.version/2` reads the contract version itself.
   """
 
   alias Rujira.Amount
@@ -26,11 +41,12 @@ defmodule Rujira.ThorchainSwap.Strategy do
             address: nil,
             max_stream_length: 0,
             stream_step_ratio: Decimal.new(0),
-            spread_bps: 0,
+            min_slip_bps: nil,
+            spread_bps: nil,
             max_borrow_ratio: Decimal.new(0),
-            min_borrow_amount: 0,
+            min_borrow_amount: nil,
             reserve_fee: Decimal.new(0),
-            fee: Decimal.new(0),
+            fee: nil,
             fee_address: nil,
             markets: :not_loaded,
             vaults: :not_loaded
@@ -40,11 +56,12 @@ defmodule Rujira.ThorchainSwap.Strategy do
           address: String.t() | nil,
           max_stream_length: non_neg_integer(),
           stream_step_ratio: Decimal.t(),
-          spread_bps: non_neg_integer(),
+          min_slip_bps: non_neg_integer() | nil,
+          spread_bps: non_neg_integer() | nil,
           max_borrow_ratio: Decimal.t(),
-          min_borrow_amount: Amount.t(),
+          min_borrow_amount: Amount.t() | nil,
           reserve_fee: Decimal.t(),
-          fee: Decimal.t(),
+          fee: Decimal.t() | nil,
           fee_address: String.t() | nil,
           markets: :not_loaded | [String.t()],
           vaults: :not_loaded | [Vault.t()]
@@ -53,38 +70,55 @@ defmodule Rujira.ThorchainSwap.Strategy do
   # --- Construction ---
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
-  def new(%{
-        "address" => address,
-        "max_stream_length" => max_stream_length,
-        "stream_step_ratio" => stream_step_ratio,
-        "spread_bps" => spread_bps,
-        "max_borrow_ratio" => max_borrow_ratio,
-        "min_borrow_amount" => min_borrow_amount,
-        "reserve_fee" => reserve_fee,
-        "fee" => [fee, fee_address]
-      }) do
-    with {:ok, max_stream_length} <- Math.to_integer(max_stream_length),
-         {:ok, stream_step_ratio} <- Math.to_decimal(stream_step_ratio),
-         {:ok, spread_bps} <- Math.to_integer(spread_bps),
-         {:ok, max_borrow_ratio} <- Math.to_decimal(max_borrow_ratio),
+  def new(
+        %{
+          "spread_bps" => spread_bps,
+          "min_borrow_amount" => min_borrow_amount,
+          "fee" => [fee, fee_address]
+        } = attrs
+      )
+      when not is_map_key(attrs, "min_slip_bps") do
+    with {:ok, spread_bps} <- Math.to_integer(spread_bps),
          {:ok, min_borrow_amount} <- Amount.new(min_borrow_amount),
-         {:ok, reserve_fee} <- Math.to_decimal(reserve_fee),
          {:ok, fee} <- Math.to_decimal(fee) do
-      {:ok,
-       %__MODULE__{
-         id: address,
-         address: address,
-         max_stream_length: max_stream_length,
-         stream_step_ratio: stream_step_ratio,
-         spread_bps: spread_bps,
-         max_borrow_ratio: max_borrow_ratio,
-         min_borrow_amount: min_borrow_amount,
-         reserve_fee: reserve_fee,
-         fee: fee,
-         fee_address: fee_address
-       }}
+      build(attrs,
+        spread_bps: spread_bps,
+        min_borrow_amount: min_borrow_amount,
+        fee: fee,
+        fee_address: fee_address
+      )
     end
   end
+
+  def new(%{"min_borrow_amount" => min_borrow_amount, "fee" => [fee, fee_address]} = attrs)
+      when not is_map_key(attrs, "min_slip_bps") and not is_map_key(attrs, "spread_bps") do
+    with {:ok, min_borrow_amount} <- Amount.new(min_borrow_amount),
+         {:ok, fee} <- Math.to_decimal(fee) do
+      build(attrs, min_borrow_amount: min_borrow_amount, fee: fee, fee_address: fee_address)
+    end
+  end
+
+  def new(%{"fee" => [fee, fee_address]} = attrs)
+      when not is_map_key(attrs, "min_slip_bps") and not is_map_key(attrs, "spread_bps") and
+             not is_map_key(attrs, "min_borrow_amount") do
+    with {:ok, fee} <- Math.to_decimal(fee) do
+      build(attrs, fee: fee, fee_address: fee_address)
+    end
+  end
+
+  def new(%{"min_slip_bps" => min_slip_bps} = attrs)
+      when not is_map_key(attrs, "fee") and not is_map_key(attrs, "spread_bps") and
+             not is_map_key(attrs, "min_borrow_amount") do
+    with {:ok, min_slip_bps} <- Math.to_integer(min_slip_bps) do
+      build(attrs, min_slip_bps: min_slip_bps)
+    end
+  end
+
+  def new(attrs)
+      when is_map(attrs) and not is_map_key(attrs, "min_slip_bps") and
+             not is_map_key(attrs, "fee") and not is_map_key(attrs, "spread_bps") and
+             not is_map_key(attrs, "min_borrow_amount"),
+      do: build(attrs, [])
 
   def new(_), do: {:error, :invalid_attrs}
 
@@ -177,6 +211,39 @@ defmodule Rujira.ThorchainSwap.Strategy do
   end
 
   # --- Private ---
+
+  # The fields every config shape carries. `fields` holds the parsed fields
+  # the matching `new/1` clause's shape adds.
+  defp build(
+         %{
+           "address" => address,
+           "max_stream_length" => max_stream_length,
+           "stream_step_ratio" => stream_step_ratio,
+           "max_borrow_ratio" => max_borrow_ratio,
+           "reserve_fee" => reserve_fee
+         },
+         fields
+       ) do
+    with {:ok, max_stream_length} <- Math.to_integer(max_stream_length),
+         {:ok, stream_step_ratio} <- Math.to_decimal(stream_step_ratio),
+         {:ok, max_borrow_ratio} <- Math.to_decimal(max_borrow_ratio),
+         {:ok, reserve_fee} <- Math.to_decimal(reserve_fee) do
+      {:ok,
+       struct(
+         %__MODULE__{
+           id: address,
+           address: address,
+           max_stream_length: max_stream_length,
+           stream_step_ratio: stream_step_ratio,
+           max_borrow_ratio: max_borrow_ratio,
+           reserve_fee: reserve_fee
+         },
+         fields
+       )}
+    end
+  end
+
+  defp build(_attrs, _fields), do: {:error, :invalid_attrs}
 
   defp fetch_markets(address, opts) do
     case Contracts.query_state_smart(address, %{markets: %{}}, opts) do
