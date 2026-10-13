@@ -96,11 +96,11 @@ days) — download it from the bottom of the workflow run page.
 
 ### The coverage floor
 
-`coveralls.json` sets a `minimum_coverage` floor. Drop below it and `mix
-coveralls` fails:
+`coveralls.json` sets a `minimum_coverage` floor, currently **85%**. Drop below
+it and `mix coveralls` fails — locally and in CI:
 
 ```
-FAILED: Expected minimum coverage of 36%, got 34.1%.
+FAILED: Expected minimum coverage of 85%, got 84.2%.
 ```
 
 This is a **ratchet**. If your PR trips it, add tests — do not lower the floor.
@@ -110,8 +110,8 @@ gain cannot be lost later.
 `coveralls.json` at the repo root configures the report. It currently skips
 the generated protobuf modules (`lib/cosmos/`, `lib/cosmwasm/`,
 `lib/tendermint/`, `lib/thorchain/`) and test support files, so the report
-lists only hand-written `lib/rujira/` code. Add a `coverage_options` block
-there to set a minimum coverage threshold — see the
+lists only hand-written `lib/rujira/` code. The floor lives in its
+`coverage_options` block — see the
 [excoveralls README](https://github.com/parroty/excoveralls#configuration)
 for the schema.
 
