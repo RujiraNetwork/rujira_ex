@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed
+
+- Dependency floors raised past their security advisories: `decimal` to
+  `~> 3.1 and >= 3.1.2` (EEF-CVE-2026-97853), `protobuf` to `~> 0.17.1`
+  (EEF-CVE-2026-104635) and `grpc` to `~> 1.0` (EEF-CVE-2026-48853). Drops
+  `decimal` 2.x, `protobuf` below 0.17.1 and `grpc` 0.x (#10).
+
 ### Fixed
 
 - `Rujira.ThorchainSwap.Strategy.new/1` parses every config shape the

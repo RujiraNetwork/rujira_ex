@@ -24,6 +24,10 @@ that is tighter than necessary here does not protect anyone — it becomes an
 on their side. Prefer widening (`~> 0.9 or ~> 1.0`) over bumping, and keep an upper
 bound that excludes the next major.
 
+The one exception is a security floor: when a `mix hex.audit` advisory is fixed in a
+release, raise the requirement's floor to that release (e.g. `~> 3.1 and >= 3.1.2`), so
+a consumer cannot resolve the vulnerable version through this library.
+
 Before relying on what a consumer requires, check both its declared requirement and its
 `mix.lock` — they diverge, and the lock is what actually runs.
 

@@ -69,9 +69,9 @@ defmodule RujiraEx.MixProject do
 
   defp deps do
     [
-      {:decimal, "~> 2.4 or ~> 3.0"},
-      {:grpc, "~> 0.9 or ~> 1.0"},
-      {:protobuf, "~> 0.12"},
+      {:decimal, "~> 3.1 and >= 3.1.2"},
+      {:grpc, "~> 1.0"},
+      {:protobuf, "~> 0.17.1"},
       {:telemetry, "~> 1.0"},
       {:bech32, "~> 1.0"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
@@ -79,7 +79,7 @@ defmodule RujiraEx.MixProject do
       {:excoveralls, "~> 0.18", only: [:test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       # dev-only: the gRPC client adapter scripts/refresh_chain_assets.exs needs; not a runtime or Hex dependency
-      {:gun, "~> 2.4.0", only: :dev}
+      {:mint, "~> 1.9", only: :dev}
     ]
   end
 end

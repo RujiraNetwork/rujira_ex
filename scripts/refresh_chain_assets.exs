@@ -16,7 +16,7 @@
 #   * NODE_GRPC_TOKEN - optional; sent as `authorization: Bearer <token>` on
 #                       every request. Omit it for an unauthenticated node.
 #
-# This script pins `adapter: GRPC.Client.Adapters.Gun`. `:gun` is a dev-only
+# This script pins `adapter: GRPC.Client.Adapters.Mint`. `:mint` is a dev-only
 # dependency of this repo (see mix.exs) - run this script in the dev env
 # (`mix run scripts/refresh_chain_assets.exs`, not `MIX_ENV=test`). A node impl
 # configured by a consumer application is not used here - this script talks to
@@ -36,7 +36,7 @@ defmodule RefreshChainAssets do
   @fixture "test/fixtures/chain_assets.json"
 
   def run do
-    Application.ensure_all_started(:gun)
+    Application.ensure_all_started(:mint)
 
     channel = connect(System.get_env("NODE_GRPC") || raise("NODE_GRPC is not set"))
 
@@ -56,7 +56,7 @@ defmodule RefreshChainAssets do
   # --- Node ---
 
   defp connect(endpoint) do
-    opts = [adapter: GRPC.Client.Adapters.Gun, headers: headers()]
+    opts = [adapter: GRPC.Client.Adapters.Mint, headers: headers()]
 
     opts =
       if String.ends_with?(endpoint, ":443"),

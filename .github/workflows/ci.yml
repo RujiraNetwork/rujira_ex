@@ -63,15 +63,10 @@ jobs:
       - name: Static analysis
         run: mix dialyzer
 
-      # Reports retired packages and known security advisories.
-      #
-      # Non-blocking for now: the current dependency tree carries open
-      # advisories (#10), so a hard gate would make CI red on
-      # every PR regardless of its contents. The findings are written to the run
-      # summary so they stay visible instead of being buried in a log. Flip this
-      # to a blocking step once the advisories are resolved.
+      # Reports retired packages and known security advisories. Blocking: this
+      # library is published to Hex, so its dependency tree is every
+      # consumer's. The findings also go to the run summary.
       - name: Audit dependencies
-        continue-on-error: true
         shell: bash
         run: |
           set +e
@@ -84,8 +79,6 @@ jobs:
               echo "## Dependency audit: clean"
             else
               echo "## Dependency audit: findings"
-              echo
-              echo "Non-blocking while #10 is open."
               echo
               echo '```'
               cat audit.log
