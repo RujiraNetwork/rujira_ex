@@ -14,6 +14,9 @@ defmodule Rujira.Thorchain.InboundAddress do
   alias Thorchain.Types.QueryInboundAddressesResponse
   alias Thorchain.Types.QueryInboundAddressResponse
 
+  @typedoc "The node's inbound address protobuf struct, as `new/1` consumes it."
+  @type raw :: %QueryInboundAddressResponse{}
+
   # --- Struct ---
 
   defstruct id: nil,
@@ -44,7 +47,7 @@ defmodule Rujira.Thorchain.InboundAddress do
 
   # --- Construction ---
 
-  @spec new(QueryInboundAddressResponse.t()) :: {:ok, t()} | {:error, term()}
+  @spec new(raw()) :: {:ok, t()} | {:error, term()}
   def new(%QueryInboundAddressResponse{} = address) do
     with {:ok, gas_rate} <- Amount.new(address.gas_rate),
          {:ok, outbound_tx_size} <- Amount.new(address.outbound_tx_size),

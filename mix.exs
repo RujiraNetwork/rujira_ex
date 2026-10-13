@@ -62,8 +62,16 @@ defmodule RujiraEx.MixProject do
         "guides/conventions.md",
         "guides/architecture.md",
         "guides/event_pipeline.md",
-        "guides/caching.md"
-      ]
+        "guides/caching.md",
+        "LICENSE"
+      ],
+      # The generated gRPC stub is hidden from the docs; name it as plain code.
+      skip_code_autolink_to: [
+        "Thorchain.Types.Query.Stub.contract_infos/2",
+        "Thorchain.Types.Query.Stub.contract_infos/3"
+      ],
+      # The changelog names functions that have since been removed or renamed.
+      skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
     ]
   end
 

@@ -16,6 +16,9 @@ defmodule Rujira.Thorchain.Pool do
   alias Thorchain.Types.QueryPoolsRequest
   alias Thorchain.Types.QueryPoolsResponse
 
+  @typedoc "The node's pool protobuf response, as `new/1` consumes it."
+  @type raw :: %QueryPoolResponse{}
+
   # --- Struct ---
 
   defstruct id: nil,
@@ -60,7 +63,7 @@ defmodule Rujira.Thorchain.Pool do
 
   # --- Construction ---
 
-  @spec new(QueryPoolResponse.t()) :: {:ok, t()} | {:error, term()}
+  @spec new(raw()) :: {:ok, t()} | {:error, term()}
   def new(%QueryPoolResponse{} = pool) do
     with {:ok, balance_asset} <- Amount.new(pool.balance_asset),
          {:ok, balance_rune} <- Amount.new(pool.balance_rune),

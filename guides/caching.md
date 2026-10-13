@@ -268,7 +268,7 @@ threading `opts[:height]` by hand or resolving the head more than once.
 `Rujira.Enum`. It does not bound the total number of reads in flight at once:
 a fan-out nested inside another multiplies, since the outer's `opts` (and
 whatever `:fan_out` it carries) is what the inner fan-out reads too. `Fin`'s
-`Range.list_all/2`, for instance, fans out over pairs and, per pair, over
+`Rujira.Fin.Range.list_all/3`, for instance, fans out over pairs and, per pair, over
 that pair's own ranges - `max_concurrency` pairs at once, each running its own
 `max_concurrency`-wide read.
 

@@ -43,6 +43,9 @@ defmodule Rujira.Thorchain.Block.Tx do
   alias Thorchain.Types.BlockTxResult
   alias Thorchain.Types.QueryBlockTx
 
+  @typedoc "The node's block transaction protobuf struct, as `new/3` consumes it."
+  @type raw :: %QueryBlockTx{}
+
   # --- Struct ---
 
   defstruct idx: 0, hash: nil, code: 0, memo: nil, messages: []
@@ -58,7 +61,7 @@ defmodule Rujira.Thorchain.Block.Tx do
   # --- Construction ---
 
   @doc "The transaction at `idx` of the block at `height`. Never fails."
-  @spec new(QueryBlockTx.t(), non_neg_integer(), non_neg_integer()) :: t()
+  @spec new(raw(), non_neg_integer(), non_neg_integer()) :: t()
   def new(%QueryBlockTx{hash: hash, tx: raw, result: result}, idx, height) do
     body = decode(raw, height, idx)
 

@@ -12,6 +12,9 @@ defmodule Rujira.Thorchain.Mimir do
   alias Thorchain.Types.QueryMimirValuesRequest
   alias Thorchain.Types.QueryMimirValuesResponse
 
+  @typedoc "The node's mimir protobuf struct, as `new/1` consumes it."
+  @type raw :: %TcMimir{}
+
   # --- Struct ---
 
   defstruct id: nil, key: nil, value: 0
@@ -24,7 +27,7 @@ defmodule Rujira.Thorchain.Mimir do
 
   # --- Construction ---
 
-  @spec new(TcMimir.t()) :: {:ok, t()} | {:error, term()}
+  @spec new(raw()) :: {:ok, t()} | {:error, term()}
   def new(%TcMimir{key: key, value: value}),
     do: {:ok, %__MODULE__{id: key, key: key, value: value}}
 

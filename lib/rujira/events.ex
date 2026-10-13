@@ -26,6 +26,9 @@ defmodule Rujira.Events do
   alias Rujira.Events.Event
   alias Thorchain.Types.BlockEvent
 
+  @typedoc "A raw THORChain `BlockEvent` protobuf struct, as the node returns it."
+  @type block_event :: %BlockEvent{}
+
   @doc """
   Casts a raw `BlockEvent` protobuf struct into the standard
   `%{type: String.t(), attributes: map()}` format.
@@ -33,7 +36,7 @@ defmodule Rujira.Events do
   A `BlockEvent` whose pairs don't start with `%{key: "type"}` casts to
   `%{type: nil, attributes: <all pairs as a map>}` instead of raising.
   """
-  @spec cast(BlockEvent.t()) :: %{type: String.t() | nil, attributes: map()}
+  @spec cast(block_event()) :: %{type: String.t() | nil, attributes: map()}
   def cast(%BlockEvent{
         event_kv_pair: [
           %{key: "type", value: type}
@@ -76,7 +79,7 @@ defmodule Rujira.Events do
   alias Rujira.Thorchain.Events.Event, as: TcEvent
   alias Rujira.ThorchainSwap.Events.Event, as: ThorchainSwapEvent
 
-  @spec parse(map() | BlockEvent.t()) ::
+  @spec parse(map() | block_event()) ::
           {:ok,
            FinEvent.t()
            | TcEvent.t()

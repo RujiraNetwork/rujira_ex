@@ -1,5 +1,10 @@
 defmodule Rujira.Logger do
-  @moduledoc false
+  @moduledoc ~S"""
+  The library's logger. Every log line is prefixed with the module that wrote
+  it, so pass `__MODULE__` as the first argument:
+
+      Rujira.Logger.error(__MODULE__, "query failed: #{inspect(reason)}")
+  """
   require Logger
 
   @spec info(module(), String.t()) :: :ok

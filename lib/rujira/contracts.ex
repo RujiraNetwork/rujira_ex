@@ -31,12 +31,18 @@ defmodule Rujira.Contracts do
   alias Rujira.Logger
   alias Rujira.Node
 
+  @typedoc "A CosmWasm `ContractInfo` protobuf struct: code id, creator, admin and label."
+  @type contract_info :: %ContractInfo{}
+
+  @typedoc "A CosmWasm `CodeInfoResponse` protobuf struct: a stored code's id, creator and checksum."
+  @type code_info :: %CodeInfoResponse{}
+
   # The node's suffix on every contract error raised while answering a wasm query.
   @wasm_query_failed ": query wasm contract failed"
 
   defstruct id: nil, address: nil, info: nil
 
-  @type t :: %__MODULE__{id: String.t(), address: String.t(), info: ContractInfo.t() | nil}
+  @type t :: %__MODULE__{id: String.t(), address: String.t(), info: contract_info() | nil}
 
   @spec from_id(String.t()) :: {:ok, t()}
   def from_id(id) do
@@ -50,12 +56,12 @@ defmodule Rujira.Contracts do
   the fact it is until the code registry changes.
   """
   @spec code_info(non_neg_integer()) ::
-          {:ok, CodeInfoResponse.t()} | {:error, :not_found} | {:error, Node.rpc_error()}
+          {:ok, code_info()} | {:error, :not_found} | {:error, Node.rpc_error()}
   def code_info(code_id), do: code_info(code_id, [])
 
   @doc "As `code_info/1`, read at `opts[:height]` when given."
   @spec code_info(non_neg_integer(), Node.opts()) ::
-          {:ok, CodeInfoResponse.t()} | {:error, :not_found} | {:error, Node.rpc_error()}
+          {:ok, code_info()} | {:error, :not_found} | {:error, Node.rpc_error()}
   def code_info(code_id, opts) do
     with {:ok, opts} <- Cache.pin(opts),
          {:ok, value} <-
@@ -140,11 +146,11 @@ defmodule Rujira.Contracts do
   end
 
   @spec info(String.t()) ::
-          {:ok, ContractInfo.t()} | {:error, Node.rpc_error()}
+          {:ok, contract_info()} | {:error, Node.rpc_error()}
   def info(address), do: info(address, [])
 
   @doc "As `info/1`, read at `opts[:height]` when given."
-  @spec info(String.t(), Node.opts()) :: {:ok, ContractInfo.t()} | {:error, Node.rpc_error()}
+  @spec info(String.t(), Node.opts()) :: {:ok, contract_info()} | {:error, Node.rpc_error()}
   def info(address, opts) do
     with {:ok, opts} <- Cache.pin(opts) do
       Cache.fetch(
@@ -156,11 +162,11 @@ defmodule Rujira.Contracts do
     end
   end
 
-  @spec codes() :: {:ok, list(CodeInfoResponse.t())} | {:error, Node.rpc_error()}
+  @spec codes() :: {:ok, list(code_info())} | {:error, Node.rpc_error()}
   def codes, do: codes([])
 
   @doc "As `codes/0`, read at `opts[:height]` when given."
-  @spec codes(Node.opts()) :: {:ok, list(CodeInfoResponse.t())} | {:error, Node.rpc_error()}
+  @spec codes(Node.opts()) :: {:ok, list(code_info())} | {:error, Node.rpc_error()}
   def codes(opts) do
     with {:ok, opts} <- Cache.pin(opts) do
       Cache.fetch({__MODULE__, :codes, []}, [:contract_registry], opts, fn _height ->

@@ -5,7 +5,7 @@ defmodule Rujira.Fin.Order do
   Struct, construction, and queries. Use `Rujira.Fin` as the public API.
 
   The query boundary is typed: `side` is `:base | :quote` and `price` is a
-  `Rujira.Fin.Price.order/0`; the price reaches the cache and the wire in the
+  `t:Rujira.Fin.Price.order/0`; the price reaches the cache and the wire in the
   one form `Rujira.Fin.Price.to_query/1` builds.
 
   Every read here is cached per `Rujira.Cache`, resolved at `opts[:height]` or -

@@ -13,6 +13,9 @@ defmodule Rujira.Thorchain.Network do
   alias Thorchain.Types.QueryNetworkRequest
   alias Thorchain.Types.QueryNetworkResponse
 
+  @typedoc "The node's network protobuf response, as `new/1` consumes it."
+  @type raw :: %QueryNetworkResponse{}
+
   # --- Struct ---
 
   defstruct bond_reward_rune: 0,
@@ -47,7 +50,7 @@ defmodule Rujira.Thorchain.Network do
 
   # --- Construction ---
 
-  @spec new(QueryNetworkResponse.t()) :: {:ok, t()} | {:error, term()}
+  @spec new(raw()) :: {:ok, t()} | {:error, term()}
   def new(%QueryNetworkResponse{} = network) do
     with {:ok, bond_reward_rune} <- Amount.new(network.bond_reward_rune),
          {:ok, total_bond_units} <- Amount.new(network.total_bond_units),

@@ -109,12 +109,11 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
 
-      # Build check only: this package publishes docs to HexDocs, so a hard
-      # failure here would break a release. Pre-existing ex_doc warnings mean
-      # --warnings-as-errors cannot be enabled yet.
+      # This package publishes docs to HexDocs, so a broken reference fails CI
+      # here rather than shipping as dead text.
       - name: Build docs
         if: matrix.primary
-        run: mix docs
+        run: mix docs --warnings-as-errors
 
       # MIX_ENV is deliberately never set at the workflow level: cli/0 in mix.exs
       # sets preferred_envs, and an explicit MIX_ENV would override it and run

@@ -105,6 +105,9 @@ defmodule Rujira.Thorchain.Block do
   alias Thorchain.Types.QueryBlockResponse
   alias Thorchain.Types.QueryBlockTx
 
+  @typedoc "The node's block protobuf response, as `new/1` consumes it."
+  @type raw :: %QueryBlockResponse{}
+
   # --- Struct ---
 
   defstruct height: 0, time: nil, chain_id: nil, txs: [], events: []
@@ -151,7 +154,7 @@ defmodule Rujira.Thorchain.Block do
   node renders nanoseconds, which `DateTime` truncates. An absent timestamp is
   `nil`; an unparsable one is `{:error, :invalid_time}`.
   """
-  @spec new(QueryBlockResponse.t()) :: {:ok, t()} | {:error, term()}
+  @spec new(raw()) :: {:ok, t()} | {:error, term()}
   def new(%QueryBlockResponse{header: %BlockResponseHeader{} = header} = res) do
     with {:ok, time} <- time(header.time) do
       {txs, events} = build(res, header.height)

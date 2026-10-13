@@ -37,6 +37,9 @@ defmodule Rujira.Deployments do
   alias Thorchain.Types.Query.Stub
   alias Thorchain.Types.QueryContractInfosRequest
 
+  @typedoc "A THORChain contract-registry entry: the address, contract name and version the node reports."
+  @type contract_info :: %ContractInfo{}
+
   @default_protocol_modules %{
     "rujira-brune" => Rujira.Brune.Pool,
     "rujira-fin" => Rujira.Fin.Pair,
@@ -47,11 +50,11 @@ defmodule Rujira.Deployments do
     "rujira-thorchain-swap" => Rujira.ThorchainSwap.Strategy
   }
 
-  @spec contract_infos() :: {:ok, [ContractInfo.t()]} | {:error, term()}
+  @spec contract_infos() :: {:ok, [contract_info()]} | {:error, term()}
   def contract_infos, do: contract_infos([])
 
   @doc "As `contract_infos/0`, read at `opts[:height]` when given."
-  @spec contract_infos(Node.opts()) :: {:ok, [ContractInfo.t()]} | {:error, term()}
+  @spec contract_infos(Node.opts()) :: {:ok, [contract_info()]} | {:error, term()}
   def contract_infos(opts) do
     with {:ok, opts} <- Cache.pin(opts) do
       Cache.fetch({__MODULE__, :contract_infos, []}, [:contract_registry], opts, fn _height ->

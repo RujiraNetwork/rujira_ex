@@ -18,6 +18,9 @@ defmodule Rujira.Thorchain.LiquidityProvider do
   alias Thorchain.Types.QueryLiquidityProviderRequest
   alias Thorchain.Types.QueryLiquidityProviderResponse
 
+  @typedoc "The node's liquidity provider protobuf response, as `new/1` consumes it."
+  @type raw :: %QueryLiquidityProviderResponse{}
+
   # --- Struct ---
 
   defstruct id: nil,
@@ -59,7 +62,7 @@ defmodule Rujira.Thorchain.LiquidityProvider do
   # --- Construction ---
 
   @doc "Builds a liquidity provider from a raw position."
-  @spec new(QueryLiquidityProviderResponse.t()) :: {:ok, t()} | {:error, term()}
+  @spec new(raw()) :: {:ok, t()} | {:error, term()}
   def new(%QueryLiquidityProviderResponse{} = lp) do
     asset = Assets.from_string(lp.asset)
 
@@ -114,12 +117,12 @@ defmodule Rujira.Thorchain.LiquidityProvider do
 
   @doc "A liquidity provider's raw position, cached per `Rujira.Cache`."
   @spec query(String.t(), String.t()) ::
-          {:ok, QueryLiquidityProviderResponse.t()} | {:error, term()}
+          {:ok, raw()} | {:error, term()}
   def query(asset, address), do: query(asset, address, [])
 
   @doc "As `query/2`, read at `opts[:height]` or, without one, at the head."
   @spec query(String.t(), String.t(), Node.opts()) ::
-          {:ok, QueryLiquidityProviderResponse.t()} | {:error, term()}
+          {:ok, raw()} | {:error, term()}
   def query(asset, address, opts) do
     with {:ok, opts} <- Cache.pin(opts) do
       Cache.fetch(

@@ -15,6 +15,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The Elixir requirement is now `~> 1.19` (was `~> 1.18`). CI tests both ends
   of the supported range: Elixir 1.19 on OTP 28 and Elixir 1.20 on OTP 29
   (#5).
+- Public specs that took or returned a generated protobuf struct now name it
+  through a documented local type (`Rujira.Events.block_event/0`,
+  `Rujira.Contracts.contract_info/0` and `code_info/0`,
+  `Rujira.Deployments.contract_info/0`, and `raw/0` on each
+  `Rujira.Thorchain` resource), so HexDocs no longer renders them as dead
+  links. The docs build with `--warnings-as-errors` (#6).
 
 ### Fixed
 

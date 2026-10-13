@@ -13,6 +13,9 @@ defmodule Rujira.Thorchain.OutboundFee do
   alias Thorchain.Types.QueryOutboundFeesRequest
   alias Thorchain.Types.QueryOutboundFeesResponse
 
+  @typedoc "The node's outbound fee protobuf struct, as `new/1` consumes it."
+  @type raw :: %QueryOutboundFeeResponse{}
+
   # --- Struct ---
 
   defstruct id: nil,
@@ -35,7 +38,7 @@ defmodule Rujira.Thorchain.OutboundFee do
 
   # --- Construction ---
 
-  @spec new(QueryOutboundFeeResponse.t()) :: {:ok, t()} | {:error, term()}
+  @spec new(raw()) :: {:ok, t()} | {:error, term()}
   def new(%QueryOutboundFeeResponse{} = fee) do
     with {:ok, outbound_fee} <- Amount.new(fee.outbound_fee),
          {:ok, fee_withheld_rune} <- Amount.new(fee.fee_withheld_rune),
