@@ -8,7 +8,7 @@ defmodule RujiraEx.MixProject do
     [
       app: :rujira_ex,
       version: @version,
-      elixir: "~> 1.18",
+      elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),

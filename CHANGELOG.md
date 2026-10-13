@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `~> 3.1 and >= 3.1.2` (EEF-CVE-2026-97853), `protobuf` to `~> 0.17.1`
   (EEF-CVE-2026-104635) and `grpc` to `~> 1.0` (EEF-CVE-2026-48853). Drops
   `decimal` 2.x, `protobuf` below 0.17.1 and `grpc` 0.x (#10).
+- The Elixir requirement is now `~> 1.19` (was `~> 1.18`). CI tests both ends
+  of the supported range: Elixir 1.19 on OTP 28 and Elixir 1.20 on OTP 29
+  (#5).
 
 ### Fixed
 

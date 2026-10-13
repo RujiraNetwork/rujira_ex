@@ -14,8 +14,24 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify
+    name: Verify (${{ matrix.leg }})
     runs-on: ubuntu-latest
+
+    # Two legs: the floor that mix.exs declares (`elixir: "~> 1.19"`), pinned
+    # to the toolchain rujira-api runs, and the primary leg, which reads
+    # .tool-versions so CI and local development cannot drift. Tooling-only
+    # gates (Dialyzer, audit, docs, coverage) run on the primary leg alone.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - leg: floor
+            otp: "28.1.1"
+            elixir: "1.19.2"
+            primary: false
+          - leg: primary
+            version-file: .tool-versions
+            primary: true
 
     steps:
       - name: Checkout
@@ -24,8 +40,12 @@ jobs:
       - name: Set up Erlang and Elixir
         id: beam
         uses: erlef/setup-beam@v1
+        # Exactly one of version-file / otp-version+elixir-version is set per
+        # leg; setup-beam rejects a leg that sets both.
         with:
-          version-file: .tool-versions
+          version-file: ${{ matrix.version-file }}
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
           version-type: strict
 
       # Caches deps/ and _build/. The Dialyzer PLT lives at
@@ -61,12 +81,14 @@ jobs:
         run: mix credo --strict
 
       - name: Static analysis
+        if: matrix.primary
         run: mix dialyzer
 
       # Reports retired packages and known security advisories. Blocking: this
       # library is published to Hex, so its dependency tree is every
       # consumer's. The findings also go to the run summary.
       - name: Audit dependencies
+        if: matrix.primary
         shell: bash
         run: |
           set +e
@@ -91,12 +113,14 @@ jobs:
       # failure here would break a release. Pre-existing ex_doc warnings mean
       # --warnings-as-errors cannot be enabled yet.
       - name: Build docs
+        if: matrix.primary
         run: mix docs
 
       # MIX_ENV is deliberately never set at the workflow level: cli/0 in mix.exs
       # sets preferred_envs, and an explicit MIX_ENV would override it and run
       # coveralls in the wrong environment.
       - name: Coverage
+        if: matrix.primary
         shell: bash
         run: |
           mix coveralls.html | tee coverage.log
@@ -116,7 +140,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage report
-        if: always()
+        if: always() && matrix.primary
         uses: actions/upload-artifact@v4
         with:
           name: coverage-html
