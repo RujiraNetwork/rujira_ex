@@ -285,6 +285,10 @@ Use consistent error atoms across the codebase:
 | `{:height_mismatch, height, returned}` | The reply's `returned` height doesn't match the requested `height` - `Rujira.Node.query/3` reads it from the headers (`nil` when they were dropped), `Rujira.Thorchain.block/2` from the block header |
 | `{:height_unavailable, height}` | A node error from `Rujira.Node.query/3` or `Rujira.Thorchain.block/2` means the requested `height` cannot be served (pruned, in the future, etc.) |
 | `{:timeout, module}` | A `Rujira.Enum.reduce_async_while_ok/4` fan-out item outlives its resolved `:timeout` - `module` is the caller-supplied `label`, `:timeout` bare if none was given |
+| `:not_configured` | `Rujira.Node.subscribe/2` with no `Rujira.Node.Subscription` running under that name (no `config :rujira_ex, websocket: ...`) |
+| `:invalid_subscription` | `Rujira.Node.subscribe/2` or `unsubscribe/2` given an event other than `:new_block` |
+| `{:invalid_url, url}` | `Rujira.Node.Subscription.Endpoint.new/1` (and so `Rujira.Node.Subscription.start_link/1`) given a URL that is not `ws://` or `wss://` with a host |
+| `:mint_web_socket_not_loaded` | `Rujira.Node.Subscription.start_link/1` without the optional `:mint_web_socket` dependency |
 | `:invalid_fan_out` | An `opts[:fan_out]` or configured `fan_out:` keyword has a key other than `:timeout`/`:max_concurrency`, or a non-positive-integer value |
 
 ## Query options

@@ -25,7 +25,7 @@ end
 - `Rujira.Events` — multi-protocol event parser with typed envelopes
 - `Rujira.Contracts` — CosmWasm smart contract queries (cached)
 - `Rujira.Deployments` — on-chain contract registry resolved live from THORChain
-- `Rujira.Node` — pluggable gRPC node abstraction
+- `Rujira.Node` — pluggable gRPC node abstraction, and an optional push for new blocks
 - `Rujira.Prices` — pluggable price provider with oracle and FIN book fallback
 - `Rujira.Math` — decimal arithmetic and numeric parsing
 
@@ -34,7 +34,8 @@ end
 ```elixir
 config :rujira_ex,
   node: MyApp.Node,               # required — implement Rujira.Node behaviour
-  prices: Rujira.Prices.Default   # optional — defaults to oracle + FIN mid-price fallback
+  prices: Rujira.Prices.Default,  # optional — defaults to oracle + FIN mid-price fallback
+  websocket: "ws://thornode:27147/websocket"  # optional — push new blocks, needs :mint_web_socket
 ```
 
 See [Caching](guides/caching.md#configuration) for the cache's own tuning
@@ -107,10 +108,26 @@ end
 
 See [Caching](guides/caching.md) for the full model.
 
+## New blocks
+
+With `websocket:` configured (and `{:mint_web_socket, "~> 1.0"}` in your
+deps), a process can be woken by every new block instead of polling for it:
+
+```elixir
+:ok = Rujira.Node.subscribe(:new_block)
+
+def handle_info({:rujira_new_block, height}, state), do: ...
+```
+
+It is a wake-up, not a feed: fetch the block as usual, and keep a slow poll
+for a missed message. See [New blocks](guides/new_blocks.md).
+
 ## Guides
 
 - [Coding Conventions](guides/conventions.md) — style, naming, return values, numeric parsing
 - [Architecture](guides/architecture.md) — protocol structure, event pipeline, adding new protocols
+- [Caching](guides/caching.md) — the height-keyed cache and `Rujira.Node.advance/1`
+- [New blocks](guides/new_blocks.md) — the optional websocket push for new block heights
 
 ## Development
 

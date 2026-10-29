@@ -8,6 +8,19 @@ defmodule Rujira.Node do
 
   The implementation must export `query/3`.
 
+  ## New blocks
+
+  `subscribe/2` is a push-based wake-up for new blocks over the node's
+  CometBFT websocket, configured beside the node:
+
+      config :rujira_ex,
+        node: MyApp.NodeImpl,
+        websocket: "ws://thornode:27147/websocket"
+
+  It is optional: without `:websocket`, `subscribe/2` returns `{:error,
+  :not_configured}` and the consumer keeps polling. See
+  `Rujira.Node.Subscription`.
+
   ## Options
 
   `opts` is a keyword list forwarded to the configured implementation, with two
@@ -59,6 +72,7 @@ defmodule Rujira.Node do
 
   alias Rujira.Cache
   alias Rujira.Math
+  alias Rujira.Node.Subscription
   alias Rujira.Thorchain.Block
 
   @typedoc """
@@ -136,6 +150,27 @@ defmodule Rujira.Node do
   """
   @spec advance(pos_integer() | Block.t()) :: :ok | {:error, term()}
   defdelegate advance(height), to: Cache
+
+  # --- New blocks ---
+
+  @doc """
+  Subscribes the calling process to new blocks: it receives
+  `{:rujira_new_block, height}` as soon as the node commits `height`.
+
+      :ok = Rujira.Node.subscribe(:new_block)
+
+  A wake-up, not a feed - fetch the block as usual, and keep a slow poll
+  for a missed message. `{:error, :not_configured}` without `config
+  :rujira_ex, websocket: ...`. See `Rujira.Node.Subscription`.
+  """
+  @spec subscribe(Subscription.event(), Subscription.opts()) ::
+          :ok | {:error, :not_configured | :invalid_subscription}
+  defdelegate subscribe(event, opts \\ []), to: Subscription
+
+  @doc "Undoes `subscribe/2` for the calling process. See `Rujira.Node.Subscription`."
+  @spec unsubscribe(Subscription.event(), Subscription.opts()) ::
+          :ok | {:error, :invalid_subscription}
+  defdelegate unsubscribe(event, opts \\ []), to: Subscription
 
   # --- Queries ---
 
