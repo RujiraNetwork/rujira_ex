@@ -264,6 +264,35 @@ defmodule Rujira.Fin.PairTest do
       assert {:error, :invalid_attrs} = Fin.get_pair(@s8_address, height: @height)
     end
 
+    test "only S8 reads {addr, arb} objects as market makers" do
+      object = %{"addr" => "thor1mm", "arb" => true}
+
+      for shape <- [:s2, :s3, :s4, :s5, :s6] do
+        reset!()
+        shape(shape) |> Map.put("market_makers", ["thor1mm1", object]) |> serve_config()
+
+        assert {:error, :invalid_attrs} = Fin.get_pair(@s8_address, height: @height)
+      end
+
+      reset!()
+      shape(:s1) |> Map.put("market_maker", object) |> serve_config()
+
+      assert {:error, :invalid_attrs} = Fin.get_pair(@s8_address, height: @height)
+    end
+
+    test "S8 reads a market-maker list mixing addresses and objects" do
+      shape(:s8)
+      |> Map.put("market_makers", ["thor1mm1", %{"addr" => "thor1mm2", "arb" => true}])
+      |> serve_config()
+
+      assert {:ok, %Pair{} = pair} = Fin.get_pair(@s8_address, height: @height)
+
+      assert pair.market_makers == [
+               %MarketMaker{address: "thor1mm1", arb: false},
+               %MarketMaker{address: "thor1mm2", arb: true}
+             ]
+    end
+
     test "unknown extra keys are ignored" do
       shape(:s8) |> Map.put("some_future_key", %{"x" => 1}) |> serve_config()
 

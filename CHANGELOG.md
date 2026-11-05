@@ -51,7 +51,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   two arb fields; an empty list on the wire is `[]`. A commit `msg` that is
   not valid base64 is `{:error, :invalid_msg}`. An arb market maker of unknown
   kind is `{:error, :invalid_attrs}`, and so is a config carrying a later
-  shape's key without the rest of that shape. The `Pair` moduledoc has a version table
+  shape's key without the rest of that shape, or a shape before S8 with an
+  `{addr, arb?}` market-maker object. The `Pair` moduledoc has a version table
   for S0-S8 (#32).
 
 ### Changed
