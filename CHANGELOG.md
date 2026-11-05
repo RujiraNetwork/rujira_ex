@@ -25,6 +25,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the contract's `InstantiateMsg`: `markets` and `denoms` stay raw strings,
   `fee` is split into `fee` and `fee_address`, and `prepared_fin_checksum` is
   decoded bytes or `nil` when omitted (#35).
+- `Rujira.ThorchainArb.status/1,2` reads a guard's live status into
+  `Rujira.ThorchainArb.Status` (`height`, `claimed_pools`, `pending_hedges`,
+  `paused`), so a consumer can tell whether a guard is paused. It is cached
+  per block, and node errors come back unchanged (#36).
 - `Rujira.Events.data_error?/1`: whether a parse failure is the data's fault
   (`:invalid_*` or `{:invalid_*, _}`) rather than a failure a retry may
   clear (#38).
