@@ -7,6 +7,18 @@ defmodule Rujira.Ghost.Credit.Account do
   own response fields, in the unit it priced them in - nothing is re-derived and
   no total is added here.
 
+  The `AccountResponse` has kept its keys since credit v1.0.0. Only the value
+  format of the embedded delegate's `shares` changed, and both forms parse to
+  a `Decimal`:
+
+  | Shape | Upstream                                   | Keys                                                                         | Debt `shares`          |
+  | ----- | ------------------------------------------ | ---------------------------------------------------------------------------- | ---------------------- |
+  | A1    | credit v1.0.0 (`355aafa`) to `c1e1d62`     | `owner, account, tag, collaterals, debts, ltv, liquidation_preferences`      | `Uint128` (integer)    |
+  | A2    | `3ee2d68` (ghost-vault v1.1.0) and later   | unchanged                                                                    | `Decimal`              |
+
+  Unknown extra keys are ignored; a response missing any key is
+  `{:error, :invalid_attrs}`.
+
   Struct, construction, and queries. Use `Rujira.Ghost` as the public API.
   """
 
