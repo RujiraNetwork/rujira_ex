@@ -103,6 +103,22 @@ defmodule Rujira.DeploymentsTest do
       assert {:ok, [%{address: "thor1credit", module: Rujira.Ghost.Credit}]} =
                Deployments.list_all_targets()
     end
+
+    test "rujira-thorchain-arb resolves to Rujira.ThorchainArb.Guard by default" do
+      address = "thor1g7cqgq389q738jrwnxhuah0u86t2pwnruvsdq70l7yt6egj6q9jq4kfeqf"
+
+      MockNode.expect(fn %QueryContractInfosRequest{} ->
+        {:ok,
+         %{
+           infos: [
+             %ContractInfo{address: address, contract: "rujira-thorchain-arb", version: "0.1.0"}
+           ]
+         }}
+      end)
+
+      assert {:ok, %{address: ^address, module: Rujira.ThorchainArb.Guard}} =
+               Deployments.from_address(address)
+    end
   end
 
   describe "get_target/1 and list_targets/1" do
