@@ -16,10 +16,16 @@ defmodule Rujira.ThorchainArb do
   """
 
   alias Rujira.ThorchainArb.Guard
+  alias Rujira.ThorchainArb.Status
 
   # --- Guard ---
 
   defdelegate get(address, opts \\ []), to: Guard
   defdelegate list(opts \\ []), to: Guard
   defdelegate from_id(id, opts \\ []), to: Guard
+
+  # --- Status ---
+
+  @doc "A guard's live status - whether it is paused - cached per block."
+  defdelegate status(address, opts \\ []), to: Status, as: :get
 end
