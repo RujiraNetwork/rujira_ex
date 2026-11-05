@@ -110,6 +110,15 @@ defmodule Rujira.ThorchainArbTest do
 
       assert {:error, :invalid_attrs} = ThorchainArb.get(@address)
     end
+
+    test "a non-string market or denom is invalid_attrs" do
+      for key <- ["markets", "denoms"] do
+        config = Map.update!(config(), key, &(&1 ++ [42]))
+        MockNode.expect(fn %{"config" => %{}} -> MockNode.ok(config) end)
+
+        assert {:error, :invalid_attrs} = ThorchainArb.get(@address)
+      end
+    end
   end
 
   describe "from_id/2" do
@@ -242,6 +251,13 @@ defmodule Rujira.ThorchainArbTest do
 
     test "a status missing a required key is invalid_attrs" do
       MockNode.expect(fn %{"status" => %{}} -> MockNode.ok(Map.delete(status(), "paused")) end)
+
+      assert {:error, :invalid_attrs} = ThorchainArb.status(@address)
+    end
+
+    test "a non-string claimed pool is invalid_attrs" do
+      status = Map.put(status(), "claimed_pools", ["BTC.BTC", 42])
+      MockNode.expect(fn %{"status" => %{}} -> MockNode.ok(status) end)
 
       assert {:error, :invalid_attrs} = ThorchainArb.status(@address)
     end

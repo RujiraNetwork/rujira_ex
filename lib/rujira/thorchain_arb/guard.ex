@@ -125,15 +125,18 @@ defmodule Rujira.ThorchainArb.Guard do
 
   # --- Private ---
 
-  defp strings(list) do
-    if Enum.all?(list, &is_binary/1), do: :ok, else: {:error, :invalid_attrs}
-  end
+  defp strings([]), do: :ok
+  defp strings([value | rest]) when is_binary(value), do: strings(rest)
+  defp strings(_), do: {:error, :invalid_attrs}
 
-  defp chain_defaults(map) do
-    if Enum.all?(map, fn {_key, value} -> is_integer(value) end),
-      do: :ok,
-      else: {:error, :invalid_attrs}
-  end
+  defp chain_defaults(map), do: chain_default_values(Map.values(map))
+
+  defp chain_default_values([]), do: :ok
+
+  defp chain_default_values([value | rest]) when is_integer(value),
+    do: chain_default_values(rest)
+
+  defp chain_default_values(_), do: {:error, :invalid_attrs}
 
   defp checksum(nil), do: {:ok, nil}
 
