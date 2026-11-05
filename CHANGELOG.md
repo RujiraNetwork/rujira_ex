@@ -28,6 +28,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Rujira.Events.data_error?/1`: whether a parse failure is the data's fault
   (`:invalid_*` or `{:invalid_*, _}`) rather than a failure a retry may
   clear (#38).
+- `Rujira.Fin.Pair` has `fee_range`, `range_delta` and `range_min` as
+  decimals, and parses config shapes S3 (v1.2/v1.3, whose `fee_amm` is read
+  into `fee_range`), S4 (v2.0.0) and S5 (v2.1.x). A field a shape does not
+  carry is `nil`, so S0-S2 pairs have `nil` for all three. A config with
+  `range_delta` but neither range fee, or with both `fee_amm` and `fee_range`,
+  is `{:error, :invalid_attrs}`; a non-numeric value is
+  `{:error, :invalid_decimal}` (#31).
 
 ### Changed
 

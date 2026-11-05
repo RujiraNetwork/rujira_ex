@@ -21,10 +21,22 @@ defmodule Rujira.Fin.Pair do
 
   | Shape | Upstream                     | Market-maker key on the wire        | `market_makers`                |
   | ----- | ---------------------------- | ----------------------------------- | ------------------------------ |
-  | S0    | before `1736222`             | `market_maker: String \\| null`      | one entry, or `[]` for `null`  |
-  | S1    | v1.0                         | none                                | `nil`                          |
+  | S0    | `3216240` to `1736222^`      | `market_maker: String \\| null`      | one entry, or `[]` for `null`  |
+  | S1    | before `3216240` (Jan 2025)  | none                                | `nil`                          |
   | S2    | `1736222` (Fin/v1.1.0)       | `market_makers: [String]`           | entries with `arb: false`      |
+  | S3    | `2c308f8` (v1.2), v1.3       | `market_makers: [String]`           | entries with `arb: false`      |
+  | S4    | `87e7a32` (v2.0.0)           | `market_makers: [String]`           | entries with `arb: false`      |
+  | S5    | `04bf399` (v2.1.0)           | `market_makers: [String]`           | entries with `arb: false`      |
   | S8    | `dacb42c` (feat/optimize)    | `market_makers: [String \\| {addr, arb?}]` | entries with their `arb` |
+
+  The range-fee fields, by shape:
+
+  | Shape   | On the wire                                | `fee_range`        | `range_delta` | `range_min` |
+  | ------- | ------------------------------------------ | ------------------ | ------------- | ----------- |
+  | S0-S2   | none                                       | `nil`              | `nil`         | `nil`       |
+  | S3      | `range_delta`, `fee_amm`                   | read from `fee_amm` | set          | `nil`       |
+  | S4      | `range_delta`, `fee_range`                 | set                | set           | `nil`       |
+  | S5, S8  | `range_delta`, `fee_range`, `range_min`    | set                | set           | set         |
 
   Every shape also carries `denoms`, `oracles`, `tick`, `fee_taker`,
   `fee_maker` and `fee_address`. Each `market_makers` entry is a
@@ -55,6 +67,9 @@ defmodule Rujira.Fin.Pair do
             fee_taker: Decimal.new(0),
             fee_maker: Decimal.new(0),
             fee_address: nil,
+            fee_range: nil,
+            range_delta: nil,
+            range_min: nil,
             book: :not_loaded
 
   @type t :: %__MODULE__{
@@ -69,6 +84,9 @@ defmodule Rujira.Fin.Pair do
           fee_taker: Decimal.t(),
           fee_maker: Decimal.t(),
           fee_address: String.t() | nil,
+          fee_range: Decimal.t() | nil,
+          range_delta: Decimal.t() | nil,
+          range_min: Decimal.t() | nil,
           book: :not_loaded | Book.t()
         }
 
@@ -79,11 +97,72 @@ defmodule Rujira.Fin.Pair do
   # carries.
   @spec new(map()) :: {:ok, t()} | {:error, term()}
 
-  # S2 and S8: `market_makers` entries are addresses (S2) or `{addr, arb?}`
-  # objects (S8).
+  # S5, and - until they get clauses of their own - S6 to S8, whose extra keys
+  # are ignored: adds `range_min`. S8's `market_makers` entries may be
+  # `{addr, arb?}` objects.
+  def new(
+        %{
+          "market_makers" => market_makers,
+          "fee_range" => fee_range,
+          "range_delta" => range_delta,
+          "range_min" => range_min
+        } = attrs
+      )
+      when is_list(market_makers) and not is_map_key(attrs, "market_maker") and
+             not is_map_key(attrs, "fee_amm") do
+    with {:ok, market_makers} <- market_makers(market_makers),
+         {:ok, fee_range} <- Math.to_decimal(fee_range),
+         {:ok, range_delta} <- Math.to_decimal(range_delta),
+         {:ok, range_min} <- Math.to_decimal(range_min) do
+      build(attrs,
+        market_makers: market_makers,
+        fee_range: fee_range,
+        range_delta: range_delta,
+        range_min: range_min
+      )
+    end
+  end
+
+  # S4: `fee_amm` renamed to `fee_range`.
+  def new(
+        %{
+          "market_makers" => market_makers,
+          "fee_range" => fee_range,
+          "range_delta" => range_delta
+        } = attrs
+      )
+      when is_list(market_makers) and not is_map_key(attrs, "market_maker") and
+             not is_map_key(attrs, "fee_amm") and not is_map_key(attrs, "range_min") do
+    with {:ok, market_makers} <- market_makers(market_makers),
+         {:ok, fee_range} <- Math.to_decimal(fee_range),
+         {:ok, range_delta} <- Math.to_decimal(range_delta) do
+      build(attrs, market_makers: market_makers, fee_range: fee_range, range_delta: range_delta)
+    end
+  end
+
+  # S3: adds `range_delta` and `fee_amm`, which is read into `fee_range`.
+  def new(
+        %{
+          "market_makers" => market_makers,
+          "fee_amm" => fee_amm,
+          "range_delta" => range_delta
+        } = attrs
+      )
+      when is_list(market_makers) and not is_map_key(attrs, "market_maker") and
+             not is_map_key(attrs, "fee_range") and not is_map_key(attrs, "range_min") do
+    with {:ok, market_makers} <- market_makers(market_makers),
+         {:ok, fee_range} <- Math.to_decimal(fee_amm),
+         {:ok, range_delta} <- Math.to_decimal(range_delta) do
+      build(attrs, market_makers: market_makers, fee_range: fee_range, range_delta: range_delta)
+    end
+  end
+
+  # S2: `market_makers` is a list of addresses, with no range-fee key.
   def new(%{"market_makers" => market_makers} = attrs)
-      when is_list(market_makers) and not is_map_key(attrs, "market_maker") do
-    with {:ok, market_makers} <- Rujira.Enum.reduce_while_ok(market_makers, &MarketMaker.new/1) do
+      when is_list(market_makers) and not is_map_key(attrs, "market_maker") and
+             not is_map_key(attrs, "fee_amm") and not is_map_key(attrs, "fee_range") and
+             not is_map_key(attrs, "range_delta") and not is_map_key(attrs, "range_min") do
+    with {:ok, market_makers} <- market_makers(market_makers) do
       build(attrs, market_makers: market_makers)
     end
   end
@@ -146,6 +225,8 @@ defmodule Rujira.Fin.Pair do
   end
 
   defp build(_, _), do: {:error, :invalid_attrs}
+
+  defp market_makers(entries), do: Rujira.Enum.reduce_while_ok(entries, &MarketMaker.new/1)
 
   # --- Queries ---
 

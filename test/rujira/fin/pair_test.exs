@@ -139,6 +139,21 @@ defmodule Rujira.Fin.PairTest do
     }
   end
 
+  # `04bf399` (v2.1.0): adds `range_min`.
+  defp shape(:s5), do: Map.put(shape(:s4), "range_min", "250")
+
+  # `87e7a32` (v2.0.0): `fee_amm` renamed to `fee_range`; oracles may be
+  # enshrined symbols.
+  defp shape(:s4) do
+    shape(:s3)
+    |> Map.delete("fee_amm")
+    |> Map.merge(%{"fee_range" => "0.0003", "oracles" => ["ATOM", "USDC"]})
+  end
+
+  # `2c308f8` (RUJI Trade v1.2, unchanged through v1.3.0 `332a3d2`): adds
+  # `range_delta` and `fee_amm`.
+  defp shape(:s3), do: Map.merge(shape(:s2), %{"range_delta" => "0.002", "fee_amm" => "0.0005"})
+
   # `1736222` (Fin/v1.1.0): `market_makers` is a list of addresses.
   defp shape(:s2) do
     %{
@@ -155,10 +170,11 @@ defmodule Rujira.Fin.PairTest do
     }
   end
 
-  # v1.0: no market-maker key at all.
+  # `3216240^` (Jan 2025): no market-maker key at all. `3216240` added the
+  # singular `market_maker`, so S1 is older than S0.
   defp shape(:s1), do: Map.delete(shape(:s2), "market_makers")
 
-  # `1736222^`: the singular, nullable `market_maker`.
+  # `3216240` to `1736222^`: the singular, nullable `market_maker`.
   defp shape(:s0), do: Map.put(shape(:s1), "market_maker", "thor1mm")
 
   defp serve_config(config) do
@@ -223,6 +239,100 @@ defmodule Rujira.Fin.PairTest do
 
       assert {:ok, %Pair{market_makers: [%MarketMaker{arb: true}]}} =
                Fin.get_pair(@s8_address, height: @height)
+    end
+
+    test "S3: fee_amm is read into fee_range, with range_delta and no range_min" do
+      serve_config(shape(:s3))
+
+      assert {:ok, %Pair{} = pair} = Fin.get_pair(@s8_address, height: @height)
+
+      assert pair.fee_range == Decimal.new("0.0005")
+      assert pair.range_delta == Decimal.new("0.002")
+      assert pair.range_min == nil
+
+      assert pair.market_makers == [
+               %MarketMaker{address: "thor1mm1", arb: false},
+               %MarketMaker{address: "thor1mm2", arb: false}
+             ]
+    end
+
+    test "S4: fee_range is read, with range_delta and no range_min" do
+      serve_config(shape(:s4))
+
+      assert {:ok, %Pair{} = pair} = Fin.get_pair(@s8_address, height: @height)
+
+      assert pair.fee_range == Decimal.new("0.0003")
+      assert pair.range_delta == Decimal.new("0.002")
+      assert pair.range_min == nil
+      assert pair.oracle_base.id == "ATOM"
+      assert [%MarketMaker{address: "thor1mm1", arb: false}, _] = pair.market_makers
+    end
+
+    test "S5: range_min is read alongside fee_range and range_delta" do
+      serve_config(shape(:s5))
+
+      assert {:ok, %Pair{} = pair} = Fin.get_pair(@s8_address, height: @height)
+
+      assert pair.fee_range == Decimal.new("0.0003")
+      assert pair.range_delta == Decimal.new("0.002")
+      assert pair.range_min == Decimal.new("250")
+    end
+
+    test "S3, S4 and S5 list like any other pair" do
+      for shape <- [:s3, :s4, :s5] do
+        reset!()
+        serve_config(shape(shape))
+
+        assert {:ok, [%Pair{range_delta: range_delta}]} = Fin.list_pairs(height: @height)
+        assert range_delta == Decimal.new("0.002")
+      end
+    end
+
+    test "S8 carries the range fee fields" do
+      serve_config(shape(:s8))
+
+      assert {:ok, %Pair{} = pair} = Fin.get_pair(@s8_address, height: @height)
+
+      assert pair.fee_range == Decimal.new("0.00025")
+      assert pair.range_delta == Decimal.new("0.001")
+      assert pair.range_min == Decimal.new("1000")
+    end
+
+    test "S0 to S2 carry nil for the range fee fields" do
+      for shape <- [:s0, :s1, :s2] do
+        reset!()
+        serve_config(shape(shape))
+
+        assert {:ok, %Pair{fee_range: nil, range_delta: nil, range_min: nil}} =
+                 Fin.get_pair(@s8_address, height: @height)
+      end
+    end
+
+    test "a non-numeric range fee field is an error" do
+      for {shape, key} <- [
+            s3: "fee_amm",
+            s3: "range_delta",
+            s4: "fee_range",
+            s5: "range_min",
+            s8: "range_delta"
+          ] do
+        reset!()
+        shape(shape) |> Map.put(key, "abc") |> serve_config()
+
+        assert {:error, :invalid_decimal} = Fin.get_pair(@s8_address, height: @height)
+      end
+    end
+
+    test "fee_amm and fee_range together match no shape" do
+      shape(:s4) |> Map.put("fee_amm", "0.0005") |> serve_config()
+
+      assert {:error, :invalid_attrs} = Fin.get_pair(@s8_address, height: @height)
+    end
+
+    test "range_delta without a range fee matches no shape" do
+      shape(:s2) |> Map.put("range_delta", "0.002") |> serve_config()
+
+      assert {:error, :invalid_attrs} = Fin.get_pair(@s8_address, height: @height)
     end
 
     test "S2: plain address entries read as arb false" do
