@@ -28,13 +28,13 @@ defmodule Rujira.Fin.Events.ArbLot do
   @type arb_objective :: :fin_surplus | :total_rujira_surplus
 
   @type t :: %__MODULE__{
-          provider: String.t(),
-          offer: Coin.t(),
-          ask: Coin.t(),
+          provider: String.t() | nil,
+          offer: Coin.t() | nil,
+          ask: Coin.t() | nil,
           protocol_range_fee_value: Amount.t(),
           fin_surplus_value: Amount.t(),
           total_surplus_value: Amount.t(),
-          arb_objective: arb_objective(),
+          arb_objective: arb_objective() | nil,
           valuation: Decimal.t()
         }
 

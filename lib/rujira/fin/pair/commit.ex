@@ -13,7 +13,7 @@ defmodule Rujira.Fin.Pair.Commit do
 
   defstruct address: nil, msg: nil
 
-  @type t :: %__MODULE__{address: String.t(), msg: binary()}
+  @type t :: %__MODULE__{address: String.t() | nil, msg: binary() | nil}
 
   @spec new(map()) :: {:ok, t()} | {:error, :invalid_attrs}
   def new(%{"addr" => address, "msg" => msg}) when is_binary(address) and is_binary(msg) do

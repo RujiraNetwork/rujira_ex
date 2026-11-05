@@ -16,7 +16,7 @@ defmodule Rujira.Fin.Pair.ArbMarketMaker do
   defstruct address: nil, kind: nil
 
   @type kind :: :endblock | :standard
-  @type t :: %__MODULE__{address: String.t(), kind: kind()}
+  @type t :: %__MODULE__{address: String.t() | nil, kind: kind() | nil}
 
   @spec new(map()) :: {:ok, t()} | {:error, :invalid_attrs}
   def new(%{"endblock" => address} = attrs) when is_binary(address) and map_size(attrs) == 1,
