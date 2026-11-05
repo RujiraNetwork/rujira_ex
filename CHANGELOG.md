@@ -16,7 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `{:error, :invalid_arb_objective}` (#33).
 - `Rujira.ThorchainSwap.Strategy` has an `arb_guard` field: the address of
   the VS v2 `rujira-thorchain-arb` guard a v1.4.0 strategy serves. It is `nil`
-  for strategies before v1.4.0 and for a v1.4.0 strategy serving `null`.
+  for strategies before v1.4.0 and for a v1.4.0 strategy serving `null`; any
+  other non-string `arb_guard` is `{:error, :invalid_attrs}`.
   `list_strategies/1` returns v1 and v2 strategies together (#37, #28).
 - `Rujira.ThorchainArb`, reading `rujira-thorchain-arb` guard contracts with
   `get/2`, `list/0,1` and `from_id/2` into `Rujira.ThorchainArb.Guard`.

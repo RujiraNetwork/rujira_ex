@@ -82,6 +82,13 @@ defmodule Rujira.ThorchainSwap.StrategyTest do
                config(:v1_4_0) |> Map.put("arb_guard", nil) |> Strategy.new()
     end
 
+    test "a v1.4.0 config whose arb_guard is not an address string is an error" do
+      for bad <- [42, %{"addr" => "thor1guard"}, ["thor1guard"], true] do
+        assert {:error, :invalid_attrs} =
+                 config(:v1_4_0) |> Map.put("arb_guard", bad) |> Strategy.new()
+      end
+    end
+
     test "a config from before v1.4.0 has a nil arb_guard" do
       assert {:ok, %Strategy{spread_bps: 1, arb_guard: nil}} = Strategy.new(config(:v1_2_0))
     end
