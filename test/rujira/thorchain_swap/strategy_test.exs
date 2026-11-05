@@ -18,7 +18,8 @@ defmodule Rujira.ThorchainSwap.StrategyTest do
 
   # One config per shape the contract has served, keyed by the first
   # contract version serving it. v0.0.1 and v1.2.0 are mainnet replies at
-  # height 28222789; the others follow the upstream schema at that version.
+  # height 28222789; the others follow the upstream schema at that version
+  # (v1.4.0: `schema/rujira-thorchain-swap.json` at rujira commit 23f66c1).
   defp config(:v0_0_1) do
     %{
       "address" => "thor1zmud8xx7nc86dg296dxru04y2uy85fd4yss9jp4t8s6hdrquma5q2y4a4d",
@@ -51,7 +52,40 @@ defmodule Rujira.ThorchainSwap.StrategyTest do
     }
   end
 
+  defp config(:v1_4_0) do
+    %{
+      "address" => "thor1prh3ue5nd4he254eyg3vq4lxvzed65afp9prv9qvdl2cwfq6xcnqah3aet",
+      "max_stream_length" => 1,
+      "stream_step_ratio" => "0.99",
+      "spread_bps" => 1,
+      "max_borrow_ratio" => "0.3",
+      "min_borrow_amount" => "100",
+      "reserve_fee" => "0.0003",
+      "fee" => ["0.00025", "thor1gm8q2gr25nzzsxzdp2mpja4hyvyhjlr4s6krcsgv2y953uu0js3qhwpus7"],
+      "arb_guard" => "thor1g7cqgq389q738jrwnxhuah0u86t2pwnruvsdq70l7yt6egj6q9jq4kfeqf"
+    }
+  end
+
   describe "new/1" do
+    test "parses a v1.4.0 config, keeping its arb_guard" do
+      assert {:ok,
+              %Strategy{
+                spread_bps: 1,
+                min_borrow_amount: 100,
+                fee_address: "thor1gm8q2gr25nzzsxzdp2mpja4hyvyhjlr4s6krcsgv2y953uu0js3qhwpus7",
+                arb_guard: "thor1g7cqgq389q738jrwnxhuah0u86t2pwnruvsdq70l7yt6egj6q9jq4kfeqf"
+              }} = Strategy.new(config(:v1_4_0))
+    end
+
+    test "a v1.4.0 config with a null arb_guard reads it as nil" do
+      assert {:ok, %Strategy{spread_bps: 1, arb_guard: nil}} =
+               config(:v1_4_0) |> Map.put("arb_guard", nil) |> Strategy.new()
+    end
+
+    test "a config from before v1.4.0 has a nil arb_guard" do
+      assert {:ok, %Strategy{spread_bps: 1, arb_guard: nil}} = Strategy.new(config(:v1_2_0))
+    end
+
     test "parses a v1.2.0 config, splitting the fee tuple" do
       assert {:ok,
               %Strategy{
@@ -138,7 +172,7 @@ defmodule Rujira.ThorchainSwap.StrategyTest do
     end
 
     test "errors when a field every shape carries is missing" do
-      for version <- [:v0_0_1, :v0_0_6, :v1_0_0, :v1_1_0, :v1_2_0] do
+      for version <- [:v0_0_1, :v0_0_6, :v1_0_0, :v1_1_0, :v1_2_0, :v1_4_0] do
         assert {:error, :invalid_attrs} =
                  version |> config() |> Map.delete("reserve_fee") |> Strategy.new()
       end
@@ -241,6 +275,36 @@ defmodule Rujira.ThorchainSwap.StrategyTest do
       end)
 
       assert {:ok, [%Strategy{min_slip_bps: 10}, %Strategy{spread_bps: 1}]} = Strategy.list()
+    end
+
+    test "lists a VS v1 and a VS v2 strategy together" do
+      v1 = config(:v1_2_0)
+      v2 = config(:v1_4_0)
+
+      configs = %{Map.fetch!(v1, "address") => v1, Map.fetch!(v2, "address") => v2}
+
+      MockNode.expect(fn
+        %QueryContractInfosRequest{} ->
+          {:ok, %{infos: [info(Map.fetch!(v1, "address")), info(Map.fetch!(v2, "address"))]}}
+
+        %{"config" => _} ->
+          receive do
+            {:mock_node, %QuerySmartContractStateRequest{address: address}, _opts} ->
+              MockNode.ok(Map.fetch!(configs, address))
+          end
+      end)
+
+      assert {:ok,
+              [
+                %Strategy{
+                  address: "thor1n5a08r0zvmqca39ka2tgwlkjy9ugalutk7fjpzptfppqcccnat2ska5t4g",
+                  arb_guard: nil
+                },
+                %Strategy{
+                  address: "thor1prh3ue5nd4he254eyg3vq4lxvzed65afp9prv9qvdl2cwfq6xcnqah3aet",
+                  arb_guard: "thor1g7cqgq389q738jrwnxhuah0u86t2pwnruvsdq70l7yt6egj6q9jq4kfeqf"
+                }
+              ]} = Rujira.ThorchainSwap.list_strategies()
     end
   end
 
