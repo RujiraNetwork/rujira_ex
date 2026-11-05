@@ -70,6 +70,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Migration: replace `pair.market_makers` with
   `Enum.map(pair.market_makers, & &1.address)` (guard for `nil` when reading
   old pairs).
+- Ghost vault-side responses parse every shape they have had on mainnet
+  (#42). `Ghost.Vault.Borrower` reads the v0.0.1 shape (no `available`, no
+  `denom`) and the v0.1.x shape (no `denom`), with the absent fields `nil`, so
+  `vault_borrower/3`, `vault_borrowers/2` and a delegate's borrower no longer
+  fail on pre-v1.0.0 vaults. **Breaking:** `Borrower.available` is now
+  `Amount.t() | nil` and defaults to `nil`. `Ghost.Vault.Status` gains
+  `interest`, set from the v0.x status (which carried the interest curve
+  before it moved to `config`) and `nil` from v1.0.0. `delegate` and the
+  credit contract's `borrows` had no key changes. Each struct's moduledoc has
+  a version table.
 
 ### Fixed
 
