@@ -123,6 +123,22 @@ is returned as an error instead of being cached with generic events.
   shape's key without the rest of that shape, or a shape before S8 with an
   `{addr, arb?}` market-maker object. The `Pair` moduledoc has a version table
   for S0-S8 (#32).
+- `Rujira.Node.subscribe/2` and `unsubscribe/2` (#46): a push-based wake-up for
+  new blocks. With `config :rujira_ex, websocket: "ws://<node>:<rpc
+  port>/websocket"`, `Rujira.Application` starts `Rujira.Node.Subscription`,
+  which subscribes to `tm.event='NewBlockHeader'` over the node's CometBFT
+  websocket and sends every subscribed process `{:rujira_new_block,
+  height}` - ascending, each height at most once per connection. The block
+  itself is still fetched over gRPC; a missed message costs latency only.
+  It reconnects and resubscribes with exponential backoff and jitter,
+  pings the node, skips frames it cannot read, keeps its subscribers across
+  reconnects, and emits `[:rujira, :node, :subscription, :connect |
+  :disconnect | :new_block | :invalid_frame]`. Without `:websocket` nothing
+  starts and `subscribe/2` returns `{:error, :not_configured}`. See the new
+  guide, [New blocks](guides/new_blocks.md).
+- `:mint_web_socket` (`~> 1.0`) is a new **optional** dependency, needed
+  only for the subscription. `:mint` is now optional for every environment
+  rather than a dev-only dependency.
 
 ### Changed
 

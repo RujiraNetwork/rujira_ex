@@ -63,6 +63,7 @@ defmodule RujiraEx.MixProject do
         "guides/architecture.md",
         "guides/event_pipeline.md",
         "guides/caching.md",
+        "guides/new_blocks.md",
         "LICENSE"
       ],
       # The generated gRPC stub is hidden from the docs; name it as plain code.
@@ -82,12 +83,15 @@ defmodule RujiraEx.MixProject do
       {:protobuf, "~> 0.17.1"},
       {:telemetry, "~> 1.0"},
       {:bech32, "~> 1.0"},
+      # optional: only `Rujira.Node.Subscription` (the new-block websocket) needs it
+      {:mint_web_socket, "~> 1.0", optional: true},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: [:test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
-      # dev-only: the gRPC client adapter scripts/refresh_chain_assets.exs needs; not a runtime or Hex dependency
-      {:mint, "~> 1.9", only: :dev}
+      # optional: the transport under `:mint_web_socket`, and the gRPC client adapter
+      # scripts/refresh_chain_assets.exs needs
+      {:mint, "~> 1.9", optional: true}
     ]
   end
 end
