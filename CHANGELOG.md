@@ -52,6 +52,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `Rujira.Coin.parse/1` returns a failed denom-metadata read unchanged rather
   than as `{:error, :invalid_coin_format}`, which hid an `x/` denom's node
   failure as malformed data (#38).
+- Ghost credit accounts: every account response shape mainnet has served is
+  covered by a fixture (A1, debt `shares` as `Uint128`, credit v1.0.0 to
+  `c1e1d62`; A2, `shares` as `Decimal`, from `3ee2d68`), and `Account`,
+  `LiquidationPreferences`, `Order`, `LiquidateMsg`, `Repay` and `Execute`
+  document their shapes in a version table. No drift was found in the
+  liquidation preferences, their `LiquidateMsg` variants or `Order`, so no
+  parsing changed (#43).
 
 ### Fixed
 
