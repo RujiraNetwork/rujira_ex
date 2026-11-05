@@ -18,6 +18,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the VS v2 `rujira-thorchain-arb` guard a v1.4.0 strategy serves. It is `nil`
   for strategies before v1.4.0 and for a v1.4.0 strategy serving `null`.
   `list_strategies/1` returns v1 and v2 strategies together (#37, #28).
+- `Rujira.ThorchainArb`, reading `rujira-thorchain-arb` guard contracts with
+  `get/2`, `list/0,1` and `from_id/2` into `Rujira.ThorchainArb.Guard`.
+  `Deployments` now resolves the contract name, so `from_address/1` on a guard
+  no longer returns `{:error, :not_found}`. The config is mapped exactly as
+  the contract's `InstantiateMsg`: `markets` and `denoms` stay raw strings,
+  `fee` is split into `fee` and `fee_address`, and `prepared_fin_checksum` is
+  decoded bytes or `nil` when omitted (#35).
 
 ## 0.7.3
 
