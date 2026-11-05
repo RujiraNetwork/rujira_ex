@@ -14,6 +14,8 @@ defmodule Rujira.Thorchain.BlockTest do
   alias Rujira.Events
   alias Rujira.Test.MockNode
   alias Rujira.Thorchain.Block
+  alias Rujira.Thorchain.Block.Messages.Message
+  alias Rujira.Thorchain.Block.Messages.Send
   alias Rujira.Thorchain.Events.Event, as: TcEvent
   alias Rujira.Thorchain.Events.SetMimir
   alias Rujira.Thorchain.Events.Transfer
@@ -499,6 +501,171 @@ defmodule Rujira.Thorchain.BlockTest do
     end
   end
 
+  describe "a node read that fails while parsing a message" do
+    test "fails the block, caches nothing, and the next healthy read is fully typed" do
+      height = 100_040
+      denom = "x/block-msg-errors-a"
+      block = response(height, txs: [msg_tx("HASH0", [send_msg(denom)])])
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} -> {:ok, block}
+        %QueryDenomMetadataRequest{denom: ^denom} -> {:error, @dropped}
+      end)
+
+      log = capture_log(fn -> assert {:error, @dropped} = Block.get(height) end)
+      assert log =~ "message parse failed height=#{height} tx_idx=0 msg_idx=0"
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} -> {:ok, block}
+        %QueryDenomMetadataRequest{denom: ^denom} -> {:ok, metadata(denom, "BLKM")}
+      end)
+
+      assert {:ok, %Block{txs: [%{messages: [%Send{coins: [coin]}]}]}} = Block.get(height)
+      assert %Coin{amount: 100, asset: %{symbol: "BLKM"}} = coin
+    end
+
+    test "fails through fetch_uncached/2 too" do
+      height = 100_041
+      denom = "x/block-msg-errors-uncached"
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} -> {:ok, response(height, txs: [msg_tx("HASH0", [send_msg(denom)])])}
+        %QueryDenomMetadataRequest{denom: ^denom} -> {:error, :timeout}
+      end)
+
+      capture_log(fn -> assert {:error, :timeout} = Block.fetch_uncached(height) end)
+    end
+
+    test "a malformed message still degrades to the generic message, with its slot" do
+      height = 100_042
+      malformed = %{"@type" => "/cosmos.bank.v1beta1.MsgSend", "amount" => []}
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} ->
+          {:ok, response(height, txs: [msg_tx("HASH0", []), msg_tx("HASH1", [%{}, malformed])])}
+      end)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, %Block{txs: [_, %{messages: [_, message]}]}} = Block.get(height)
+
+          assert %Message{type_url: "/cosmos.bank.v1beta1.MsgSend", data: ^malformed} =
+                   message
+        end)
+
+      assert log =~ "unparsed message height=#{height} tx_idx=1 msg_idx=1"
+      assert log =~ ":invalid_attrs"
+    end
+
+    test "within a transaction, the first failing message wins" do
+      height = 100_043
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} ->
+          {:ok,
+           response(height,
+             txs: [
+               msg_tx("HASH0", [
+                 send_msg("x/block-msg-first-ok"),
+                 send_msg("x/block-msg-first-1"),
+                 send_msg("x/block-msg-first-2")
+               ])
+             ]
+           )}
+
+        %QueryDenomMetadataRequest{denom: "x/block-msg-first-1"} ->
+          {:error, {:msg, 1}}
+
+        %QueryDenomMetadataRequest{denom: "x/block-msg-first-2"} ->
+          {:error, {:msg, 2}}
+
+        %QueryDenomMetadataRequest{denom: denom} ->
+          {:ok, metadata(denom, "OK")}
+      end)
+
+      log = capture_log(fn -> assert {:error, {:msg, 1}} = Block.get(height) end)
+      assert log =~ "tx_idx=0 msg_idx=1"
+    end
+
+    test "within a transaction, a message failure wins over an event failure" do
+      height = 100_044
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} ->
+          {:ok,
+           response(height,
+             txs: [
+               msg_tx(
+                 "HASH0",
+                 [send_msg("x/block-msg-vs-event-msg")],
+                 [transfer("x/block-msg-vs-event-event")]
+               )
+             ]
+           )}
+
+        %QueryDenomMetadataRequest{denom: "x/block-msg-vs-event-msg"} ->
+          slow_error(:message)
+
+        %QueryDenomMetadataRequest{denom: "x/block-msg-vs-event-event"} ->
+          {:error, :event}
+      end)
+
+      capture_log(fn -> assert {:error, :message} = Block.get(height) end)
+    end
+
+    test "across transactions, the failure first in block order wins, message or event" do
+      for {slow, fast, height} <- [
+            {{:msg, 3}, {:event, 17}, 100_045},
+            {{:event, 3}, {:msg, 17}, 100_046}
+          ] do
+        prefix = "x/block-msg-order-#{height}"
+        {_, slow_idx} = slow
+        {_, fast_idx} = fast
+        slow_denom = "#{prefix}-#{slow_idx}"
+        fast_denom = "#{prefix}-#{fast_idx}"
+
+        txs =
+          for i <- 0..23 do
+            case {slow, fast} do
+              {{kind, ^i}, _} -> failing_tx(kind, i, prefix)
+              {_, {kind, ^i}} -> failing_tx(kind, i, prefix)
+              _ -> msg_tx("HASH#{i}", [send_msg("#{prefix}-ok#{i}")])
+            end
+          end
+
+        MockNode.expect(fn
+          %QueryBlockRequest{} -> {:ok, response(height, txs: txs)}
+          %QueryDenomMetadataRequest{denom: ^slow_denom} -> slow_error(slow)
+          %QueryDenomMetadataRequest{denom: ^fast_denom} -> {:error, fast}
+          %QueryDenomMetadataRequest{denom: denom} -> {:ok, metadata(denom, "OK")}
+        end)
+
+        capture_log(fn -> assert {:error, ^slow} = Block.get(height) end)
+      end
+    end
+
+    test "a begin-block event failure wins over a message failure" do
+      height = 100_047
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} ->
+          {:ok,
+           response(height,
+             begin_events: [transfer("x/block-msg-begin")],
+             txs: [msg_tx("HASH0", [send_msg("x/block-msg-begin-tx")])]
+           )}
+
+        %QueryDenomMetadataRequest{denom: "x/block-msg-begin"} ->
+          slow_error(:begin)
+
+        %QueryDenomMetadataRequest{denom: "x/block-msg-begin-tx"} ->
+          {:error, :message}
+      end)
+
+      capture_log(fn -> assert {:error, :begin} = Block.get(height) end)
+    end
+  end
+
   # --- Fixtures ---
 
   defp transfer(denom),
@@ -526,6 +693,26 @@ defmodule Rujira.Thorchain.BlockTest do
 
   defp tx(hash, events) do
     %QueryBlockTx{hash: hash, result: %BlockTxResult{code: 0, events: events}}
+  end
+
+  defp msg_tx(hash, messages, events \\ []) do
+    %QueryBlockTx{
+      hash: hash,
+      tx: JSON.encode!(%{"body" => %{"messages" => messages, "memo" => ""}}),
+      result: %BlockTxResult{code: 0, events: events}
+    }
+  end
+
+  defp failing_tx(:msg, i, prefix), do: msg_tx("HASH#{i}", [send_msg("#{prefix}-#{i}")])
+  defp failing_tx(:event, i, prefix), do: msg_tx("HASH#{i}", [], [transfer("#{prefix}-#{i}")])
+
+  defp send_msg(denom) do
+    %{
+      "@type" => "/cosmos.bank.v1beta1.MsgSend",
+      "from_address" => "thor1from",
+      "to_address" => "thor1to",
+      "amount" => [%{"denom" => denom, "amount" => "100"}]
+    }
   end
 
   defp event(type, attrs \\ %{}) do
