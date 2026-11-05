@@ -3,6 +3,17 @@ defmodule Rujira.Ghost.Vault.Delegate do
   A delegated debt obligation on a Ghost vault.
 
   Struct, construction, and queries. Use `Rujira.Ghost` as the public API.
+
+  The vault's `delegate` query exists from v1.0.0 and its keys have not
+  changed since:
+
+  | Shape | Contract          | Upstream             | `borrower` | `shares` on the wire |
+  | ----- | ----------------- | -------------------- | ---------- | -------------------- |
+  | D0    | v1.0.0 to v1.0.8  | `355aafa`..`9264370` | B2         | `Uint128`            |
+  | D1    | v1.1.0 and later  | `3ee2d68`+           | B3         | `Decimal`            |
+
+  The nested `borrower` is parsed by `Rujira.Ghost.Vault.Borrower`, whose
+  table names its shapes. `shares` is a `Decimal` on both.
   """
 
   alias Rujira.Amount
