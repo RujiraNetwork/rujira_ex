@@ -46,7 +46,8 @@ Exceptions:
   current tip**, so no query can jump straight to an arbitrary older `seq`.
   Only `list/4`, paging back from the tip, can locate one.
 - Embedded value structs with no on-chain address of their own, such as
-  `Rujira.Thorchain.Oracle`, have no `from_id/2`.
+  `Rujira.Thorchain.Oracle` and `Rujira.Fin.Pair.MarketMaker`, have no `id`
+  or `from_id/2`.
 - `Rujira.Assets.Asset` is resolved by `Rujira.Assets.from_id/1`, not a
   `from_id/2` on the struct itself — asset ids are not read at a height.
 
