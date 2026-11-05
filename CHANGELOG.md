@@ -4,7 +4,74 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.8.0
+
+Breaking release: FIN, Ghost and block parsing now cover every config and
+response shape mainnet has served, and a block whose parse hit a node failure
+is returned as an error instead of being cached with generic events.
+
+### Migrating from 0.7.x
+
+- **FIN market makers.** `%Rujira.Fin.Pair{}.market_makers` is a list of
+  `Rujira.Fin.Pair.MarketMaker` structs, not of addresses. Replace
+  `pair.market_makers` with `Enum.map(pair.market_makers, & &1.address)`, and
+  guard for `nil` first: an S1 pair (no market-maker key in its config) now
+  reads `market_makers: nil`, not `[]` (#30).
+- **New `nil` fields.** These fields are `nil` when the shape being read does
+  not carry them. Match on `nil` before using them:
+  - `Rujira.Fin.Pair`: `fee_range`, `range_delta` and `range_min` (`nil`
+    before S3, and for whichever of them a shape lacks); `commits` (`nil`
+    before S6); `arb_market_makers` and `arb_commits` (`nil` before S7). An
+    empty list on the wire is `[]`, not `nil` (#31, #32).
+  - `Rujira.Ghost.Credit.full_liquidation_threshold` is
+    `non_neg_integer() | nil`: `nil` for the pre-v1.0.2 config (C1), and the
+    struct default (#40).
+  - `Rujira.Ghost.Vault.fee` and `fee_address` are `nil` for a vault from
+    before upstream `1303d28` (v1.0.0 to v1.0.5). `fee` is
+    `Decimal.t() | nil` and its struct default is `nil`, no longer
+    `Decimal.new(0)`, so guard before doing arithmetic on it (#41).
+  - `Rujira.Ghost.Vault.Borrower.available` is `Amount.t() | nil` (`nil` for
+    the v0.0.1 shape, and the struct default), and `asset` is `nil` for the
+    pre-v1.0.0 shapes, which have no `denom`. These reads used to fail on
+    pre-v1.0.0 vaults; they now succeed with the `nil`s (#42).
+  - Additive but also `nil`-able: `Rujira.ThorchainSwap.Strategy.arb_guard`
+    (`nil` before v1.4.0) and `Rujira.Ghost.Vault.Status.interest` (`nil`
+    from v1.0.0) (#37, #42).
+- **Block reads can fail.** `Rujira.Thorchain.Block.get/2` and
+  `Block.fetch_uncached/2` (and `Block.new/1`, `Rujira.Thorchain.block/0,2`)
+  return `{:error, reason}` when parsing a block's events or messages hits a
+  node, transport or timeout failure, `{:height_unavailable, _}` or any other
+  non-data reason. Such a block is not cached. Treat `{:error, _}` as a gap to
+  retry or backfill rather than assuming `{:ok, block}`. Malformed data
+  (`:invalid_*`) still degrades to the generic event or message with a
+  warning; `Rujira.Events.data_error?/1` tells the two apart (#27, #38, #39).
+- **Wider return contracts.** `Rujira.Thorchain.Block.Messages.parse/4`
+  returns `{:ok, message}` or `{:error, reason}`, not a bare message, and
+  `Rujira.Thorchain.Block.Tx.new/3` returns `{:ok, tx}` or
+  `{:error, reason}`, not a bare `Tx`. Direct callers must match the tuple
+  (#39).
+- **`Rujira.Coin.parse/1` passes non-data errors through.** A failed
+  denom-metadata read for an `x/` denom comes back unchanged, not as
+  `{:error, :invalid_coin_format}`. Code that matched only
+  `:invalid_coin_format` must handle other reasons too (#38).
+- **Stricter shape recognition.** Data that 0.7.3 accepted, or partly
+  dropped, is now `{:error, _}` when it matches no known shape:
+  - `Rujira.Fin.Pair`: an `{addr, arb}` market-maker object on a shape before
+    S8 (objects are S8-only); a market-maker entry of unknown shape; an arb
+    market maker of unknown kind; a key from a later shape without the rest of
+    that shape; `range_delta` without a range fee, or both `fee_amm` and
+    `fee_range` - all `{:error, :invalid_attrs}`. A non-numeric range value is
+    `{:error, :invalid_decimal}`, and a commit `msg` that is not valid base64
+    is `{:error, :invalid_msg}` (#30, #31, #32).
+  - `Rujira.ThorchainSwap.Strategy`: an `arb_guard` that is neither a string
+    nor `null` is `{:error, :invalid_attrs}` (#37).
+  - `wasm-rujira-fin/arb_lot` parses into `Rujira.Fin.Events.ArbLot` instead
+    of a generic `Rujira.Events.Event`; match on the new struct. An unknown
+    `arb_objective` is `{:error, :invalid_arb_objective}`, which in a block
+    degrades the event to the generic one (#33).
+  - `Rujira.Deployments.from_address/1` on a `rujira-thorchain-arb` guard
+    resolves to `Rujira.ThorchainArb.Guard` instead of returning
+    `{:error, :not_found}` (#35).
 
 ### Added
 

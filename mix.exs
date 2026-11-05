@@ -1,7 +1,7 @@
 defmodule RujiraEx.MixProject do
   use Mix.Project
 
-  @version "0.7.3"
+  @version "0.8.0"
   @source_url "https://github.com/RujiraNetwork/rujira_ex"
 
   def project do
