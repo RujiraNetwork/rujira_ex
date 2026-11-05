@@ -29,27 +29,27 @@ defmodule Rujira.ThorchainArb.Guard do
 
   defstruct id: nil,
             address: nil,
-            markets: [],
-            denoms: [],
-            max_queue: 0,
-            max_offer_bps: 0,
-            reserve_fee: Decimal.new(0),
-            fee: Decimal.new(0),
+            markets: nil,
+            denoms: nil,
+            max_queue: nil,
+            max_offer_bps: nil,
+            reserve_fee: nil,
+            fee: nil,
             fee_address: nil,
-            chain_defaults: %{},
+            chain_defaults: nil,
             prepared_fin_checksum: nil
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
           address: String.t() | nil,
-          markets: [String.t()],
-          denoms: [String.t()],
-          max_queue: non_neg_integer(),
-          max_offer_bps: non_neg_integer(),
-          reserve_fee: Decimal.t(),
-          fee: Decimal.t(),
+          markets: [String.t()] | nil,
+          denoms: [String.t()] | nil,
+          max_queue: non_neg_integer() | nil,
+          max_offer_bps: non_neg_integer() | nil,
+          reserve_fee: Decimal.t() | nil,
+          fee: Decimal.t() | nil,
           fee_address: String.t() | nil,
-          chain_defaults: %{String.t() => integer()},
+          chain_defaults: %{String.t() => integer()} | nil,
           prepared_fin_checksum: binary() | nil
         }
 
@@ -125,15 +125,18 @@ defmodule Rujira.ThorchainArb.Guard do
 
   # --- Private ---
 
-  defp strings(list) do
-    if Enum.all?(list, &is_binary/1), do: :ok, else: {:error, :invalid_attrs}
-  end
+  defp strings([]), do: :ok
+  defp strings([value | rest]) when is_binary(value), do: strings(rest)
+  defp strings(_), do: {:error, :invalid_attrs}
 
-  defp chain_defaults(map) do
-    if Enum.all?(map, fn {_key, value} -> is_integer(value) end),
-      do: :ok,
-      else: {:error, :invalid_attrs}
-  end
+  defp chain_defaults(map), do: chain_default_values(Map.values(map))
+
+  defp chain_default_values([]), do: :ok
+
+  defp chain_default_values([value | rest]) when is_integer(value),
+    do: chain_default_values(rest)
+
+  defp chain_default_values(_), do: {:error, :invalid_attrs}
 
   defp checksum(nil), do: {:ok, nil}
 

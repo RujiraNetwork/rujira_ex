@@ -121,9 +121,9 @@ defmodule Rujira.Thorchain.Block do
 
   alias Rujira.Cache
   alias Rujira.Events
-  alias Rujira.Logger
   alias Rujira.Node
   alias Rujira.String
+  alias Rujira.Thorchain.Block.Degrade
   alias Rujira.Thorchain.Block.Event
   alias Rujira.Thorchain.Block.Observation
   alias Rujira.Thorchain.Block.Tx
@@ -412,34 +412,13 @@ defmodule Rujira.Thorchain.Block do
         {:ok, event}
 
       {:error, reason} ->
-        degrade(
-          Events.data_error?(reason),
+        Degrade.degrade(
           reason,
-          type,
-          attrs,
-          {height, stage, tx_idx, event_idx}
+          __MODULE__,
+          "event",
+          "height=#{height} stage=#{stage} tx_idx=#{tx_idx} event_idx=#{event_idx} type=#{type}",
+          fn -> Events.Event.new(type, attrs) end
         )
     end
-  end
-
-  # Data the parser cannot read degrades to the generic event; anything else
-  # - a node read that failed - fails the block, so it is never cached and the
-  # next call retries. Both are warned about with the slot they happened in.
-  defp degrade(true, reason, type, attrs, slot) do
-    warn("unparsed event", slot, type, reason)
-    {:ok, Events.Event.new(type, attrs)}
-  end
-
-  defp degrade(false, reason, type, _attrs, slot) do
-    warn("event parse failed", slot, type, reason)
-    {:error, reason}
-  end
-
-  defp warn(what, {height, stage, tx_idx, event_idx}, type, reason) do
-    Logger.warning(
-      __MODULE__,
-      "#{what} height=#{height} stage=#{stage} tx_idx=#{tx_idx} " <>
-        "event_idx=#{event_idx} type=#{type} #{inspect(reason)}"
-    )
   end
 end

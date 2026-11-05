@@ -28,13 +28,13 @@ defmodule Rujira.Fin.Events.ArbLot do
   @type arb_objective :: :fin_surplus | :total_rujira_surplus
 
   @type t :: %__MODULE__{
-          provider: String.t(),
-          offer: Coin.t(),
-          ask: Coin.t(),
+          provider: String.t() | nil,
+          offer: Coin.t() | nil,
+          ask: Coin.t() | nil,
           protocol_range_fee_value: Amount.t(),
           fin_surplus_value: Amount.t(),
           total_surplus_value: Amount.t(),
-          arb_objective: arb_objective(),
+          arb_objective: arb_objective() | nil,
           valuation: Decimal.t()
         }
 
@@ -49,8 +49,8 @@ defmodule Rujira.Fin.Events.ArbLot do
         "arb_objective" => arb_objective,
         "valuation" => valuation
       }) do
-    with {:ok, offer} <- coin(offer),
-         {:ok, ask} <- coin(ask),
+    with {:ok, offer} <- Coin.parse_single(offer),
+         {:ok, ask} <- Coin.parse_single(ask),
          {:ok, protocol_range_fee_value} <- amount(protocol_range_fee_value),
          {:ok, fin_surplus_value} <- amount(fin_surplus_value),
          {:ok, total_surplus_value} <- amount(total_surplus_value),
@@ -73,14 +73,6 @@ defmodule Rujira.Fin.Events.ArbLot do
   def new(_), do: {:error, :invalid_attrs}
 
   # --- Private ---
-
-  defp coin(value) do
-    case Coin.parse(value) do
-      {:ok, [coin]} -> {:ok, coin}
-      {:ok, _} -> {:error, :invalid_coin_format}
-      {:error, _} = err -> err
-    end
-  end
 
   defp amount(value) do
     case Amount.new(value) do

@@ -13,7 +13,7 @@ defmodule Rujira.Fin.Pair.MarketMaker do
 
   defstruct address: nil, arb: false
 
-  @type t :: %__MODULE__{address: String.t(), arb: boolean()}
+  @type t :: %__MODULE__{address: String.t() | nil, arb: boolean()}
 
   @spec new(String.t() | map()) :: {:ok, t()} | {:error, :invalid_attrs}
   def new(address) when is_binary(address), do: {:ok, %__MODULE__{address: address}}

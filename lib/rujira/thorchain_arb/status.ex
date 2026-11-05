@@ -22,13 +22,13 @@ defmodule Rujira.ThorchainArb.Status do
 
   # --- Struct ---
 
-  defstruct height: 0, claimed_pools: [], pending_hedges: 0, paused: false
+  defstruct height: nil, claimed_pools: nil, pending_hedges: nil, paused: nil
 
   @type t :: %__MODULE__{
-          height: non_neg_integer(),
-          claimed_pools: [String.t()],
-          pending_hedges: non_neg_integer(),
-          paused: boolean()
+          height: non_neg_integer() | nil,
+          claimed_pools: [String.t()] | nil,
+          pending_hedges: non_neg_integer() | nil,
+          paused: boolean() | nil
         }
 
   # --- Construction ---
@@ -42,7 +42,7 @@ defmodule Rujira.ThorchainArb.Status do
       })
       when is_integer(height) and is_list(claimed_pools) and is_integer(pending_hedges) and
              is_boolean(paused) do
-    if Enum.all?(claimed_pools, &is_binary/1) do
+    with :ok <- pools(claimed_pools) do
       {:ok,
        %__MODULE__{
          height: height,
@@ -50,8 +50,6 @@ defmodule Rujira.ThorchainArb.Status do
          pending_hedges: pending_hedges,
          paused: paused
        }}
-    else
-      {:error, :invalid_attrs}
     end
   end
 
@@ -73,6 +71,10 @@ defmodule Rujira.ThorchainArb.Status do
   end
 
   # --- Private ---
+
+  defp pools([]), do: :ok
+  defp pools([pool | rest]) when is_binary(pool), do: pools(rest)
+  defp pools(_), do: {:error, :invalid_attrs}
 
   # The status reports the block it is read in, so it is new every block.
   defp query(address, opts) do

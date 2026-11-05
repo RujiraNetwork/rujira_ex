@@ -27,7 +27,7 @@ defmodule Rujira.Ghost.Credit.Events.LiquidateMsgRepay do
         "fee_liquidator" => fee_liquidator
       })
       when is_binary(amount) do
-    with {:ok, amount} <- coin(amount),
+    with {:ok, amount} <- Coin.parse_single(amount),
          {:ok, repay_amount} <- Amount.new(repay_amount),
          {:ok, fee_liquidation} <- Amount.new(fee_liquidation),
          {:ok, fee_liquidator} <- Amount.new(fee_liquidator) do
@@ -42,12 +42,4 @@ defmodule Rujira.Ghost.Credit.Events.LiquidateMsgRepay do
   end
 
   def new(_), do: {:error, :invalid_attrs}
-
-  defp coin(value) do
-    case Coin.parse(value) do
-      {:ok, [coin]} -> {:ok, coin}
-      {:ok, _} -> {:error, :invalid_coin_format}
-      {:error, _} = err -> err
-    end
-  end
 end

@@ -16,7 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `{:error, :invalid_arb_objective}` (#33).
 - `Rujira.ThorchainSwap.Strategy` has an `arb_guard` field: the address of
   the VS v2 `rujira-thorchain-arb` guard a v1.4.0 strategy serves. It is `nil`
-  for strategies before v1.4.0 and for a v1.4.0 strategy serving `null`.
+  for strategies before v1.4.0 and for a v1.4.0 strategy serving `null`; any
+  other non-string `arb_guard` is `{:error, :invalid_attrs}`.
   `list_strategies/1` returns v1 and v2 strategies together (#37, #28).
 - `Rujira.ThorchainArb`, reading `rujira-thorchain-arb` guard contracts with
   `get/2`, `list/0,1` and `from_id/2` into `Rujira.ThorchainArb.Guard`.
@@ -29,6 +30,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Rujira.ThorchainArb.Status` (`height`, `claimed_pools`, `pending_hedges`,
   `paused`), so a consumer can tell whether a guard is paused. It is cached
   per block, and node errors come back unchanged (#36).
+- `Rujira.Coin.parse_single/1`: `parse/1` for a string that must hold exactly
+  one coin; any other count is `{:error, :invalid_coin_format}`.
 - `Rujira.Events.data_error?/1`: whether a parse failure is the data's fault
   (`:invalid_*` or `{:invalid_*, _}`) rather than a failure a retry may
   clear (#38).
@@ -48,9 +51,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `arb_commits`) and S8 (`dacb42c`) in full; on 0.7.3 these keys were
   dropped. Shapes before S6 have `nil` for all three, and S6 has `nil` for the
   two arb fields; an empty list on the wire is `[]`. A commit `msg` that is
-  not valid base64, or an arb market maker of unknown kind, is
-  `{:error, :invalid_attrs}`, and so is a config carrying a later shape's key
-  without the rest of that shape. The `Pair` moduledoc has a version table
+  not valid base64 is `{:error, :invalid_msg}`. An arb market maker of unknown
+  kind is `{:error, :invalid_attrs}`, and so is a config carrying a later
+  shape's key without the rest of that shape, or a shape before S8 with an
+  `{addr, arb?}` market-maker object. The `Pair` moduledoc has a version table
   for S0-S8 (#32).
 
 ### Changed

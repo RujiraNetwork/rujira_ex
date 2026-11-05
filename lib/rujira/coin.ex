@@ -100,6 +100,19 @@ defmodule Rujira.Coin do
   @spec parse(String.t()) :: {:ok, [t()]} | {:error, term()}
   def parse(str) when is_binary(str), do: parse_coins(str, &parse_one/1)
 
+  @doc """
+  As `parse/1`, for a string that must hold exactly one coin. Any other count
+  is `{:error, :invalid_coin_format}`; a `parse/1` error is returned unchanged.
+  """
+  @spec parse_single(String.t()) :: {:ok, t()} | {:error, term()}
+  def parse_single(str) do
+    case parse(str) do
+      {:ok, [coin]} -> {:ok, coin}
+      {:ok, _} -> {:error, :invalid_coin_format}
+      {:error, _} = err -> err
+    end
+  end
+
   defp parse_one(str) do
     trimmed = String.trim(str)
 
@@ -151,9 +164,10 @@ defmodule Rujira.Coin do
 
   # A leg the string itself spoils is reported as the string's format; a node
   # read that failed is passed through, so a caller can tell it apart.
-  defp coin_error(reason) do
-    if Rujira.Events.data_error?(reason), do: :invalid_coin_format, else: reason
-  end
+  defp coin_error(reason), do: coin_error(Rujira.Events.data_error?(reason), reason)
+
+  defp coin_error(true, _reason), do: :invalid_coin_format
+  defp coin_error(false, reason), do: reason
 
   defp parse_asset_one(str) do
     case String.split(String.trim(str), " ", parts: 2) do

@@ -264,13 +264,14 @@ Use consistent error atoms across the codebase:
 | `:invalid_time` | An RFC3339 timestamp from the chain cannot be parsed |
 | `:invalid_id` | ID format doesn't match expected pattern |
 | `:invalid_denom` | Denom not recognized by `Assets.from_denom/1` |
-| `:invalid_msg` | A base64 `msg` from the chain does not decode (e.g. `Rujira.Revenue.Converter`, `Rujira.Ghost.Credit`) |
+| `:invalid_msg` | A base64 `msg` from the chain does not decode (e.g. `Rujira.Revenue.Converter`, `Rujira.Ghost.Credit`, `Rujira.Fin.Pair.Commit`) |
 | `:invalid_checksum` | A base64 checksum from the chain does not decode (`Rujira.ThorchainArb.Guard`'s `prepared_fin_checksum`) |
 | `:invalid_asset_id` | Asset id rejected by `Assets.from_id/1` |
 | `:invalid_offer` | `Fin.Simulation.ask_asset/2`'s offer denom matches neither side of the pair |
 | `:invalid_price` | `Fin.Price.parse/1`, `parse_order/1` or `from_query/1` given a shape it doesn't recognise |
 | `:invalid_range` | `Fin.Events.TradeRange.parse/1` given a log entry it can't parse |
 | `:invalid_ranges` | `Fin.Events.TradeRange.parse_list/1` given a range-list attribute it can't parse |
+| `:invalid_arb_objective` | `Fin.Events.ArbLot.new/1` got an `arb_objective` other than `fin_surplus` or `total_rujira_surplus` |
 | `:unexpected_result` | `Rujira.Enum.reduce_async_while_ok/4`'s fallback clause - a task result matched none of the expected shapes |
 | `:no_native_denom` | `Assets.to_native/1` on an asset that is not held as a bank denom |
 | `:invalid_coin_format` | `Coin.parse/1` cannot tokenize the input |

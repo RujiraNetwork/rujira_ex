@@ -40,8 +40,7 @@ defmodule Rujira.Thorchain.Block.Messages do
   | `/types.MsgObservedTxOut` | `Rujira.Thorchain.Block.Messages.ObservedTxOut` |
   """
 
-  alias Rujira.Events
-  alias Rujira.Logger
+  alias Rujira.Thorchain.Block.Degrade
   alias Rujira.Thorchain.Block.Messages.ClearAdmin
   alias Rujira.Thorchain.Block.Messages.Deposit
   alias Rujira.Thorchain.Block.Messages.ExecuteContract
@@ -116,27 +115,13 @@ defmodule Rujira.Thorchain.Block.Messages do
   defp new("/types.MsgObservedTxOut", msg), do: ObservedTxOut.new(msg)
   defp new(_type, _msg), do: :pass
 
-  # Data the parser cannot read degrades to the generic message; anything else
-  # - a node read that failed - is the block's error, so it is never cached and
-  # the next call retries. Both are warned about with the slot they happened in.
-  defp degrade(type, msg, reason, slot),
-    do: degrade(Events.data_error?(reason), type, msg, reason, slot)
-
-  defp degrade(true, type, msg, reason, slot) do
-    warn("unparsed message", slot, type, reason)
-    {:ok, Message.new(type, msg)}
-  end
-
-  defp degrade(false, type, _msg, reason, slot) do
-    warn("message parse failed", slot, type, reason)
-    {:error, reason}
-  end
-
-  defp warn(what, {height, tx_idx, msg_idx}, type, reason) do
-    Logger.warning(
+  defp degrade(type, msg, reason, {height, tx_idx, msg_idx}) do
+    Degrade.degrade(
+      reason,
       __MODULE__,
-      "#{what} height=#{height} tx_idx=#{tx_idx} msg_idx=#{msg_idx} " <>
-        "type=#{type} #{inspect(reason)}"
+      "message",
+      "height=#{height} tx_idx=#{tx_idx} msg_idx=#{msg_idx} type=#{type}",
+      fn -> Message.new(type, msg) end
     )
   end
 end
