@@ -30,6 +30,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Rujira.ThorchainArb.Status` (`height`, `claimed_pools`, `pending_hedges`,
   `paused`), so a consumer can tell whether a guard is paused. It is cached
   per block, and node errors come back unchanged (#36).
+- `Rujira.Coin.parse_single/1`: `parse/1` for a string that must hold exactly
+  one coin; any other count is `{:error, :invalid_coin_format}`.
 - `Rujira.Events.data_error?/1`: whether a parse failure is the data's fault
   (`:invalid_*` or `{:invalid_*, _}`) rather than a failure a retry may
   clear (#38).
