@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+
+- `Rujira.ThorchainSwap.Strategy` has an `arb_guard` field: the address of
+  the VS v2 `rujira-thorchain-arb` guard a v1.4.0 strategy serves. It is `nil`
+  for strategies before v1.4.0 and for a v1.4.0 strategy serving `null`.
+  `list_strategies/1` returns v1 and v2 strategies together (#37, #28).
+
 ## 0.7.3
 
 ### Changed
