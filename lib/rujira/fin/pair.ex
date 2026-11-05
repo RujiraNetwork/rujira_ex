@@ -9,6 +9,26 @@ defmodule Rujira.Fin.Pair do
   `denom_for_ticker`, `find_stable`, `find_default`, `find_by_denoms` and
   `from_id` derive from that one list in memory, so they cost no node read of
   their own.
+
+  ## Config shapes
+
+  `new/1` parses every config shape the contract has served. A pair read at an
+  older height serves the shape of the code it ran then. Shapes are told apart
+  by their keys and entry types, never by the contract version (S7 and S8 both
+  report `2.2.2`). Fields a shape does not carry are `nil`; `[]` means the
+  chain returned an empty list. Unknown extra keys are ignored, and a config
+  that matches no shape is `{:error, :invalid_attrs}`.
+
+  | Shape | Upstream                     | Market-maker key on the wire        | `market_makers`                |
+  | ----- | ---------------------------- | ----------------------------------- | ------------------------------ |
+  | S0    | before `1736222`             | `market_maker: String \\| null`      | one entry, or `[]` for `null`  |
+  | S1    | v1.0                         | none                                | `nil`                          |
+  | S2    | `1736222` (Fin/v1.1.0)       | `market_makers: [String]`           | entries with `arb: false`      |
+  | S8    | `dacb42c` (feat/optimize)    | `market_makers: [String \\| {addr, arb?}]` | entries with their `arb` |
+
+  Every shape also carries `denoms`, `oracles`, `tick`, `fee_taker`,
+  `fee_maker` and `fee_address`. Each `market_makers` entry is a
+  `Rujira.Fin.Pair.MarketMaker`.
   """
 
   alias Rujira.Assets
@@ -17,6 +37,7 @@ defmodule Rujira.Fin.Pair do
   alias Rujira.Contracts
   alias Rujira.Deployments
   alias Rujira.Fin.Book
+  alias Rujira.Fin.Pair.MarketMaker
   alias Rujira.Math
   alias Rujira.Node
   alias Rujira.Thorchain.Oracle
@@ -25,7 +46,7 @@ defmodule Rujira.Fin.Pair do
 
   defstruct id: nil,
             address: nil,
-            market_makers: [],
+            market_makers: nil,
             asset_base: nil,
             asset_quote: nil,
             oracle_base: nil,
@@ -39,7 +60,7 @@ defmodule Rujira.Fin.Pair do
   @type t :: %__MODULE__{
           id: String.t() | nil,
           address: String.t() | nil,
-          market_makers: [String.t()],
+          market_makers: [MarketMaker.t()] | nil,
           asset_base: Asset.t() | nil,
           asset_quote: Asset.t() | nil,
           oracle_base: Oracle.t() | nil,
@@ -53,26 +74,51 @@ defmodule Rujira.Fin.Pair do
 
   # --- Construction ---
 
+  # One clause per shape in the moduledoc table, most recent first. Each passes
+  # the fields only it carries to `build/2`, which reads the ones every shape
+  # carries.
   @spec new(map()) :: {:ok, t()} | {:error, term()}
 
-  def new(%{"market_maker" => nil} = attrs) do
-    attrs |> Map.delete("market_maker") |> Map.put("market_makers", []) |> new()
+  # S2 and S8: `market_makers` entries are addresses (S2) or `{addr, arb?}`
+  # objects (S8).
+  def new(%{"market_makers" => market_makers} = attrs)
+      when is_list(market_makers) and not is_map_key(attrs, "market_maker") do
+    with {:ok, market_makers} <- Rujira.Enum.reduce_while_ok(market_makers, &MarketMaker.new/1) do
+      build(attrs, market_makers: market_makers)
+    end
   end
 
-  def new(%{"market_maker" => market_maker} = attrs) do
-    attrs |> Map.delete("market_maker") |> Map.put("market_makers", [market_maker]) |> new()
+  # S1: no market-maker key at all.
+  def new(attrs)
+      when is_map(attrs) and not is_map_key(attrs, "market_maker") and
+             not is_map_key(attrs, "market_makers"),
+      do: build(attrs, market_makers: nil)
+
+  # S0: the singular, nullable `market_maker`.
+  def new(%{"market_maker" => nil} = attrs) when not is_map_key(attrs, "market_makers"),
+    do: build(attrs, market_makers: [])
+
+  def new(%{"market_maker" => market_maker} = attrs)
+      when not is_map_key(attrs, "market_makers") do
+    with {:ok, market_maker} <- MarketMaker.new(market_maker) do
+      build(attrs, market_makers: [market_maker])
+    end
   end
 
-  def new(%{
-        "address" => address,
-        "market_makers" => market_makers,
-        "denoms" => denoms,
-        "oracles" => oracles,
-        "tick" => tick,
-        "fee_taker" => fee_taker,
-        "fee_maker" => fee_maker,
-        "fee_address" => fee_address
-      }) do
+  def new(_), do: {:error, :invalid_attrs}
+
+  defp build(
+         %{
+           "address" => address,
+           "denoms" => denoms,
+           "oracles" => oracles,
+           "tick" => tick,
+           "fee_taker" => fee_taker,
+           "fee_maker" => fee_maker,
+           "fee_address" => fee_address
+         },
+         fields
+       ) do
     with {:ok, fee_taker} <- Math.to_decimal(fee_taker),
          {:ok, fee_maker} <- Math.to_decimal(fee_maker),
          {:ok, asset_base} <- Assets.from_denom(Enum.at(denoms, 0)),
@@ -80,22 +126,26 @@ defmodule Rujira.Fin.Pair do
          {:ok, oracle_base} <- oracle_from_config(Enum.at(oracles || [], 0)),
          {:ok, oracle_quote} <- oracle_from_config(Enum.at(oracles || [], 1)) do
       {:ok,
-       %__MODULE__{
-         id: address,
-         address: address,
-         market_makers: market_makers,
-         asset_base: asset_base,
-         asset_quote: asset_quote,
-         oracle_base: oracle_base,
-         oracle_quote: oracle_quote,
-         tick: tick,
-         fee_taker: fee_taker,
-         fee_maker: fee_maker,
-         fee_address: fee_address,
-         book: :not_loaded
-       }}
+       struct!(
+         %__MODULE__{
+           id: address,
+           address: address,
+           asset_base: asset_base,
+           asset_quote: asset_quote,
+           oracle_base: oracle_base,
+           oracle_quote: oracle_quote,
+           tick: tick,
+           fee_taker: fee_taker,
+           fee_maker: fee_maker,
+           fee_address: fee_address,
+           book: :not_loaded
+         },
+         fields
+       )}
     end
   end
+
+  defp build(_, _), do: {:error, :invalid_attrs}
 
   # --- Queries ---
 

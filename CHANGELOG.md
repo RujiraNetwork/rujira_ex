@@ -59,6 +59,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   document their shapes in a version table. No drift was found in the
   liquidation preferences, their `LiquidateMsg` variants or `Order`, so no
   parsing changed (#43).
+- **Breaking.** `%Rujira.Fin.Pair{}.market_makers` is a list of
+  `Rujira.Fin.Pair.MarketMaker` structs (`address`, `arb`), not of addresses.
+  On 0.7.3 an upgraded pair's `{addr, arb}` entries were passed through as
+  raw maps, so code treating them as addresses silently found nothing (0 TVL).
+  Plain-address entries and objects without `arb` read as `arb: false`. A
+  pair whose config has no market-maker key (S1) now reads
+  `market_makers: nil`, not `[]`; a `null` singular `market_maker` (S0) is
+  still `[]`. An entry of unknown shape is `{:error, :invalid_attrs}` (#30).
+  Migration: replace `pair.market_makers` with
+  `Enum.map(pair.market_makers, & &1.address)` (guard for `nil` when reading
+  old pairs).
 
 ### Fixed
 
