@@ -5,6 +5,12 @@ defmodule Rujira.Ghost.Credit.LiquidateMsg.Execute do
   debt asset.
 
   `msg` is the contract payload base64-decoded - the raw bytes, not parsed JSON.
+
+  One shape since credit v1.0.0; unknown extra keys are ignored:
+
+  | Shape | Upstream                            | Keys                         |
+  | ----- | ----------------------------------- | ---------------------------- |
+  | E1    | credit v1.0.0 (`355aafa`) and later | `contract_addr, msg, funds`  |
   """
 
   alias Rujira.Coin

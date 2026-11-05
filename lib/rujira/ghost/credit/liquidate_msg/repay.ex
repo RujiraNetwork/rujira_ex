@@ -2,6 +2,12 @@ defmodule Rujira.Ghost.Credit.LiquidateMsg.Repay do
   @moduledoc """
   A liquidation step that repays the whole account balance of one asset
   (`LiquidateMsg::Repay`).
+
+  One shape since credit v1.0.0:
+
+  | Shape | Upstream                            | Wire                    |
+  | ----- | ----------------------------------- | ----------------------- |
+  | R1    | credit v1.0.0 (`355aafa`) and later | `{"repay": denom}`      |
   """
 
   alias Rujira.Assets

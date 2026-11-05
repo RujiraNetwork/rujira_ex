@@ -9,7 +9,9 @@ defmodule Rujira.Fin.PairTest do
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
   alias Cosmos.Bank.V1beta1.QueryDenomMetadataResponse
   alias Rujira.Assets
+  alias Rujira.Fin
   alias Rujira.Fin.Pair
+  alias Rujira.Fin.Pair.MarketMaker
   alias Rujira.Test.MockNode
   alias Rujira.Thorchain.Oracle
   alias Thorchain.Types.ContractInfo
@@ -42,7 +44,12 @@ defmodule Rujira.Fin.PairTest do
       assert {:ok, %Pair{} = pair} = Pair.new(config)
       assert pair.address == "thor1pair"
       assert pair.id == "thor1pair"
-      assert pair.market_makers == ["thor1mm1", "thor1mm2"]
+
+      assert pair.market_makers == [
+               %MarketMaker{address: "thor1mm1", arb: false},
+               %MarketMaker{address: "thor1mm2", arb: false}
+             ]
+
       assert pair.asset_base == asset("gaia-atom")
       assert pair.asset_quote == asset("eth-usdc-0xabc")
       assert pair.tick == 6
@@ -81,7 +88,8 @@ defmodule Rujira.Fin.PairTest do
         "fee_address" => "thor1fee"
       }
 
-      assert {:ok, %Pair{market_makers: ["thor1mm"]}} = Pair.new(config)
+      assert {:ok, %Pair{market_makers: [%MarketMaker{address: "thor1mm", arb: false}]}} =
+               Pair.new(config)
     end
 
     test "normalizes nil market_maker to empty list" do
@@ -97,6 +105,193 @@ defmodule Rujira.Fin.PairTest do
       }
 
       assert {:ok, %Pair{market_makers: []}} = Pair.new(config)
+    end
+  end
+
+  # One raw `config` reply per shape the contract has served (see the table in
+  # `Rujira.Fin.Pair`). S8 is the live BTC/TRON-USDT reply from #26; the
+  # historical shapes follow the upstream `schema/rujira-fin.json` at each
+  # shape's commit, as no archive node is available to read them from.
+  @s8_address "thor18wkpr24rha007awldxx5hkyxdtnw5jamnuez9e27y6qy9u0tpkrqukal6t"
+
+  defp shape(:s8) do
+    %{
+      "arb_commits" => [],
+      "arb_market_makers" => [
+        %{"endblock" => "thor1g7cqgq389q738jrwnxhuah0u86t2pwnruvsdq70l7yt6egj6q9jq4kfeqf"}
+      ],
+      "commits" => [],
+      "denoms" => ["btc-btc", "tron-usdt-tr7nhqjekqxgtci8q8zy4pl8otszgjlj6t"],
+      "fee_address" => "thor1gm8q2gr25nzzsxzdp2mpja4hyvyhjlr4s6krcsgv2y953uu0js3qhwpus7",
+      "fee_maker" => "0.00075",
+      "fee_range" => "0.00025",
+      "fee_taker" => "0.0015",
+      "market_makers" => [
+        %{
+          "addr" => "thor1prh3ue5nd4he254eyg3vq4lxvzed65afp9prv9qvdl2cwfq6xcnqah3aet",
+          "arb" => true
+        }
+      ],
+      "oracles" => ["BTC", "USDT"],
+      "range_delta" => "0.001",
+      "range_min" => "1000",
+      "tick" => 6
+    }
+  end
+
+  # `1736222` (Fin/v1.1.0): `market_makers` is a list of addresses.
+  defp shape(:s2) do
+    %{
+      "denoms" => ["gaia-atom", "eth-usdc-0xabc"],
+      "oracles" => [
+        %{"chain" => "GAIA", "symbol" => "ATOM"},
+        %{"chain" => "ETH", "symbol" => "USDC"}
+      ],
+      "market_makers" => ["thor1mm1", "thor1mm2"],
+      "tick" => 6,
+      "fee_taker" => "0.0015",
+      "fee_maker" => "0.00075",
+      "fee_address" => "thor1fee"
+    }
+  end
+
+  # v1.0: no market-maker key at all.
+  defp shape(:s1), do: Map.delete(shape(:s2), "market_makers")
+
+  # `1736222^`: the singular, nullable `market_maker`.
+  defp shape(:s0), do: Map.put(shape(:s1), "market_maker", "thor1mm")
+
+  defp serve_config(config) do
+    MockNode.expect(fn
+      %QueryContractInfosRequest{} ->
+        {:ok,
+         %{infos: [%ContractInfo{address: @s8_address, contract: "rujira-fin", version: "1"}]}}
+
+      %QueryDenomMetadataRequest{denom: denom} ->
+        {:error, %GRPC.RPCError{status: 5, message: "client metadata for denom #{denom}"}}
+
+      %{"config" => _} ->
+        MockNode.ok(config)
+    end)
+  end
+
+  describe "config shapes, through Rujira.Fin" do
+    test "S8: market makers are objects carrying the arb flag" do
+      serve_config(shape(:s8))
+
+      assert {:ok, %Pair{} = pair} = Fin.get_pair(@s8_address, height: @height)
+
+      assert pair.market_makers == [
+               %MarketMaker{
+                 address: "thor1prh3ue5nd4he254eyg3vq4lxvzed65afp9prv9qvdl2cwfq6xcnqah3aet",
+                 arb: true
+               }
+             ]
+
+      assert pair.asset_base == asset("btc-btc")
+      assert pair.tick == 6
+      assert pair.fee_taker == Decimal.new("0.0015")
+      assert pair.fee_maker == Decimal.new("0.00075")
+    end
+
+    test "S8 lists like any other pair" do
+      serve_config(shape(:s8))
+
+      assert {:ok, [%Pair{market_makers: [%MarketMaker{arb: true}]}]} =
+               Fin.list_pairs(height: @height)
+    end
+
+    test "a market-maker object without arb reads as arb false" do
+      shape(:s8)
+      |> Map.put("market_makers", [%{"addr" => "thor1mm"}])
+      |> serve_config()
+
+      assert {:ok, %Pair{market_makers: [%MarketMaker{address: "thor1mm", arb: false}]}} =
+               Fin.get_pair(@s8_address, height: @height)
+    end
+
+    test "a market-maker entry of unknown shape is an error" do
+      shape(:s8)
+      |> Map.put("market_makers", [%{"unexpected" => "thor1mm"}])
+      |> serve_config()
+
+      assert {:error, :invalid_attrs} = Fin.get_pair(@s8_address, height: @height)
+    end
+
+    test "unknown extra keys are ignored" do
+      shape(:s8) |> Map.put("some_future_key", %{"x" => 1}) |> serve_config()
+
+      assert {:ok, %Pair{market_makers: [%MarketMaker{arb: true}]}} =
+               Fin.get_pair(@s8_address, height: @height)
+    end
+
+    test "S2: plain address entries read as arb false" do
+      serve_config(shape(:s2))
+
+      assert {:ok, %Pair{} = pair} = Fin.get_pair(@s8_address, height: @height)
+
+      assert pair.market_makers == [
+               %MarketMaker{address: "thor1mm1", arb: false},
+               %MarketMaker{address: "thor1mm2", arb: false}
+             ]
+
+      assert pair.oracle_base.id == "GAIA.ATOM"
+      assert pair.fee_address == "thor1fee"
+    end
+
+    test "S1: no market-maker key reads as nil, not an empty list" do
+      serve_config(shape(:s1))
+
+      assert {:ok, %Pair{market_makers: nil, tick: 6}} =
+               Fin.get_pair(@s8_address, height: @height)
+    end
+
+    test "S0: the singular market_maker becomes a one-entry list" do
+      serve_config(shape(:s0))
+
+      assert {:ok, %Pair{market_makers: [%MarketMaker{address: "thor1mm", arb: false}]}} =
+               Fin.get_pair(@s8_address, height: @height)
+    end
+
+    test "S0: a nil market_maker is an empty list" do
+      shape(:s0) |> Map.put("market_maker", nil) |> serve_config()
+
+      assert {:ok, %Pair{market_makers: []}} = Fin.get_pair(@s8_address, height: @height)
+    end
+
+    test "a config missing a field every shape carries is an error" do
+      shape(:s2) |> Map.delete("tick") |> serve_config()
+
+      assert {:error, :invalid_attrs} = Fin.get_pair(@s8_address, height: @height)
+    end
+
+    test "both the singular and the plural key match no shape" do
+      shape(:s2) |> Map.put("market_maker", "thor1mm") |> serve_config()
+
+      assert {:error, :invalid_attrs} = Fin.get_pair(@s8_address, height: @height)
+    end
+  end
+
+  describe "Pair.MarketMaker.new/1" do
+    test "a plain address is a market maker without arb" do
+      assert {:ok, %MarketMaker{address: "thor1mm", arb: false}} = MarketMaker.new("thor1mm")
+    end
+
+    test "an object carries its arb flag" do
+      assert {:ok, %MarketMaker{address: "thor1mm", arb: true}} =
+               MarketMaker.new(%{"addr" => "thor1mm", "arb" => true})
+    end
+
+    test "an object without arb defaults to false, as the contract does" do
+      assert {:ok, %MarketMaker{address: "thor1mm", arb: false}} =
+               MarketMaker.new(%{"addr" => "thor1mm"})
+    end
+
+    test "any other shape is invalid" do
+      assert {:error, :invalid_attrs} = MarketMaker.new(%{"addr" => "thor1mm", "arb" => "yes"})
+      assert {:error, :invalid_attrs} = MarketMaker.new(%{"address" => "thor1mm"})
+      assert {:error, :invalid_attrs} = MarketMaker.new(nil)
+      assert {:error, :invalid_attrs} = MarketMaker.new(42)
     end
   end
 

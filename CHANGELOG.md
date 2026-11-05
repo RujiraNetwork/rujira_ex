@@ -29,6 +29,70 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Rujira.ThorchainArb.Status` (`height`, `claimed_pools`, `pending_hedges`,
   `paused`), so a consumer can tell whether a guard is paused. It is cached
   per block, and node errors come back unchanged (#36).
+- `Rujira.Events.data_error?/1`: whether a parse failure is the data's fault
+  (`:invalid_*` or `{:invalid_*, _}`) rather than a failure a retry may
+  clear (#38).
+
+### Changed
+
+- **Breaking:** `Rujira.Ghost.Vault` parses every vault `config` shape (#41).
+  A vault from before upstream `1303d28` (v1.0.0 to v1.0.5) now reads with
+  `fee: nil` and `fee_address: nil` instead of failing `get/2` and the whole of
+  `Rujira.Ghost.list_vaults/1`. `fee` is now `Decimal.t() | nil` and its struct
+  default is `nil`, no longer `Decimal.new(0)`: match on `nil` before doing
+  arithmetic on it. A v0.x vault, which has no `config` query, returns the
+  contract's error unchanged and still fails the list. The moduledoc has a
+  version table.
+- **Breaking:** `Rujira.Thorchain.Block.get/2` (and `Block.new/1`,
+  `Block.fetch_uncached/2`, `Rujira.Thorchain.block/0,2`) can now return
+  `{:error, reason}` for a failure while parsing a block's events. Only an
+  `:invalid_*` reason - malformed data - still degrades the event to a generic
+  `Rujira.Events.Event` with a warning. A node, transport or timeout failure,
+  `{:height_unavailable, _}`, or any other reason is returned unchanged, and
+  the block is not cached, so the next call retries. With several failures the
+  first in `{tx_idx, event_idx}` order is returned. Treat an `{:error, _}` as a
+  gap to retry or backfill. Pre-block, begin-block, tx and end-block events
+  are covered; transaction messages are not yet (#27, #38).
+- `Rujira.Coin.parse/1` returns a failed denom-metadata read unchanged rather
+  than as `{:error, :invalid_coin_format}`, which hid an `x/` denom's node
+  failure as malformed data (#38).
+- Ghost credit accounts: every account response shape mainnet has served is
+  covered by a fixture (A1, debt `shares` as `Uint128`, credit v1.0.0 to
+  `c1e1d62`; A2, `shares` as `Decimal`, from `3ee2d68`), and `Account`,
+  `LiquidationPreferences`, `Order`, `LiquidateMsg`, `Repay` and `Execute`
+  document their shapes in a version table. No drift was found in the
+  liquidation preferences, their `LiquidateMsg` variants or `Order`, so no
+  parsing changed (#43).
+- **Breaking.** `%Rujira.Fin.Pair{}.market_makers` is a list of
+  `Rujira.Fin.Pair.MarketMaker` structs (`address`, `arb`), not of addresses.
+  On 0.7.3 an upgraded pair's `{addr, arb}` entries were passed through as
+  raw maps, so code treating them as addresses silently found nothing (0 TVL).
+  Plain-address entries and objects without `arb` read as `arb: false`. A
+  pair whose config has no market-maker key (S1) now reads
+  `market_makers: nil`, not `[]`; a `null` singular `market_maker` (S0) is
+  still `[]`. An entry of unknown shape is `{:error, :invalid_attrs}` (#30).
+  Migration: replace `pair.market_makers` with
+  `Enum.map(pair.market_makers, & &1.address)` (guard for `nil` when reading
+  old pairs).
+- Ghost vault-side responses parse every shape they have had on mainnet
+  (#42). `Ghost.Vault.Borrower` reads the v0.0.1 shape (no `available`, no
+  `denom`) and the v0.1.x shape (no `denom`), with the absent fields `nil`, so
+  `vault_borrower/3`, `vault_borrowers/2` and a delegate's borrower no longer
+  fail on pre-v1.0.0 vaults. **Breaking:** `Borrower.available` is now
+  `Amount.t() | nil` and defaults to `nil`. `Ghost.Vault.Status` gains
+  `interest`, set from the v0.x status (which carried the interest curve
+  before it moved to `config`) and `nil` from v1.0.0. `delegate` and the
+  credit contract's `borrows` had no key changes. Each struct's moduledoc has
+  a version table.
+
+### Fixed
+
+- **Breaking:** `Rujira.Ghost.Credit.new/1` parses the pre-v1.0.2 credit
+  config (C1, v1.0.0 to v1.0.1), which has no `full_liquidation_threshold`,
+  so `Rujira.Ghost.get_credit/2` and `list_credits/1` work at heights before
+  about 26.05M. `full_liquidation_threshold` is now
+  `non_neg_integer() | nil`, `nil` for C1 (and the struct default). The
+  `Credit` moduledoc has a version table (#40).
 
 ## 0.7.3
 
