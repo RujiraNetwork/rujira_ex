@@ -9,6 +9,7 @@ defmodule Rujira.ThorchainArbTest do
   alias Rujira.Test.MockNode
   alias Rujira.ThorchainArb
   alias Rujira.ThorchainArb.Guard
+  alias Rujira.ThorchainArb.Status
   alias Thorchain.Types.ContractInfo
   alias Thorchain.Types.QueryContractInfosRequest
 
@@ -169,6 +170,80 @@ defmodule Rujira.ThorchainArbTest do
       end)
 
       assert {:error, :invalid_attrs} = ThorchainArb.list()
+    end
+  end
+
+  # A `StatusResponse` as the contract's schema defines it on `feat/optimize`
+  # (first in `schema/rujira-thorchain-arb.json` at `d38bcfb`, unchanged
+  # since): all four keys required, `height` and `pending_hedges` JSON
+  # integers. It is the only shape there has been.
+  defp status do
+    %{
+      "height" => 28_531_530,
+      "claimed_pools" => ["BTC.BTC", "ETH.ETH"],
+      "pending_hedges" => 2,
+      "paused" => false
+    }
+  end
+
+  describe "status/2" do
+    test "reads the guard's status at the head" do
+      MockNode.expect(fn %{"status" => %{}} -> MockNode.ok(status()) end)
+
+      assert {:ok,
+              %Status{
+                height: 28_531_530,
+                claimed_pools: ["BTC.BTC", "ETH.ETH"],
+                pending_hedges: 2,
+                paused: false
+              }} = ThorchainArb.status(@address)
+    end
+
+    test "reads at the height it is given" do
+      MockNode.expect(fn %{"status" => %{}} ->
+        MockNode.ok(%{status() | "height" => 900_000, "paused" => true})
+      end)
+
+      assert {:ok, %Status{height: 900_000, paused: true}} =
+               ThorchainArb.status(@address, height: 900_000)
+
+      assert_received {:mock_node, %QuerySmartContractStateRequest{address: @address}, opts}
+      assert opts[:metadata] == %{"x-cosmos-block-height" => "900000"}
+    end
+
+    test "a second read in the same block is served from the cache" do
+      MockNode.expect(fn %{"status" => %{}} -> MockNode.ok(status()) end)
+
+      assert {:ok, status} = ThorchainArb.status(@address)
+      assert {:ok, ^status} = ThorchainArb.status(@address)
+
+      assert_received {:mock_node, _, _}
+      refute_received {:mock_node, _, _}
+    end
+
+    test "the next block reads the status again" do
+      MockNode.expect(fn %{"status" => %{}} -> MockNode.ok(status()) end)
+      assert {:ok, %Status{paused: false}} = ThorchainArb.status(@address)
+      assert_received {:mock_node, _, _}
+
+      set_head(default_head() + 1)
+      MockNode.expect(fn %{"status" => %{}} -> MockNode.ok(%{status() | "paused" => true}) end)
+
+      assert {:ok, %Status{paused: true}} = ThorchainArb.status(@address)
+      assert_received {:mock_node, _, _}
+    end
+
+    test "a node error comes back unchanged" do
+      error = %GRPC.RPCError{status: 14, message: "unavailable"}
+      MockNode.expect(fn %{"status" => %{}} -> {:error, error} end)
+
+      assert {:error, ^error} = ThorchainArb.status(@address)
+    end
+
+    test "a status missing a required key is invalid_attrs" do
+      MockNode.expect(fn %{"status" => %{}} -> MockNode.ok(Map.delete(status(), "paused")) end)
+
+      assert {:error, :invalid_attrs} = ThorchainArb.status(@address)
     end
   end
 end
