@@ -19,28 +19,64 @@ defmodule Rujira.Fin.Pair do
   chain returned an empty list. Unknown extra keys are ignored, and a config
   that matches no shape is `{:error, :invalid_attrs}`.
 
-  | Shape | Upstream                     | Market-maker key on the wire        | `market_makers`                |
-  | ----- | ---------------------------- | ----------------------------------- | ------------------------------ |
-  | S0    | `3216240` to `1736222^`      | `market_maker: String \\| null`      | one entry, or `[]` for `null`  |
-  | S1    | before `3216240` (Jan 2025)  | none                                | `nil`                          |
-  | S2    | `1736222` (Fin/v1.1.0)       | `market_makers: [String]`           | entries with `arb: false`      |
-  | S3    | `2c308f8` (v1.2), v1.3       | `market_makers: [String]`           | entries with `arb: false`      |
-  | S4    | `87e7a32` (v2.0.0)           | `market_makers: [String]`           | entries with `arb: false`      |
-  | S5    | `04bf399` (v2.1.0)           | `market_makers: [String]`           | entries with `arb: false`      |
-  | S8    | `dacb42c` (feat/optimize)    | `market_makers: [String \\| {addr, arb?}]` | entries with their `arb` |
+  Upstream is `gitlab.com/thorchain/rujira`; commits are on `main` unless
+  marked `feat/optimize`. The shapes are listed oldest first, so S1 comes
+  before S0: S0's singular `market_maker` was added by `3216240`, after S1.
+
+  | Shape | Release                 | Commit                         | Date       | Changes from the shape before                                  |
+  | ----- | ----------------------- | ------------------------------ | ---------- | -------------------------------------------------------------- |
+  | S1    | v1.0 (Cargo `0.0.0`)    | before `3216240`               | Jan 2025   | `denoms`, `oracles`, `tick`, `fee_taker`, `fee_maker`, `fee_address`; no market-maker key |
+  | S0    | pre-v1.1.0              | `3216240` to `1736222^`        | 2025-01-20 | adds the singular, nullable `market_maker`                     |
+  | S2    | Fin/v1.1.0              | `1736222`                      | 2025-12-03 | `market_maker` replaced by `market_makers: [String]`           |
+  | S3    | RUJI Trade v1.2, v1.3.0 | `2c308f8`, `332a3d2`           | 2026-02-13 | adds `range_delta` and `fee_amm`                               |
+  | S4    | v2.0.0                  | `87e7a32`                      | 2026-03-18 | renames `fee_amm` to `fee_range`                               |
+  | S5    | v2.1.x                  | `04bf399`                      | 2026-04-07 | adds `range_min`                                               |
+  | S6    | fin/v2.2.0              | `3666e52`                      | 2026-08-13 | adds `commits: [{addr, msg}]`                                  |
+  | S7    | (`feat/optimize`)       | `9126d72`                      | 2026-10-19 | adds `arb_market_makers` and `arb_commits`                     |
+  | S8    | (`feat/optimize`)       | `dacb42c`                      | 2026-10-19 | `market_makers` entries may be `{addr, arb?}` objects          |
+
+  The market makers, by shape. Each `market_makers` entry is a
+  `Rujira.Fin.Pair.MarketMaker`:
+
+  | Shape | On the wire                                 | `market_makers`                |
+  | ----- | ------------------------------------------- | ------------------------------ |
+  | S1    | none                                        | `nil`                          |
+  | S0    | `market_maker: String \\| null`              | one entry, or `[]` for `null`  |
+  | S2-S7 | `market_makers: [String]`                   | entries with `arb: false`      |
+  | S8    | `market_makers: [String \\| {addr, arb?}]`   | entries with their `arb`       |
 
   The range-fee fields, by shape:
 
-  | Shape   | On the wire                                | `fee_range`        | `range_delta` | `range_min` |
-  | ------- | ------------------------------------------ | ------------------ | ------------- | ----------- |
-  | S0-S2   | none                                       | `nil`              | `nil`         | `nil`       |
-  | S3      | `range_delta`, `fee_amm`                   | read from `fee_amm` | set          | `nil`       |
-  | S4      | `range_delta`, `fee_range`                 | set                | set           | `nil`       |
-  | S5, S8  | `range_delta`, `fee_range`, `range_min`    | set                | set           | set         |
+  | Shape   | On the wire                                | `fee_range`         | `range_delta` | `range_min` |
+  | ------- | ------------------------------------------ | ------------------- | ------------- | ----------- |
+  | S0-S2   | none                                       | `nil`               | `nil`         | `nil`       |
+  | S3      | `range_delta`, `fee_amm`                   | read from `fee_amm` | set           | `nil`       |
+  | S4      | `range_delta`, `fee_range`                 | set                 | set           | `nil`       |
+  | S5      | `range_delta`, `fee_range`, `range_min`    | set                 | set           | set         |
+  | S6      | as S5                                      | set                 | set           | set         |
+  | S7      | as S5                                      | set                 | set           | set         |
+  | S8      | as S5                                      | set                 | set           | set         |
+
+  Commits and arbitrage providers, by shape. Each `commits` and `arb_commits`
+  entry is a `Rujira.Fin.Pair.Commit` (its `msg` base64-decoded, not
+  JSON-parsed); each `arb_market_makers` entry is a
+  `Rujira.Fin.Pair.ArbMarketMaker`:
+
+  | Shape | On the wire                                       | `commits` | `arb_market_makers` | `arb_commits` |
+  | ----- | ------------------------------------------------- | --------- | ------------------- | ------------- |
+  | S0-S5 | none                                              | `nil`     | `nil`               | `nil`         |
+  | S6    | `commits`                                         | set       | `nil`               | `nil`         |
+  | S7    | `commits`, `arb_market_makers`, `arb_commits`     | set       | set                 | set           |
+  | S8    | as S7                                             | set       | set                 | set           |
+
+  S7 and S8 have the same keys and are read by one clause: an S8 config whose
+  market makers are all plain addresses is indistinguishable from S7, and
+  reads the same. A config carrying a later shape's key without the rest of
+  that shape (`commits` without `range_min`, `arb_market_makers` without
+  `arb_commits`) matches no shape.
 
   Every shape also carries `denoms`, `oracles`, `tick`, `fee_taker`,
-  `fee_maker` and `fee_address`. Each `market_makers` entry is a
-  `Rujira.Fin.Pair.MarketMaker`.
+  `fee_maker` and `fee_address`.
   """
 
   alias Rujira.Assets
@@ -49,6 +85,8 @@ defmodule Rujira.Fin.Pair do
   alias Rujira.Contracts
   alias Rujira.Deployments
   alias Rujira.Fin.Book
+  alias Rujira.Fin.Pair.ArbMarketMaker
+  alias Rujira.Fin.Pair.Commit
   alias Rujira.Fin.Pair.MarketMaker
   alias Rujira.Math
   alias Rujira.Node
@@ -70,6 +108,9 @@ defmodule Rujira.Fin.Pair do
             fee_range: nil,
             range_delta: nil,
             range_min: nil,
+            arb_market_makers: nil,
+            commits: nil,
+            arb_commits: nil,
             book: :not_loaded
 
   @type t :: %__MODULE__{
@@ -87,41 +128,63 @@ defmodule Rujira.Fin.Pair do
           fee_range: Decimal.t() | nil,
           range_delta: Decimal.t() | nil,
           range_min: Decimal.t() | nil,
+          arb_market_makers: [ArbMarketMaker.t()] | nil,
+          commits: [Commit.t()] | nil,
+          arb_commits: [Commit.t()] | nil,
           book: :not_loaded | Book.t()
         }
 
   # --- Construction ---
+
+  # Keys only S6 or later carry, so that an older shape's clause does not
+  # ignore them as unknown extras.
+  defguardp is_arb_shape(attrs)
+            when is_map_key(attrs, "arb_market_makers") or is_map_key(attrs, "arb_commits")
+
+  defguardp is_commit_shape(attrs) when is_map_key(attrs, "commits") or is_arb_shape(attrs)
 
   # One clause per shape in the moduledoc table, most recent first. Each passes
   # the fields only it carries to `build/2`, which reads the ones every shape
   # carries.
   @spec new(map()) :: {:ok, t()} | {:error, term()}
 
-  # S5, and - until they get clauses of their own - S6 to S8, whose extra keys
-  # are ignored: adds `range_min`. S8's `market_makers` entries may be
-  # `{addr, arb?}` objects.
+  # S7 and S8: add `arb_market_makers` and `arb_commits`. The two shapes have
+  # the same keys; S8's `market_makers` entries may be `{addr, arb?}` objects,
+  # which `MarketMaker.new/1` reads either way.
   def new(
         %{
           "market_makers" => market_makers,
-          "fee_range" => fee_range,
-          "range_delta" => range_delta,
-          "range_min" => range_min
+          "commits" => commits,
+          "arb_market_makers" => arb_market_makers,
+          "arb_commits" => arb_commits
         } = attrs
       )
-      when is_list(market_makers) and not is_map_key(attrs, "market_maker") and
-             not is_map_key(attrs, "fee_amm") do
-    with {:ok, market_makers} <- market_makers(market_makers),
-         {:ok, fee_range} <- Math.to_decimal(fee_range),
-         {:ok, range_delta} <- Math.to_decimal(range_delta),
-         {:ok, range_min} <- Math.to_decimal(range_min) do
-      build(attrs,
-        market_makers: market_makers,
-        fee_range: fee_range,
-        range_delta: range_delta,
-        range_min: range_min
+      when is_list(market_makers) and is_list(commits) and is_list(arb_market_makers) and
+             is_list(arb_commits) and not is_map_key(attrs, "market_maker") do
+    with {:ok, commits} <- commits(commits),
+         {:ok, arb_market_makers} <-
+           Rujira.Enum.reduce_while_ok(arb_market_makers, &ArbMarketMaker.new/1),
+         {:ok, arb_commits} <- commits(arb_commits) do
+      ranged(attrs,
+        commits: commits,
+        arb_market_makers: arb_market_makers,
+        arb_commits: arb_commits
       )
     end
   end
+
+  # S6: adds `commits`.
+  def new(%{"market_makers" => market_makers, "commits" => commits} = attrs)
+      when is_list(market_makers) and is_list(commits) and not is_map_key(attrs, "market_maker") and
+             not is_arb_shape(attrs) do
+    with {:ok, commits} <- commits(commits), do: ranged(attrs, commits: commits)
+  end
+
+  # S5: adds `range_min`.
+  def new(%{"market_makers" => market_makers} = attrs)
+      when is_list(market_makers) and not is_map_key(attrs, "market_maker") and
+             is_map_key(attrs, "range_min") and not is_commit_shape(attrs),
+      do: ranged(attrs, [])
 
   # S4: `fee_amm` renamed to `fee_range`.
   def new(
@@ -132,7 +195,8 @@ defmodule Rujira.Fin.Pair do
         } = attrs
       )
       when is_list(market_makers) and not is_map_key(attrs, "market_maker") and
-             not is_map_key(attrs, "fee_amm") and not is_map_key(attrs, "range_min") do
+             not is_map_key(attrs, "fee_amm") and not is_map_key(attrs, "range_min") and
+             not is_commit_shape(attrs) do
     with {:ok, market_makers} <- market_makers(market_makers),
          {:ok, fee_range} <- Math.to_decimal(fee_range),
          {:ok, range_delta} <- Math.to_decimal(range_delta) do
@@ -149,7 +213,8 @@ defmodule Rujira.Fin.Pair do
         } = attrs
       )
       when is_list(market_makers) and not is_map_key(attrs, "market_maker") and
-             not is_map_key(attrs, "fee_range") and not is_map_key(attrs, "range_min") do
+             not is_map_key(attrs, "fee_range") and not is_map_key(attrs, "range_min") and
+             not is_commit_shape(attrs) do
     with {:ok, market_makers} <- market_makers(market_makers),
          {:ok, fee_range} <- Math.to_decimal(fee_amm),
          {:ok, range_delta} <- Math.to_decimal(range_delta) do
@@ -161,7 +226,8 @@ defmodule Rujira.Fin.Pair do
   def new(%{"market_makers" => market_makers} = attrs)
       when is_list(market_makers) and not is_map_key(attrs, "market_maker") and
              not is_map_key(attrs, "fee_amm") and not is_map_key(attrs, "fee_range") and
-             not is_map_key(attrs, "range_delta") and not is_map_key(attrs, "range_min") do
+             not is_map_key(attrs, "range_delta") and not is_map_key(attrs, "range_min") and
+             not is_commit_shape(attrs) do
     with {:ok, market_makers} <- market_makers(market_makers) do
       build(attrs, market_makers: market_makers)
     end
@@ -170,7 +236,7 @@ defmodule Rujira.Fin.Pair do
   # S1: no market-maker key at all.
   def new(attrs)
       when is_map(attrs) and not is_map_key(attrs, "market_maker") and
-             not is_map_key(attrs, "market_makers"),
+             not is_map_key(attrs, "market_makers") and not is_commit_shape(attrs),
       do: build(attrs, market_makers: nil)
 
   # S0: the singular, nullable `market_maker`.
@@ -227,6 +293,38 @@ defmodule Rujira.Fin.Pair do
   defp build(_, _), do: {:error, :invalid_attrs}
 
   defp market_makers(entries), do: Rujira.Enum.reduce_while_ok(entries, &MarketMaker.new/1)
+
+  defp commits(entries), do: Rujira.Enum.reduce_while_ok(entries, &Commit.new/1)
+
+  # S5 to S8 carry the same market-maker list and range-fee fields; each passes
+  # what it adds on top as `fields`.
+  defp ranged(
+         %{
+           "market_makers" => market_makers,
+           "fee_range" => fee_range,
+           "range_delta" => range_delta,
+           "range_min" => range_min
+         } = attrs,
+         fields
+       )
+       when not is_map_key(attrs, "fee_amm") do
+    with {:ok, market_makers} <- market_makers(market_makers),
+         {:ok, fee_range} <- Math.to_decimal(fee_range),
+         {:ok, range_delta} <- Math.to_decimal(range_delta),
+         {:ok, range_min} <- Math.to_decimal(range_min) do
+      build(
+        attrs,
+        [
+          market_makers: market_makers,
+          fee_range: fee_range,
+          range_delta: range_delta,
+          range_min: range_min
+        ] ++ fields
+      )
+    end
+  end
+
+  defp ranged(_, _), do: {:error, :invalid_attrs}
 
   # --- Queries ---
 
