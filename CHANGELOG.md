@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- FIN's `wasm-rujira-fin/arb_lot` event parses into
+  `Rujira.Fin.Events.ArbLot` (provider, `offer`/`ask` coins, the three
+  surplus/fee values as amounts, `arb_objective` as `:fin_surplus` or
+  `:total_rujira_surplus`, and `valuation` as a decimal). It was a generic
+  event before. An unknown `arb_objective` fails the parse with
+  `{:error, :invalid_arb_objective}` (#33).
+- `Rujira.ThorchainSwap.Strategy` has an `arb_guard` field: the address of
+  the VS v2 `rujira-thorchain-arb` guard a v1.4.0 strategy serves. It is `nil`
+  for strategies before v1.4.0 and for a v1.4.0 strategy serving `null`.
+  `list_strategies/1` returns v1 and v2 strategies together (#37, #28).
+
 ### Changed
 
 - Ghost credit accounts: every account response shape mainnet has served is
