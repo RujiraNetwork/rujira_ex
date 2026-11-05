@@ -35,6 +35,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `non_neg_integer() | nil`, `nil` for C1 (and the struct default). The
   `Credit` moduledoc has a version table (#40).
 
+### Changed
+
+- **Breaking:** `Rujira.Ghost.Vault` parses every vault `config` shape (#41).
+  A vault from before upstream `1303d28` (v1.0.0 to v1.0.5) now reads with
+  `fee: nil` and `fee_address: nil` instead of failing `get/2` and the whole of
+  `Rujira.Ghost.list_vaults/1`. `fee` is now `Decimal.t() | nil` and its struct
+  default is `nil`, no longer `Decimal.new(0)`: match on `nil` before doing
+  arithmetic on it. A v0.x vault, which has no `config` query, returns the
+  contract's error unchanged and still fails the list. The moduledoc has a
+  version table.
+
 ## 0.7.3
 
 ### Changed
