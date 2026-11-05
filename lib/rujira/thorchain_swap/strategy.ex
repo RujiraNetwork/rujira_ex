@@ -9,13 +9,18 @@ defmodule Rujira.ThorchainSwap.Strategy do
   height serves the shape of the code it ran then. Fields a shape does not
   carry are `nil`:
 
-  | Contract          | `min_slip_bps` | `fee`, `fee_address` | `min_borrow_amount` | `spread_bps` |
-  | ----------------- | -------------- | -------------------- | ------------------- | ------------ |
-  | before v0.0.6     | set            | `nil`                | `nil`               | `nil`        |
-  | v0.0.6 to v0.x    | `nil`          | `nil`                | `nil`               | `nil`        |
-  | v1.0.x            | `nil`          | set                  | `nil`               | `nil`        |
-  | v1.1.x            | `nil`          | set                  | set                 | `nil`        |
-  | v1.2.0 and later  | `nil`          | set                  | set                 | set          |
+  | Contract          | `min_slip_bps` | `fee`, `fee_address` | `min_borrow_amount` | `spread_bps` | `arb_guard`     |
+  | ----------------- | -------------- | -------------------- | ------------------- | ------------ | --------------- |
+  | before v0.0.6     | set            | `nil`                | `nil`               | `nil`        | `nil`           |
+  | v0.0.6 to v0.x    | `nil`          | `nil`                | `nil`               | `nil`        | `nil`           |
+  | v1.0.x            | `nil`          | set                  | `nil`               | `nil`        | `nil`           |
+  | v1.1.x            | `nil`          | set                  | set                 | `nil`        | `nil`           |
+  | v1.2.0 to v1.3.x  | `nil`          | set                  | set                 | set          | `nil`           |
+  | v1.4.0 and later  | `nil`          | set                  | set                 | set          | set, or `nil`   |
+
+  `arb_guard` is the address of the strategy's `rujira-thorchain-arb` guard
+  (VS v2). From v1.4.0 the contract may serve it as `null` when no guard is
+  configured, which reads as `nil`, the same as a shape without the key.
 
   `Rujira.Contracts.version/2` reads the contract version itself.
   """
@@ -48,6 +53,7 @@ defmodule Rujira.ThorchainSwap.Strategy do
             reserve_fee: Decimal.new(0),
             fee: nil,
             fee_address: nil,
+            arb_guard: nil,
             markets: :not_loaded,
             vaults: :not_loaded
 
@@ -63,6 +69,7 @@ defmodule Rujira.ThorchainSwap.Strategy do
           reserve_fee: Decimal.t(),
           fee: Decimal.t() | nil,
           fee_address: String.t() | nil,
+          arb_guard: String.t() | nil,
           markets: :not_loaded | [String.t()],
           vaults: :not_loaded | [Vault.t()]
         }
@@ -85,7 +92,8 @@ defmodule Rujira.ThorchainSwap.Strategy do
         spread_bps: spread_bps,
         min_borrow_amount: min_borrow_amount,
         fee: fee,
-        fee_address: fee_address
+        fee_address: fee_address,
+        arb_guard: Map.get(attrs, "arb_guard")
       )
     end
   end
