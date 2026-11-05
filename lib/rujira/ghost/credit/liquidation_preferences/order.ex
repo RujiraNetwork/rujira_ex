@@ -4,6 +4,13 @@ defmodule Rujira.Ghost.Credit.LiquidationPreferences.Order do
 
   Each entry reads "liquidating `asset` is invalid while the account still holds
   `after`". `limit` is the contract's own cap on how many entries it will store.
+
+  One shape since credit v1.0.0 (`LiquidationPreferenceOrder`); unknown extra
+  keys are ignored:
+
+  | Shape | Upstream                            | Keys                                         |
+  | ----- | ----------------------------------- | -------------------------------------------- |
+  | O1    | credit v1.0.0 (`355aafa`) and later | `map` (denom to denom), `limit` (`u8`)       |
   """
 
   alias Rujira.Assets

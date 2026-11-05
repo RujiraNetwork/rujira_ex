@@ -26,6 +26,7 @@ defmodule Rujira.HeightCoverageTest do
   alias Rujira.Staking
   alias Rujira.Test.MockNode
   alias Rujira.Thorchain
+  alias Rujira.ThorchainArb
   alias Rujira.ThorchainSwap
 
   @height 12_345
@@ -48,6 +49,7 @@ defmodule Rujira.HeightCoverageTest do
     Brune => %{},
     Revenue => %{},
     ThorchainSwap => %{},
+    ThorchainArb => %{},
     Thorchain => %{
       module_address: "pure - hashes a module name into an address, no node read",
       block: "takes its height as an argument - it travels in the request, not in metadata",
@@ -81,6 +83,7 @@ defmodule Rujira.HeightCoverageTest do
     test "Rujira.Brune", do: assert_forwards_height(Brune)
     test "Rujira.Revenue", do: assert_forwards_height(Revenue)
     test "Rujira.ThorchainSwap", do: assert_forwards_height(ThorchainSwap)
+    test "Rujira.ThorchainArb", do: assert_forwards_height(ThorchainArb)
     test "Rujira.Thorchain", do: assert_forwards_height(Thorchain)
     test "Rujira.Bank", do: assert_forwards_height(Rujira.Bank)
   end
@@ -265,6 +268,15 @@ defmodule Rujira.HeightCoverageTest do
       {:load_strategy, &ThorchainSwap.load_strategy(strategy(), &1)},
       {:strategy_from_id, &ThorchainSwap.strategy_from_id("thor1strategy", &1)},
       {:quote, &ThorchainSwap.quote("thor1strategy", rune(), ruji(), nil, &1)}
+    ]
+  end
+
+  defp covered(ThorchainArb) do
+    [
+      {:get, &ThorchainArb.get("thor1guard", &1)},
+      {:list, &ThorchainArb.list/1},
+      {:from_id, &ThorchainArb.from_id("thor1guard", &1)},
+      {:status, &ThorchainArb.status("thor1guard", &1)}
     ]
   end
 

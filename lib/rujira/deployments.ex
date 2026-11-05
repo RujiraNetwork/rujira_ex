@@ -47,6 +47,7 @@ defmodule Rujira.Deployments do
     "rujira-ghost-vault" => Rujira.Ghost.Vault,
     "rujira-revenue" => Rujira.Revenue.Converter,
     "rujira-staking" => Rujira.Staking.Pool,
+    "rujira-thorchain-arb" => Rujira.ThorchainArb.Guard,
     "rujira-thorchain-swap" => Rujira.ThorchainSwap.Strategy
   }
 

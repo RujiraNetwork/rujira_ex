@@ -9,13 +9,20 @@ defmodule Rujira.ThorchainSwap.Strategy do
   height serves the shape of the code it ran then. Fields a shape does not
   carry are `nil`:
 
-  | Contract          | `min_slip_bps` | `fee`, `fee_address` | `min_borrow_amount` | `spread_bps` |
-  | ----------------- | -------------- | -------------------- | ------------------- | ------------ |
-  | before v0.0.6     | set            | `nil`                | `nil`               | `nil`        |
-  | v0.0.6 to v0.x    | `nil`          | `nil`                | `nil`               | `nil`        |
-  | v1.0.x            | `nil`          | set                  | `nil`               | `nil`        |
-  | v1.1.x            | `nil`          | set                  | set                 | `nil`        |
-  | v1.2.0 and later  | `nil`          | set                  | set                 | set          |
+  | Contract          | `min_slip_bps` | `fee`, `fee_address` | `min_borrow_amount` | `spread_bps` | `arb_guard`     |
+  | ----------------- | -------------- | -------------------- | ------------------- | ------------ | --------------- |
+  | before v0.0.6     | set            | `nil`                | `nil`               | `nil`        | `nil`           |
+  | v0.0.6 to v0.x    | `nil`          | `nil`                | `nil`               | `nil`        | `nil`           |
+  | v1.0.x            | `nil`          | set                  | `nil`               | `nil`        | `nil`           |
+  | v1.1.x            | `nil`          | set                  | set                 | `nil`        | `nil`           |
+  | v1.2.0 to v1.3.x  | `nil`          | set                  | set                 | set          | `nil`           |
+  | v1.4.0 and later  | `nil`          | set                  | set                 | set          | set, or `nil`   |
+
+  `arb_guard` is the address of the strategy's `rujira-thorchain-arb` guard
+  (VS v2). From v1.4.0 the contract may serve it as `null` when no guard is
+  configured, which reads as `nil`, the same as a shape without the key. An
+  `arb_guard` that is neither an address string nor `null` is
+  `{:error, :invalid_attrs}`.
 
   `Rujira.Contracts.version/2` reads the contract version itself.
   """
@@ -48,6 +55,7 @@ defmodule Rujira.ThorchainSwap.Strategy do
             reserve_fee: Decimal.new(0),
             fee: nil,
             fee_address: nil,
+            arb_guard: nil,
             markets: :not_loaded,
             vaults: :not_loaded
 
@@ -63,6 +71,7 @@ defmodule Rujira.ThorchainSwap.Strategy do
           reserve_fee: Decimal.t(),
           fee: Decimal.t() | nil,
           fee_address: String.t() | nil,
+          arb_guard: String.t() | nil,
           markets: :not_loaded | [String.t()],
           vaults: :not_loaded | [Vault.t()]
         }
@@ -70,25 +79,16 @@ defmodule Rujira.ThorchainSwap.Strategy do
   # --- Construction ---
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
-  def new(
-        %{
-          "spread_bps" => spread_bps,
-          "min_borrow_amount" => min_borrow_amount,
-          "fee" => [fee, fee_address]
-        } = attrs
-      )
-      when not is_map_key(attrs, "min_slip_bps") do
-    with {:ok, spread_bps} <- Math.to_integer(spread_bps),
-         {:ok, min_borrow_amount} <- Amount.new(min_borrow_amount),
-         {:ok, fee} <- Math.to_decimal(fee) do
-      build(attrs,
-        spread_bps: spread_bps,
-        min_borrow_amount: min_borrow_amount,
-        fee: fee,
-        fee_address: fee_address
-      )
-    end
-  end
+
+  # v1.4.0 and later: adds `arb_guard`, an address or `null`.
+  def new(%{"spread_bps" => _, "arb_guard" => arb_guard} = attrs)
+      when (is_binary(arb_guard) or is_nil(arb_guard)) and not is_map_key(attrs, "min_slip_bps"),
+      do: spread(attrs, arb_guard: arb_guard)
+
+  # v1.2.0 to v1.3.x: adds `spread_bps`.
+  def new(%{"spread_bps" => _} = attrs)
+      when not is_map_key(attrs, "min_slip_bps") and not is_map_key(attrs, "arb_guard"),
+      do: spread(attrs, [])
 
   def new(%{"min_borrow_amount" => min_borrow_amount, "fee" => [fee, fee_address]} = attrs)
       when not is_map_key(attrs, "min_slip_bps") and not is_map_key(attrs, "spread_bps") do
@@ -211,6 +211,33 @@ defmodule Rujira.ThorchainSwap.Strategy do
   end
 
   # --- Private ---
+
+  # v1.2.0 and later carry the same spread, borrow and fee fields; each passes
+  # what it adds on top as `fields`.
+  defp spread(
+         %{
+           "spread_bps" => spread_bps,
+           "min_borrow_amount" => min_borrow_amount,
+           "fee" => [fee, fee_address]
+         } = attrs,
+         fields
+       ) do
+    with {:ok, spread_bps} <- Math.to_integer(spread_bps),
+         {:ok, min_borrow_amount} <- Amount.new(min_borrow_amount),
+         {:ok, fee} <- Math.to_decimal(fee) do
+      build(
+        attrs,
+        [
+          spread_bps: spread_bps,
+          min_borrow_amount: min_borrow_amount,
+          fee: fee,
+          fee_address: fee_address
+        ] ++ fields
+      )
+    end
+  end
+
+  defp spread(_, _), do: {:error, :invalid_attrs}
 
   # The fields every config shape carries. `fields` holds the parsed fields
   # the matching `new/1` clause's shape adds.

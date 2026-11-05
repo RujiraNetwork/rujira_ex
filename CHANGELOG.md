@@ -4,6 +4,198 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.8.0
+
+Breaking release: FIN, Ghost and block parsing now cover every config and
+response shape mainnet has served, and a block whose parse hit a node failure
+is returned as an error instead of being cached with generic events.
+
+### Migrating from 0.7.x
+
+- **FIN market makers.** `%Rujira.Fin.Pair{}.market_makers` is a list of
+  `Rujira.Fin.Pair.MarketMaker` structs, not of addresses. Replace
+  `pair.market_makers` with `Enum.map(pair.market_makers, & &1.address)`, and
+  guard for `nil` first: an S1 pair (no market-maker key in its config) now
+  reads `market_makers: nil`, not `[]` (#30).
+- **New `nil` fields.** These fields are `nil` when the shape being read does
+  not carry them. Match on `nil` before using them:
+  - `Rujira.Fin.Pair`: `fee_range`, `range_delta` and `range_min` (`nil`
+    before S3, and for whichever of them a shape lacks); `commits` (`nil`
+    before S6); `arb_market_makers` and `arb_commits` (`nil` before S7). An
+    empty list on the wire is `[]`, not `nil` (#31, #32).
+  - `Rujira.Ghost.Credit.full_liquidation_threshold` is
+    `non_neg_integer() | nil`: `nil` for the pre-v1.0.2 config (C1), and the
+    struct default (#40).
+  - `Rujira.Ghost.Vault.fee` and `fee_address` are `nil` for a vault from
+    before upstream `1303d28` (v1.0.0 to v1.0.5). `fee` is
+    `Decimal.t() | nil` and its struct default is `nil`, no longer
+    `Decimal.new(0)`, so guard before doing arithmetic on it (#41).
+  - `Rujira.Ghost.Vault.Borrower.available` is `Amount.t() | nil` (`nil` for
+    the v0.0.1 shape, and the struct default), and `asset` is `nil` for the
+    pre-v1.0.0 shapes, which have no `denom`. These reads used to fail on
+    pre-v1.0.0 vaults; they now succeed with the `nil`s (#42).
+  - Additive but also `nil`-able: `Rujira.ThorchainSwap.Strategy.arb_guard`
+    (`nil` before v1.4.0) and `Rujira.Ghost.Vault.Status.interest` (`nil`
+    from v1.0.0) (#37, #42).
+- **Block reads can fail.** `Rujira.Thorchain.Block.get/2` and
+  `Block.fetch_uncached/2` (and `Block.new/1`, `Rujira.Thorchain.block/0,2`)
+  return `{:error, reason}` when parsing a block's events or messages hits a
+  node, transport or timeout failure, `{:height_unavailable, _}` or any other
+  non-data reason. Such a block is not cached. Treat `{:error, _}` as a gap to
+  retry or backfill rather than assuming `{:ok, block}`. Malformed data
+  (`:invalid_*`) still degrades to the generic event or message with a
+  warning; `Rujira.Events.data_error?/1` tells the two apart (#27, #38, #39).
+- **Wider return contracts.** `Rujira.Thorchain.Block.Messages.parse/4`
+  returns `{:ok, message}` or `{:error, reason}`, not a bare message, and
+  `Rujira.Thorchain.Block.Tx.new/3` returns `{:ok, tx}` or
+  `{:error, reason}`, not a bare `Tx`. Direct callers must match the tuple
+  (#39).
+- **`Rujira.Coin.parse/1` passes non-data errors through.** A failed
+  denom-metadata read for an `x/` denom comes back unchanged, not as
+  `{:error, :invalid_coin_format}`. Code that matched only
+  `:invalid_coin_format` must handle other reasons too (#38).
+- **Stricter shape recognition.** Data that 0.7.3 accepted, or partly
+  dropped, is now `{:error, _}` when it matches no known shape:
+  - `Rujira.Fin.Pair`: an `{addr, arb}` market-maker object on a shape before
+    S8 (objects are S8-only); a market-maker entry of unknown shape; an arb
+    market maker of unknown kind; a key from a later shape without the rest of
+    that shape; `range_delta` without a range fee, or both `fee_amm` and
+    `fee_range` - all `{:error, :invalid_attrs}`. A non-numeric range value is
+    `{:error, :invalid_decimal}`, and a commit `msg` that is not valid base64
+    is `{:error, :invalid_msg}` (#30, #31, #32).
+  - `Rujira.ThorchainSwap.Strategy`: an `arb_guard` that is neither a string
+    nor `null` is `{:error, :invalid_attrs}` (#37).
+  - `wasm-rujira-fin/arb_lot` parses into `Rujira.Fin.Events.ArbLot` instead
+    of a generic `Rujira.Events.Event`; match on the new struct. An unknown
+    `arb_objective` is `{:error, :invalid_arb_objective}`, which in a block
+    degrades the event to the generic one (#33).
+  - `Rujira.Deployments.from_address/1` on a `rujira-thorchain-arb` guard
+    resolves to `Rujira.ThorchainArb.Guard` instead of returning
+    `{:error, :not_found}` (#35).
+
+### Added
+
+- FIN's `wasm-rujira-fin/arb_lot` event parses into
+  `Rujira.Fin.Events.ArbLot` (provider, `offer`/`ask` coins, the three
+  surplus/fee values as amounts, `arb_objective` as `:fin_surplus` or
+  `:total_rujira_surplus`, and `valuation` as a decimal). It was a generic
+  event before. An unknown `arb_objective` fails the parse with
+  `{:error, :invalid_arb_objective}` (#33).
+- `Rujira.ThorchainSwap.Strategy` has an `arb_guard` field: the address of
+  the VS v2 `rujira-thorchain-arb` guard a v1.4.0 strategy serves. It is `nil`
+  for strategies before v1.4.0 and for a v1.4.0 strategy serving `null`; any
+  other non-string `arb_guard` is `{:error, :invalid_attrs}`.
+  `list_strategies/1` returns v1 and v2 strategies together (#37, #28).
+- `Rujira.ThorchainArb`, reading `rujira-thorchain-arb` guard contracts with
+  `get/2`, `list/0,1` and `from_id/2` into `Rujira.ThorchainArb.Guard`.
+  `Deployments` now resolves the contract name, so `from_address/1` on a guard
+  no longer returns `{:error, :not_found}`. The config is mapped exactly as
+  the contract's `InstantiateMsg`: `markets` and `denoms` stay raw strings,
+  `fee` is split into `fee` and `fee_address`, and `prepared_fin_checksum` is
+  decoded bytes or `nil` when omitted (#35).
+- `Rujira.ThorchainArb.status/1,2` reads a guard's live status into
+  `Rujira.ThorchainArb.Status` (`height`, `claimed_pools`, `pending_hedges`,
+  `paused`), so a consumer can tell whether a guard is paused. It is cached
+  per block, and node errors come back unchanged (#36).
+- `Rujira.Coin.parse_single/1`: `parse/1` for a string that must hold exactly
+  one coin; any other count is `{:error, :invalid_coin_format}`.
+- `Rujira.Events.data_error?/1`: whether a parse failure is the data's fault
+  (`:invalid_*` or `{:invalid_*, _}`) rather than a failure a retry may
+  clear (#38).
+- `Rujira.Fin.Pair` has `fee_range`, `range_delta` and `range_min` as
+  decimals, and parses config shapes S3 (v1.2/v1.3, whose `fee_amm` is read
+  into `fee_range`), S4 (v2.0.0) and S5 (v2.1.x). A field a shape does not
+  carry is `nil`, so S0-S2 pairs have `nil` for all three. A config with
+  `range_delta` but neither range fee, or with both `fee_amm` and `fee_range`,
+  is `{:error, :invalid_attrs}`; a non-numeric value is
+  `{:error, :invalid_decimal}` (#31).
+- `Rujira.Fin.Pair` has `arb_market_makers` (a list of
+  `Rujira.Fin.Pair.ArbMarketMaker`, with `address` and a `kind` of
+  `:endblock` or the obsolete, still-accepted `:standard`), and `commits` and
+  `arb_commits` (lists of `Rujira.Fin.Pair.Commit`, with `address` and `msg`
+  as base64-decoded bytes, not JSON-parsed). It parses config shapes S6
+  (fin/v2.2.0, `commits`), S7 (`9126d72`, adding `arb_market_makers` and
+  `arb_commits`) and S8 (`dacb42c`) in full; on 0.7.3 these keys were
+  dropped. Shapes before S6 have `nil` for all three, and S6 has `nil` for the
+  two arb fields; an empty list on the wire is `[]`. A commit `msg` that is
+  not valid base64 is `{:error, :invalid_msg}`. An arb market maker of unknown
+  kind is `{:error, :invalid_attrs}`, and so is a config carrying a later
+  shape's key without the rest of that shape, or a shape before S8 with an
+  `{addr, arb?}` market-maker object. The `Pair` moduledoc has a version table
+  for S0-S8 (#32).
+
+### Changed
+
+- **Breaking:** `Rujira.Ghost.Vault` parses every vault `config` shape (#41).
+  A vault from before upstream `1303d28` (v1.0.0 to v1.0.5) now reads with
+  `fee: nil` and `fee_address: nil` instead of failing `get/2` and the whole of
+  `Rujira.Ghost.list_vaults/1`. `fee` is now `Decimal.t() | nil` and its struct
+  default is `nil`, no longer `Decimal.new(0)`: match on `nil` before doing
+  arithmetic on it. A v0.x vault, which has no `config` query, returns the
+  contract's error unchanged and still fails the list. The moduledoc has a
+  version table.
+- **Breaking:** `Rujira.Thorchain.Block.get/2` (and `Block.new/1`,
+  `Block.fetch_uncached/2`, `Rujira.Thorchain.block/0,2`) can now return
+  `{:error, reason}` for a failure while parsing a block's events. Only an
+  `:invalid_*` reason - malformed data - still degrades the event to a generic
+  `Rujira.Events.Event` with a warning. A node, transport or timeout failure,
+  `{:height_unavailable, _}`, or any other reason is returned unchanged, and
+  the block is not cached, so the next call retries. With several failures the
+  first in `{tx_idx, event_idx}` order is returned. Treat an `{:error, _}` as a
+  gap to retry or backfill. Pre-block, begin-block, tx and end-block events
+  are covered, and so are transaction messages (#27, #38, #39).
+- **Breaking:** a transaction message whose parse fails for a reason other
+  than its data - a failed `x/` denom-metadata read for one of its coins, say -
+  now fails the block the same way, instead of degrading to the generic
+  `Rujira.Thorchain.Block.Messages.Message`. A malformed message still
+  degrades, with its `unparsed message` warning. Within one transaction its
+  messages come before its events in block order, so a message failure is
+  reported ahead of an event failure in the same transaction. Direct callers
+  of `Rujira.Thorchain.Block.Messages.parse/4` now get `{:ok, message}` or
+  `{:error, reason}` instead of a bare message, and of
+  `Rujira.Thorchain.Block.Tx.new/3` `{:ok, tx}` or `{:error, reason}` instead
+  of a bare `Tx` (#39).
+- `Rujira.Coin.parse/1` returns a failed denom-metadata read unchanged rather
+  than as `{:error, :invalid_coin_format}`, which hid an `x/` denom's node
+  failure as malformed data (#38).
+- Ghost credit accounts: every account response shape mainnet has served is
+  covered by a fixture (A1, debt `shares` as `Uint128`, credit v1.0.0 to
+  `c1e1d62`; A2, `shares` as `Decimal`, from `3ee2d68`), and `Account`,
+  `LiquidationPreferences`, `Order`, `LiquidateMsg`, `Repay` and `Execute`
+  document their shapes in a version table. No drift was found in the
+  liquidation preferences, their `LiquidateMsg` variants or `Order`, so no
+  parsing changed (#43).
+- **Breaking.** `%Rujira.Fin.Pair{}.market_makers` is a list of
+  `Rujira.Fin.Pair.MarketMaker` structs (`address`, `arb`), not of addresses.
+  On 0.7.3 an upgraded pair's `{addr, arb}` entries were passed through as
+  raw maps, so code treating them as addresses silently found nothing (0 TVL).
+  Plain-address entries and objects without `arb` read as `arb: false`. A
+  pair whose config has no market-maker key (S1) now reads
+  `market_makers: nil`, not `[]`; a `null` singular `market_maker` (S0) is
+  still `[]`. An entry of unknown shape is `{:error, :invalid_attrs}` (#30).
+  Migration: replace `pair.market_makers` with
+  `Enum.map(pair.market_makers, & &1.address)` (guard for `nil` when reading
+  old pairs).
+- Ghost vault-side responses parse every shape they have had on mainnet
+  (#42). `Ghost.Vault.Borrower` reads the v0.0.1 shape (no `available`, no
+  `denom`) and the v0.1.x shape (no `denom`), with the absent fields `nil`, so
+  `vault_borrower/3`, `vault_borrowers/2` and a delegate's borrower no longer
+  fail on pre-v1.0.0 vaults. **Breaking:** `Borrower.available` is now
+  `Amount.t() | nil` and defaults to `nil`. `Ghost.Vault.Status` gains
+  `interest`, set from the v0.x status (which carried the interest curve
+  before it moved to `config`) and `nil` from v1.0.0. `delegate` and the
+  credit contract's `borrows` had no key changes. Each struct's moduledoc has
+  a version table.
+
+### Fixed
+
+- **Breaking:** `Rujira.Ghost.Credit.new/1` parses the pre-v1.0.2 credit
+  config (C1, v1.0.0 to v1.0.1), which has no `full_liquidation_threshold`,
+  so `Rujira.Ghost.get_credit/2` and `list_credits/1` work at heights before
+  about 26.05M. `full_liquidation_threshold` is now
+  `non_neg_integer() | nil`, `nil` for C1 (and the struct default). The
+  `Credit` moduledoc has a version table (#40).
+
 ## 0.7.3
 
 ### Changed

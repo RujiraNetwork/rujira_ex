@@ -149,6 +149,16 @@ defmodule Rujira.CoinTest do
   end
 
   describe "parse/1" do
+    test "a node read that fails while naming a denom is returned unchanged" do
+      dropped = %GRPC.RPCError{status: 14, message: "upstream connect error"}
+
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/coin-parse-dropped"} ->
+        {:error, dropped}
+      end)
+
+      assert {:error, ^dropped} = Coin.parse("1rune,5x/coin-parse-dropped")
+    end
+
     test "parses single coin (no space)" do
       assert {:ok, [%Coin{amount: 1000, asset: %Asset{id: "THOR.RUNE"}}]} = Coin.parse("1000rune")
     end
@@ -179,6 +189,30 @@ defmodule Rujira.CoinTest do
 
     test "returns error for invalid format" do
       assert {:error, :invalid_coin_format} = Coin.parse("notacoin")
+    end
+  end
+
+  describe "parse_single/1" do
+    test "parses a string holding exactly one coin" do
+      assert {:ok, %Coin{amount: 1000, asset: %Asset{id: "THOR.RUNE"}}} =
+               Coin.parse_single("1000rune")
+    end
+
+    test "a string holding several coins, or none, is invalid_coin_format" do
+      assert {:error, :invalid_coin_format} = Coin.parse_single("1000rune,500tcy")
+      assert {:error, :invalid_coin_format} = Coin.parse_single("")
+    end
+
+    test "a parse error is returned unchanged" do
+      assert {:error, :invalid_coin_format} = Coin.parse_single("notacoin")
+
+      dropped = %GRPC.RPCError{status: 14, message: "upstream connect error"}
+
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/coin-single-dropped"} ->
+        {:error, dropped}
+      end)
+
+      assert {:error, ^dropped} = Coin.parse_single("5x/coin-single-dropped")
     end
   end
 

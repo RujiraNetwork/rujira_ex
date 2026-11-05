@@ -1,6 +1,8 @@
 defmodule Rujira.EventsTest do
   use ExUnit.Case, async: true
 
+  doctest Rujira.Events, only: [data_error?: 1]
+
   alias Rujira.Brune.Events.Event, as: BruneEvent
   alias Rujira.Brune.Events.NodeBond, as: BruneNodeBond
   alias Rujira.Events
@@ -348,6 +350,25 @@ defmodule Rujira.EventsTest do
       assert {:ok,
               %Rujira.Events.Event{type: nil, attributes: %{"pool" => "BTC.BTC", "id" => "123"}}} =
                Events.parse(block_event)
+    end
+  end
+
+  describe "data_error?/1" do
+    test "only an :invalid_* reason, bare or tagged, is the data's fault" do
+      for reason <- [:invalid_attrs, :invalid_coin_format, {:invalid_message, %{}}],
+          do: assert(Events.data_error?(reason))
+
+      for reason <- [
+            :timeout,
+            :not_found,
+            :invalid,
+            nil,
+            "invalid_attrs",
+            {:height_unavailable, 7},
+            {:invalid_attrs, 1, 2},
+            %GRPC.RPCError{status: 14, message: "unavailable"}
+          ],
+          do: refute(Events.data_error?(reason))
     end
   end
 end

@@ -102,6 +102,12 @@ defmodule Rujira.EnumTest do
       assert {:ok, [1, 3]} = result
     end
 
+    # How long to wait for a crashing task's exit to reach the caller. Nothing
+    # here is timed - the exit arrives as soon as the task has crashed and
+    # logged its crash report - so the bound only has to outlast a loaded
+    # machine; it is a ceiling, not an expected duration.
+    @crash_wait 30_000
+
     # Intended: a crash is a bug, and the linked task takes the caller down
     # with it rather than becoming an error tuple. See #13.
     @tag :capture_log
@@ -117,7 +123,7 @@ defmodule Rujira.EnumTest do
           )
         end)
 
-      assert_receive {:EXIT, ^pid, :killed}, 1_000
+      assert_receive {:EXIT, ^pid, :killed}, @crash_wait
       refute_receive {:result, _}, 50
     end
 
@@ -134,7 +140,7 @@ defmodule Rujira.EnumTest do
         )
       end)
 
-      assert_receive {:result, {:error, :boom}}, 1_000
+      assert_receive {:result, {:error, :boom}}, @crash_wait
     end
 
     test "surfaces a timeout as an error, unlabelled when no label is given" do

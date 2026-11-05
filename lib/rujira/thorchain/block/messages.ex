@@ -8,9 +8,17 @@ defmodule Rujira.Thorchain.Block.Messages do
   `Rujira.Thorchain.Block.Messages.Message` carrying the `@type` and the map
   the node sent.
 
-  Parsing never fails. A known type whose body does not parse is logged - in
-  the same style as an unparsed event - and kept as a generic message too, so a
-  message the library mis-reads costs that message's detail, never the block.
+  A message that does not parse is handled by why it failed, as
+  `Rujira.Events.data_error?/1` tells - the same rule a block's events follow:
+
+  - **The data's fault** - an `:invalid_*` reason, such as a body missing a
+    field. The message is logged - in the same style as an unparsed event -
+    and kept as a generic message, so a message the library mis-reads costs
+    that message's detail, never the block.
+  - **Anything else** - a node read that failed while resolving one of the
+    message's coins (an `x/` denom's metadata), say. `parse/4` returns
+    `{:error, reason}` with the reason unchanged, after a warning, and the
+    block it belongs to fails rather than hiding the gap.
 
   The types with a struct of their own:
 
@@ -32,7 +40,7 @@ defmodule Rujira.Thorchain.Block.Messages do
   | `/types.MsgObservedTxOut` | `Rujira.Thorchain.Block.Messages.ObservedTxOut` |
   """
 
-  alias Rujira.Logger
+  alias Rujira.Thorchain.Block.Degrade
   alias Rujira.Thorchain.Block.Messages.ClearAdmin
   alias Rujira.Thorchain.Block.Messages.Deposit
   alias Rujira.Thorchain.Block.Messages.ExecuteContract
@@ -69,28 +77,25 @@ defmodule Rujira.Thorchain.Block.Messages do
 
   `height` and the two indices place the message in its block, for the warning
   a message that does not parse is logged with.
+
+  A message whose data does not parse is `{:ok, message}` with the generic
+  `Rujira.Thorchain.Block.Messages.Message`; any other failure is
+  `{:error, reason}` - see the moduledoc.
   """
-  @spec parse(term(), non_neg_integer(), non_neg_integer(), non_neg_integer()) :: t()
+  @spec parse(term(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ::
+          {:ok, t()} | {:error, term()}
   def parse(%{"@type" => type} = msg, height, tx_idx, msg_idx) when is_binary(type) do
     case new(type, msg) do
-      {:ok, data} -> data
-      {:error, reason} -> warn(Message.new(type, msg), reason, type, height, tx_idx, msg_idx)
-      :pass -> Message.new(type, msg)
+      {:ok, data} -> {:ok, data}
+      {:error, reason} -> degrade(type, msg, reason, {height, tx_idx, msg_idx})
+      :pass -> {:ok, Message.new(type, msg)}
     end
   end
 
-  def parse(%{} = msg, _height, _tx_idx, _msg_idx), do: Message.new(nil, msg)
+  def parse(%{} = msg, _height, _tx_idx, _msg_idx), do: {:ok, Message.new(nil, msg)}
 
   def parse(msg, height, tx_idx, msg_idx),
-    do:
-      warn(
-        Message.new(nil, %{"value" => msg}),
-        {:invalid_message, msg},
-        nil,
-        height,
-        tx_idx,
-        msg_idx
-      )
+    do: degrade(nil, %{"value" => msg}, {:invalid_message, msg}, {height, tx_idx, msg_idx})
 
   # --- Private ---
 
@@ -110,13 +115,13 @@ defmodule Rujira.Thorchain.Block.Messages do
   defp new("/types.MsgObservedTxOut", msg), do: ObservedTxOut.new(msg)
   defp new(_type, _msg), do: :pass
 
-  defp warn(message, reason, type, height, tx_idx, msg_idx) do
-    Logger.warning(
+  defp degrade(type, msg, reason, {height, tx_idx, msg_idx}) do
+    Degrade.degrade(
+      reason,
       __MODULE__,
-      "unparsed message height=#{height} tx_idx=#{tx_idx} msg_idx=#{msg_idx} " <>
-        "type=#{type} #{inspect(reason)}"
+      "message",
+      "height=#{height} tx_idx=#{tx_idx} msg_idx=#{msg_idx} type=#{type}",
+      fn -> Message.new(type, msg) end
     )
-
-    message
   end
 end

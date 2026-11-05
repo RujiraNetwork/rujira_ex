@@ -275,7 +275,156 @@ defmodule Rujira.Ghost.Credit.AccountTest do
     end
   end
 
+  # One fixture per account shape the contract has served, built from the
+  # upstream `schema/rujira-ghost-credit.json` at that shape's commit (no archive
+  # node is available). Each carries both liquidation-message variants and an
+  # order entry, so every credit-side response type is read in every shape.
+  describe "historical shapes, through Rujira.Ghost" do
+    test "A1 (credit v1.0.0, 355aafa, to 3ee2d68): debt shares are Uint128" do
+      MockNode.expect(fn
+        %{"account" => "thor1account"} -> MockNode.ok(a1_response())
+        %{"all_accounts" => _} -> MockNode.ok(%{"accounts" => [a1_response()]})
+      end)
+
+      assert {:ok, account} =
+               Rujira.Ghost.credit_account("thor1credit", "thor1account", height: @height)
+
+      assert_shape(account, Decimal.new("500"), Decimal.new("50"))
+
+      assert {:ok, [^account]} = Rujira.Ghost.credit_accounts("thor1credit", height: @height)
+    end
+
+    test "A2 (3ee2d68, ghost-vault v1.1.0, and later): debt shares are Decimal" do
+      MockNode.expect(fn
+        %{"account" => "thor1account"} -> MockNode.ok(a2_response())
+        %{"all_accounts" => _} -> MockNode.ok(%{"accounts" => [a2_response()]})
+      end)
+
+      assert {:ok, account} =
+               Rujira.Ghost.credit_account("thor1credit", "thor1account", height: @height)
+
+      assert_shape(account, Decimal.new("500.25"), Decimal.new("50.125"))
+
+      assert {:ok, [^account]} = Rujira.Ghost.credit_accounts("thor1credit", height: @height)
+    end
+
+    test "unknown extra keys are ignored at every level" do
+      extra = fn map -> Map.put(map, "future", true) end
+
+      response =
+        a2_response()
+        |> extra.()
+        |> Map.update!("liquidation_preferences", fn prefs ->
+          prefs |> extra.() |> Map.update!("order", extra)
+        end)
+
+      MockNode.expect(fn %{"account" => _} -> MockNode.ok(response) end)
+
+      assert {:ok, account} =
+               Rujira.Ghost.credit_account("thor1credit", "thor1account", height: @height)
+
+      assert_shape(account, Decimal.new("500.25"), Decimal.new("50.125"))
+    end
+
+    test "an order without its limit matches no shape" do
+      order = %{"map" => %{"btc-btc" => "eth-eth"}}
+      response = put_in(a2_response(), ["liquidation_preferences", "order"], order)
+
+      MockNode.expect(fn %{"account" => _} -> MockNode.ok(response) end)
+
+      assert {:error, :invalid_attrs} =
+               Rujira.Ghost.credit_account("thor1credit", "thor1account", height: @height)
+    end
+
+    test "an execute step without its funds matches no shape" do
+      messages = [%{"execute" => %{"contract_addr" => "thor1fin", "msg" => "e30="}}]
+      response = put_in(a2_response(), ["liquidation_preferences", "messages"], messages)
+
+      MockNode.expect(fn %{"account" => _} -> MockNode.ok(response) end)
+
+      assert {:error, :invalid_attrs} =
+               Rujira.Ghost.credit_account("thor1credit", "thor1account", height: @height)
+    end
+  end
+
+  defp assert_shape(account, borrower_shares, delegate_shares) do
+    assert %Account{
+             id: "thor1credit/thor1account",
+             owner: "thor1owner",
+             tag: "main",
+             collaterals: [%Collateral{coin: %{amount: 100}}],
+             debts: [%Debt{delegate: %Delegate{current: 50} = delegate}],
+             liquidation_preferences: %LiquidationPreferences{
+               messages: [
+                 %LiquidateMsg.Repay{asset: repay},
+                 %LiquidateMsg.Execute{contract: "thor1fin", msg: ~s({"swap":{}}), funds: [fund]}
+               ],
+               order: %Order{entries: [entry], limit: 100}
+             }
+           } = account
+
+    assert Decimal.equal?(delegate.shares, delegate_shares)
+    assert Decimal.equal?(delegate.borrower.shares, borrower_shares)
+    assert repay.id == "THOR.RUNE"
+    assert fund.asset.id == "BTC-BTC"
+    assert {entry.asset.id, entry.after.id} == {"BTC-BTC", "ETH-ETH"}
+  end
+
   # --- Fixtures ---
+
+  # AccountResponse at 355aafa: `BorrowerResponse.shares` and
+  # `DelegateResponse.shares` are `Uint128`, so integer strings.
+  defp a1_response, do: shaped_response("500", "50")
+
+  # AccountResponse at 3ee2d68: both `shares` are `Decimal`.
+  defp a2_response, do: shaped_response("500.25", "50.125")
+
+  defp shaped_response(borrower_shares, delegate_shares) do
+    %{
+      "owner" => "thor1owner",
+      "account" => "thor1account",
+      "tag" => "main",
+      "collaterals" => [
+        %{
+          "collateral" => %{"coin" => %{"denom" => "btc-btc", "amount" => "100"}},
+          "value_full" => "10",
+          "value_adjusted" => "8"
+        }
+      ],
+      "debts" => [
+        %{
+          "debt" => %{
+            "borrower" => %{
+              "addr" => "thor1credit",
+              "denom" => "rune",
+              "limit" => "1000",
+              "current" => "500",
+              "shares" => borrower_shares,
+              "available" => "500"
+            },
+            "addr" => "thor1account",
+            "current" => "50",
+            "shares" => delegate_shares
+          },
+          "value" => "5"
+        }
+      ],
+      "ltv" => "0.5",
+      "liquidation_preferences" => %{
+        "messages" => [
+          %{"repay" => "rune"},
+          %{
+            "execute" => %{
+              "contract_addr" => "thor1fin",
+              "msg" => Base.encode64(~s({"swap":{}})),
+              "funds" => [%{"denom" => "btc-btc", "amount" => "100"}]
+            }
+          }
+        ],
+        "order" => %{"map" => %{"btc-btc" => "eth-eth"}, "limit" => 100}
+      }
+    }
+  end
 
   defp response(overrides \\ %{}) do
     Map.merge(

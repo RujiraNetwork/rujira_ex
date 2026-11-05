@@ -3,6 +3,12 @@ defmodule Rujira.Ghost.Credit.LiquidationPreferences do
   An account owner's liquidation preferences: the route steps the contract
   injects at the start of a liquidation, and the order constraints it enforces
   once those are exhausted.
+
+  One shape since credit v1.0.0; unknown extra keys are ignored:
+
+  | Shape | Upstream                            | Keys              |
+  | ----- | ----------------------------------- | ----------------- |
+  | P1    | credit v1.0.0 (`355aafa`) and later | `messages, order` |
   """
 
   alias Rujira.Ghost.Credit.LiquidateMsg

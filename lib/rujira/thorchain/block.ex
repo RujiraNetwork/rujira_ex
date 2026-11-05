@@ -61,10 +61,38 @@ defmodule Rujira.Thorchain.Block do
 
   Concurrency is invisible in the result: the stream is `ordered:`, so the
   transactions come back in block order and the events still sort into the
-  `{tx_idx, event_idx}` order the node executed them in. A unit that cannot
-  parse an event or a message degrades it to a generic one with a warning
-  exactly as a sequential parse would, and an exception inside a unit is
-  carried back and re-raised in the caller rather than swallowed.
+  `{tx_idx, event_idx}` order the node executed them in. An exception inside a
+  unit is carried back and re-raised in the caller rather than swallowed.
+
+  ## Parse failures
+
+  An event that does not parse is handled by why it failed, as
+  `Rujira.Events.data_error?/1` tells:
+
+  - **The data's fault** - an `:invalid_*` reason, such as a malformed
+    attribute. The slot degrades to the generic `Rujira.Events.Event` and a
+    warning is logged; the block is still `{:ok, block}`.
+  - **Anything else** - a node, transport or timeout failure while the parse
+    read the node (an `x/` denom's metadata), `{:height_unavailable, _}`, or a
+    reason nobody anticipated. The block fails: `new/1`, `get/2` and
+    `fetch_uncached/2` return `{:error, reason}`, the reason unchanged, and
+    nothing is cached, so the next call retries the reads. A degraded block
+    would look exactly like a good one, and an indexer could not tell it had a
+    gap to backfill.
+
+  The same holds at every event stage, and for a transaction's messages - see
+  `Rujira.Thorchain.Block.Messages`: a malformed message degrades to the
+  generic message, and a message whose coin read failed fails the block. Each
+  failure is warned about with its slot: height, stage, `tx_idx` and
+  `event_idx` for an event, height, `tx_idx` and `msg_idx` for a message.
+
+  With several failures, the one reported is the first in block order:
+  `{tx_idx, event_idx}` order, where within one transaction its messages, in
+  `msg_idx` order, come before all of its events - a transaction's messages run
+  before it emits its events. A unit stops at its first failure, every unit
+  runs to completion - none is cancelled - and the units' results are then
+  read in block order, so which unit happened to finish first never decides
+  the answer.
 
   This is the one fan-out in the library that does not go through
   `Rujira.Enum.reduce_async_while_ok/4`: that helper's policy is a per-item
@@ -88,13 +116,14 @@ defmodule Rujira.Thorchain.Block do
 
   `:latest` is the clock a consumer reads new heights from, so it is never
   cached, and a failed read is never cached either - the next call retries.
+  That includes a block whose parse failed on a node read.
   """
 
   alias Rujira.Cache
   alias Rujira.Events
-  alias Rujira.Logger
   alias Rujira.Node
   alias Rujira.String
+  alias Rujira.Thorchain.Block.Degrade
   alias Rujira.Thorchain.Block.Event
   alias Rujira.Thorchain.Block.Observation
   alias Rujira.Thorchain.Block.Tx
@@ -152,13 +181,14 @@ defmodule Rujira.Thorchain.Block do
 
   `time` is the header's RFC3339 timestamp, kept at microsecond precision - the
   node renders nanoseconds, which `DateTime` truncates. An absent timestamp is
-  `nil`; an unparsable one is `{:error, :invalid_time}`.
+  `nil`; an unparsable one is `{:error, :invalid_time}`. An event whose parse
+  fails for a reason other than its data is the block's error - see "Parse
+  failures" above.
   """
   @spec new(raw()) :: {:ok, t()} | {:error, term()}
   def new(%QueryBlockResponse{header: %BlockResponseHeader{} = header} = res) do
-    with {:ok, time} <- time(header.time) do
-      {txs, events} = build(res, header.height)
-
+    with {:ok, time} <- time(header.time),
+         {:ok, {txs, events}} <- build(res, header.height) do
       {:ok,
        %__MODULE__{
          height: header.height,
@@ -296,7 +326,7 @@ defmodule Rujira.Thorchain.Block do
     |> Enum.map(fn {tx, idx} -> {:tx, idx, tx} end)
   end
 
-  defp run(units, false, _count, height), do: Enum.map(units, &unit(&1, height))
+  defp run(units, false, _count, height), do: chunk(units, height)
 
   defp run(units, true, count, height) do
     concurrency = System.schedulers_online()
@@ -308,7 +338,7 @@ defmodule Rujira.Thorchain.Block do
       timeout: :infinity,
       max_concurrency: concurrency
     )
-    |> Enum.flat_map(fn {:ok, results} -> Enum.map(results, &unwrap/1) end)
+    |> Enum.flat_map(fn {:ok, results} -> results end)
   end
 
   defp chunk_size(count, concurrency), do: ceil(count / concurrency)
@@ -316,58 +346,79 @@ defmodule Rujira.Thorchain.Block do
   # An exception, throw or exit is carried back rather than left to the task's
   # link, so it is raised in the caller - the process a sequential parse would
   # have raised it in - with its original kind, reason and stacktrace, and is
-  # not first mangled into the stream's exit or a CaseClauseError here.
+  # not first mangled into the stream's exit or a CaseClauseError here. The
+  # inline path carries it back the same way, so both paths agree on which of
+  # several failing units is reported: the first in block order.
   defp chunk(units, height), do: Enum.map(units, &rescued(&1, height))
 
   defp rescued(work, height) do
-    {:ok, unit(work, height)}
+    unit(work, height)
   rescue
     exception -> {:raised, :error, exception, __STACKTRACE__}
   catch
     kind, reason -> {:raised, kind, reason, __STACKTRACE__}
   end
 
-  defp unwrap({:ok, result}), do: result
   defp unwrap({:raised, kind, reason, stacktrace}), do: :erlang.raise(kind, reason, stacktrace)
+  defp unwrap(result), do: result
 
-  defp unit({:stage, stage, tx_idx, events}, height),
-    do: {nil, stage_events(stage, tx_idx, nil, events, height)}
+  # A unit is `{:ok, {tx | nil, events}}`, or the first failure inside it.
+  defp unit({:stage, stage, tx_idx, events}, height) do
+    with {:ok, events} <- stage_events(stage, tx_idx, nil, events, height),
+         do: {:ok, {nil, events}}
+  end
 
-  defp unit({:tx, idx, %QueryBlockTx{hash: hash, result: result} = tx}, height),
-    do: {Tx.new(tx, idx, height), stage_events(:tx, idx, hash, result_events(result), height)}
+  # A transaction's messages parse before its events - the order the node ran
+  # them in - so a message failure is reported ahead of an event failure in the
+  # same transaction.
+  defp unit({:tx, idx, %QueryBlockTx{hash: hash, result: result} = tx}, height) do
+    with {:ok, tx} <- Tx.new(tx, idx, height),
+         {:ok, events} <- stage_events(:tx, idx, hash, result_events(result), height),
+         do: {:ok, {tx, events}}
+  end
 
+  # Every unit has run to completion by now, and the units are in block order -
+  # the stream is `ordered:` - so the first failure met here is the first in
+  # `{tx_idx, event_idx}` order, whichever unit happened to finish first.
   defp collect(results) do
-    {txs, events} = Enum.unzip(results)
+    with {:ok, results} <- Rujira.Enum.reduce_while_ok(results, &unwrap/1) do
+      {txs, events} = Enum.unzip(results)
 
-    {Enum.reject(txs, &is_nil/1),
-     events |> List.flatten() |> Enum.sort_by(&{&1.tx_idx, &1.event_idx})}
+      {:ok,
+       {Enum.reject(txs, &is_nil/1),
+        events |> List.flatten() |> Enum.sort_by(&{&1.tx_idx, &1.event_idx})}}
+    end
   end
 
   defp result_events(%BlockTxResult{events: events}), do: events
   defp result_events(_result), do: []
 
+  # A unit's events parse in order and stop at the first that fails, so the
+  # failure a unit reports is its first in `event_idx` order.
   defp stage_events(stage, tx_idx, txhash, events, height) do
     events
     |> Enum.with_index()
-    |> Enum.map(fn {raw, event_idx} ->
+    |> Rujira.Enum.reduce_while_ok(fn {raw, event_idx} ->
       cast = Events.cast(raw)
-      Event.new(stage, tx_idx, event_idx, txhash, parse(cast, stage, tx_idx, event_idx, height))
+
+      with {:ok, event} <- parse(cast, stage, tx_idx, event_idx, height),
+           do: {:ok, Event.new(stage, tx_idx, event_idx, txhash, event)}
     end)
   end
 
   defp parse(%{type: type, attributes: attrs} = cast, stage, tx_idx, event_idx, height) do
     case Events.parse(cast) do
       {:ok, event} ->
-        event
+        {:ok, event}
 
       {:error, reason} ->
-        Logger.warning(
+        Degrade.degrade(
+          reason,
           __MODULE__,
-          "unparsed event height=#{height} stage=#{stage} tx_idx=#{tx_idx} " <>
-            "event_idx=#{event_idx} type=#{type} #{inspect(reason)}"
+          "event",
+          "height=#{height} stage=#{stage} tx_idx=#{tx_idx} event_idx=#{event_idx} type=#{type}",
+          fn -> Events.Event.new(type, attrs) end
         )
-
-        Events.Event.new(type, attrs)
     end
   end
 end
