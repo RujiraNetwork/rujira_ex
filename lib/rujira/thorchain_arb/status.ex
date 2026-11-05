@@ -22,13 +22,13 @@ defmodule Rujira.ThorchainArb.Status do
 
   # --- Struct ---
 
-  defstruct height: 0, claimed_pools: [], pending_hedges: 0, paused: false
+  defstruct height: nil, claimed_pools: nil, pending_hedges: nil, paused: nil
 
   @type t :: %__MODULE__{
-          height: non_neg_integer(),
-          claimed_pools: [String.t()],
-          pending_hedges: non_neg_integer(),
-          paused: boolean()
+          height: non_neg_integer() | nil,
+          claimed_pools: [String.t()] | nil,
+          pending_hedges: non_neg_integer() | nil,
+          paused: boolean() | nil
         }
 
   # --- Construction ---
