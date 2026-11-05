@@ -149,6 +149,16 @@ defmodule Rujira.CoinTest do
   end
 
   describe "parse/1" do
+    test "a node read that fails while naming a denom is returned unchanged" do
+      dropped = %GRPC.RPCError{status: 14, message: "upstream connect error"}
+
+      MockNode.expect(fn %QueryDenomMetadataRequest{denom: "x/coin-parse-dropped"} ->
+        {:error, dropped}
+      end)
+
+      assert {:error, ^dropped} = Coin.parse("1rune,5x/coin-parse-dropped")
+    end
+
     test "parses single coin (no space)" do
       assert {:ok, [%Coin{amount: 1000, asset: %Asset{id: "THOR.RUNE"}}]} = Coin.parse("1000rune")
     end

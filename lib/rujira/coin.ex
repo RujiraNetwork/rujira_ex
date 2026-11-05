@@ -92,8 +92,12 @@ defmodule Rujira.Coin do
   @doc """
   Parse a comma-separated coin string into a list of coins.
   Supports both `"1000rune"` and `"1000 rune"` formats.
+
+  A string that is not a coin list is `{:error, :invalid_coin_format}`. Naming
+  an `x/` denom reads its metadata from the node, and a read that fails is
+  returned unchanged - it is not the string's fault, and a retry may succeed.
   """
-  @spec parse(String.t()) :: {:ok, [t()]} | {:error, :invalid_coin_format}
+  @spec parse(String.t()) :: {:ok, [t()]} | {:error, term()}
   def parse(str) when is_binary(str), do: parse_coins(str, &parse_one/1)
 
   defp parse_one(str) do
@@ -136,13 +140,19 @@ defmodule Rujira.Coin do
     |> Enum.reduce_while({:ok, []}, fn part, {:ok, acc} ->
       case build_fn.(part) do
         {:ok, coin} -> {:cont, {:ok, [coin | acc]}}
-        {:error, _} -> {:halt, {:error, :invalid_coin_format}}
+        {:error, reason} -> {:halt, {:error, coin_error(reason)}}
       end
     end)
     |> case do
       {:ok, coins} -> {:ok, Enum.reverse(coins)}
       error -> error
     end
+  end
+
+  # A leg the string itself spoils is reported as the string's format; a node
+  # read that failed is passed through, so a caller can tell it apart.
+  defp coin_error(reason) do
+    if Rujira.Events.data_error?(reason), do: :invalid_coin_format, else: reason
   end
 
   defp parse_asset_one(str) do

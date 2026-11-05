@@ -7,11 +7,16 @@ defmodule Rujira.Thorchain.BlockTest do
 
   import ExUnit.CaptureLog
 
+  alias Cosmos.Bank.V1beta1.Metadata, as: DenomMetadata
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataRequest
+  alias Cosmos.Bank.V1beta1.QueryDenomMetadataResponse
+  alias Rujira.Coin
   alias Rujira.Events
   alias Rujira.Test.MockNode
   alias Rujira.Thorchain.Block
   alias Rujira.Thorchain.Events.Event, as: TcEvent
   alias Rujira.Thorchain.Events.SetMimir
+  alias Rujira.Thorchain.Events.Transfer
   alias Thorchain.Types.BlockEvent
   alias Thorchain.Types.BlockResponseHeader
   alias Thorchain.Types.BlockTxResult
@@ -25,6 +30,7 @@ defmodule Rujira.Thorchain.BlockTest do
     message: "failed to load state at height 100004: version does not exist"
   }
   @other %GRPC.RPCError{status: 2, message: "boom"}
+  @dropped %GRPC.RPCError{status: 14, message: "upstream connect error"}
 
   describe "new/1" do
     test "keeps the header's nanosecond time at microsecond precision" do
@@ -350,7 +356,159 @@ defmodule Rujira.Thorchain.BlockTest do
     end
   end
 
+  describe "a node read that fails while parsing an event" do
+    test "fails the block, caches nothing, and the next healthy read is fully typed" do
+      height = 100_020
+      denom = "x/block-errors-a"
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} -> {:ok, response(height, txs: [tx("HASH0", [transfer(denom)])])}
+        %QueryDenomMetadataRequest{denom: ^denom} -> {:error, @dropped}
+      end)
+
+      assert {:error, @dropped} = Block.get(height)
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} -> {:ok, response(height, txs: [tx("HASH0", [transfer(denom)])])}
+        %QueryDenomMetadataRequest{denom: ^denom} -> {:ok, metadata(denom, "BLKA")}
+      end)
+
+      assert {:ok, %Block{events: [%{event: %TcEvent{data: %Transfer{coins: [coin]}}}]}} =
+               Block.get(height)
+
+      assert %Coin{amount: 100, asset: %{symbol: "BLKA"}} = coin
+    end
+
+    test "fails the block from every event stage, through get/2 and fetch_uncached/2" do
+      for {stage, {key, tx_idx}, height} <- [
+            {:pre_block, {:finalize_events, -2}, 100_021},
+            {:begin, {:begin_events, -1}, 100_022},
+            {:tx, {:txs, 0}, 100_023},
+            {:end, {:end_events, 2_147_483_647}, 100_024}
+          ] do
+        denom = "x/block-errors-#{stage}"
+        events = [event("ok_a"), transfer(denom)]
+        slot = if key == :txs, do: [tx("HASH0", events)], else: events
+
+        MockNode.expect(fn
+          %QueryBlockRequest{} -> {:ok, response(height, [{key, slot}])}
+          %QueryDenomMetadataRequest{denom: ^denom} -> {:error, :timeout}
+        end)
+
+        log =
+          capture_log(fn ->
+            assert {:error, :timeout} = Block.get(height)
+            assert {:error, :timeout} = Block.fetch_uncached(height)
+          end)
+
+        assert log =~ "height=#{height} stage=#{stage} tx_idx=#{tx_idx} event_idx=1"
+      end
+    end
+
+    test "a node error naming the height propagates like any other" do
+      height = 100_025
+      denom = "x/block-errors-height"
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} -> {:ok, response(height, begin_events: [transfer(denom)])}
+        %QueryDenomMetadataRequest{} -> {:error, {:height_unavailable, height}}
+      end)
+
+      assert {:error, {:height_unavailable, ^height}} = Block.get(height)
+    end
+
+    test "the first failing slot in block order wins, and every unit still runs" do
+      height = 100_026
+      count = 24
+
+      # tx 3 fails slowly and tx 17 fails at once, so the later slot finishes
+      # first; begin and end both fail too, and begin precedes every tx.
+      txs =
+        for i <- 0..(count - 1) do
+          tx("HASH#{i}", [event("tx#{i}_a"), transfer("x/block-errors-tx#{i}")])
+        end
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} ->
+          {:ok,
+           response(height,
+             begin_events: [event("begin_a"), transfer("x/block-errors-begin-first")],
+             end_events: [transfer("x/block-errors-end-last")],
+             txs: txs
+           )}
+
+        %QueryDenomMetadataRequest{denom: "x/block-errors-begin-first"} ->
+          slow_error({:first, :begin})
+
+        %QueryDenomMetadataRequest{denom: "x/block-errors-tx3"} ->
+          slow_error({:tx, 3})
+
+        %QueryDenomMetadataRequest{denom: "x/block-errors-tx17"} ->
+          {:error, {:tx, 17}}
+
+        %QueryDenomMetadataRequest{denom: "x/block-errors-end-last"} ->
+          {:error, {:last, :end}}
+
+        %QueryDenomMetadataRequest{denom: denom} ->
+          {:ok, metadata(denom, "OK")}
+      end)
+
+      capture_log(fn -> assert {:error, {:first, :begin}} = Block.get(height) end)
+
+      read = for %QueryDenomMetadataRequest{denom: denom} <- requests(), do: denom
+      assert "x/block-errors-end-last" in read
+      assert Enum.all?(0..(count - 1), &("x/block-errors-tx#{&1}" in read))
+    end
+
+    test "without the begin failure, the earlier of two failing transactions wins" do
+      height = 100_027
+
+      txs =
+        for i <- 0..23, do: tx("HASH#{i}", [transfer("x/block-errors-b#{i}")])
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} -> {:ok, response(height, txs: txs)}
+        %QueryDenomMetadataRequest{denom: "x/block-errors-b3"} -> slow_error({:tx, 3})
+        %QueryDenomMetadataRequest{denom: "x/block-errors-b17"} -> {:error, {:tx, 17}}
+        %QueryDenomMetadataRequest{denom: denom} -> {:ok, metadata(denom, "OK")}
+      end)
+
+      capture_log(fn -> assert {:error, {:tx, 3}} = Block.get(height) end)
+    end
+
+    test "a data error in one slot still degrades while another slot's read succeeds" do
+      height = 100_028
+      denom = "x/block-errors-healthy"
+
+      MockNode.expect(fn
+        %QueryBlockRequest{} ->
+          {:ok,
+           response(height,
+             begin_events: [event("set_mimir", %{"key" => "HALTTHORCHAIN"}), transfer(denom)]
+           )}
+
+        %QueryDenomMetadataRequest{denom: ^denom} ->
+          {:ok, metadata(denom, "HEALTHY")}
+      end)
+
+      capture_log(fn ->
+        assert {:ok, %Block{events: [%{event: unparsed}, %{event: typed}]}} = Block.get(height)
+        assert %Events.Event{type: "set_mimir"} = unparsed
+        assert %TcEvent{data: %Transfer{}} = typed
+      end)
+    end
+  end
+
   # --- Fixtures ---
+
+  defp transfer(denom),
+    do: event("transfer", %{"sender" => "a", "recipient" => "b", "amount" => "100#{denom}"})
+
+  defp metadata(denom, symbol) do
+    %QueryDenomMetadataResponse{
+      metadata: %DenomMetadata{base: denom, display: denom, symbol: symbol, denom_units: []}
+    }
+  end
 
   defp response(height, opts \\ []) do
     %QueryBlockResponse{
@@ -382,6 +540,19 @@ defmodule Rujira.Thorchain.BlockTest do
   defp untyped_event(attrs) do
     pairs = Enum.map(attrs, fn {key, value} -> %EventKeyValuePair{key: key, value: value} end)
     %BlockEvent{event_kv_pair: pairs}
+  end
+
+  defp slow_error(reason) do
+    Process.sleep(20)
+    {:error, reason}
+  end
+
+  defp requests(acc \\ []) do
+    receive do
+      {:mock_node, request, _opts} -> requests([request | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
   end
 
   defp drain(acc \\ []) do

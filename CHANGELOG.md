@@ -4,6 +4,30 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Changed
+
+- **Breaking:** `Rujira.Thorchain.Block.get/2` (and `Block.new/1`,
+  `Block.fetch_uncached/2`, `Rujira.Thorchain.block/0,2`) can now return
+  `{:error, reason}` for a failure while parsing a block's events. Only an
+  `:invalid_*` reason - malformed data - still degrades the event to a generic
+  `Rujira.Events.Event` with a warning. A node, transport or timeout failure,
+  `{:height_unavailable, _}`, or any other reason is returned unchanged, and
+  the block is not cached, so the next call retries. With several failures the
+  first in `{tx_idx, event_idx}` order is returned. Treat an `{:error, _}` as a
+  gap to retry or backfill. Pre-block, begin-block, tx and end-block events
+  are covered; transaction messages are not yet (#27, #38).
+- `Rujira.Coin.parse/1` returns a failed denom-metadata read unchanged rather
+  than as `{:error, :invalid_coin_format}`, which hid an `x/` denom's node
+  failure as malformed data (#38).
+
+### Added
+
+- `Rujira.Events.data_error?/1`: whether a parse failure is the data's fault
+  (`:invalid_*` or `{:invalid_*, _}`) rather than a failure a retry may
+  clear (#38).
+
 ## 0.7.3
 
 ### Changed
