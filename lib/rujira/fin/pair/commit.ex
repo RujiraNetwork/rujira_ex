@@ -8,19 +8,20 @@ defmodule Rujira.Fin.Pair.Commit do
 
   On the wire it is `{addr, msg}`, where `msg` is a CosmWasm `Binary`
   (base64). `msg` holds the decoded bytes; they are not JSON-parsed. A `msg`
-  that is not valid base64 is `{:error, :invalid_attrs}`.
+  that is not valid base64 is `{:error, :invalid_msg}`; any other shape is
+  `{:error, :invalid_attrs}`.
   """
+
+  alias Rujira.String
 
   defstruct address: nil, msg: nil
 
   @type t :: %__MODULE__{address: String.t() | nil, msg: binary() | nil}
 
-  @spec new(map()) :: {:ok, t()} | {:error, :invalid_attrs}
+  @spec new(map()) :: {:ok, t()} | {:error, :invalid_attrs | :invalid_msg}
   def new(%{"addr" => address, "msg" => msg}) when is_binary(address) and is_binary(msg) do
-    case Base.decode64(msg) do
-      {:ok, msg} -> {:ok, %__MODULE__{address: address, msg: msg}}
-      :error -> {:error, :invalid_attrs}
-    end
+    with {:ok, msg} <- String.decode_base64(msg),
+         do: {:ok, %__MODULE__{address: address, msg: msg}}
   end
 
   def new(_), do: {:error, :invalid_attrs}

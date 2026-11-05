@@ -264,7 +264,7 @@ Use consistent error atoms across the codebase:
 | `:invalid_time` | An RFC3339 timestamp from the chain cannot be parsed |
 | `:invalid_id` | ID format doesn't match expected pattern |
 | `:invalid_denom` | Denom not recognized by `Assets.from_denom/1` |
-| `:invalid_msg` | A base64 `msg` from the chain does not decode (e.g. `Rujira.Revenue.Converter`, `Rujira.Ghost.Credit`) |
+| `:invalid_msg` | A base64 `msg` from the chain does not decode (e.g. `Rujira.Revenue.Converter`, `Rujira.Ghost.Credit`, `Rujira.Fin.Pair.Commit`) |
 | `:invalid_checksum` | A base64 checksum from the chain does not decode (`Rujira.ThorchainArb.Guard`'s `prepared_fin_checksum`) |
 | `:invalid_asset_id` | Asset id rejected by `Assets.from_id/1` |
 | `:invalid_offer` | `Fin.Simulation.ask_asset/2`'s offer denom matches neither side of the pair |

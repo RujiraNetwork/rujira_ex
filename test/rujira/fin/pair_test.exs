@@ -344,7 +344,7 @@ defmodule Rujira.Fin.PairTest do
         reset!()
         shape(shape) |> Map.put(key, bad) |> serve_config()
 
-        assert {:error, :invalid_attrs} = Fin.get_pair(@s8_address, height: @height)
+        assert {:error, :invalid_msg} = Fin.get_pair(@s8_address, height: @height)
       end
     end
 
