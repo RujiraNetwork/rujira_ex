@@ -7,6 +7,18 @@ defmodule Rujira.Ghost.Credit do
   borrower positions the contract itself holds - loaded with `load/2`, and
   `:not_loaded` until then.
 
+  Parses every config shape the contract has served: a credit contract read
+  at a height before its migration to v1.0.2 serves the older shape. Fields a
+  shape does not carry are `nil`:
+
+  | Shape | Contract         | Upstream            | `full_liquidation_threshold` |
+  | ----- | ---------------- | ------------------- | ---------------------------- |
+  | C1    | v1.0.0 to v1.0.1 | `355aafa` `e099bac` | `nil`                        |
+  | C2    | v1.0.2 and later | `8ba0d25`           | set                          |
+
+  Every other config field is common to both shapes. A config matching
+  neither is `{:error, :invalid_attrs}`; unknown extra keys are ignored.
+
   Struct, construction, and queries. Use `Rujira.Ghost` as the public API.
   """
 
@@ -43,7 +55,7 @@ defmodule Rujira.Ghost.Credit do
             liquidation_max_slip: Decimal.new(0),
             liquidation_threshold: Decimal.new(0),
             adjustment_threshold: Decimal.new(0),
-            full_liquidation_threshold: 0,
+            full_liquidation_threshold: nil,
             borrows: :not_loaded
 
   @type t :: %__MODULE__{
@@ -57,50 +69,21 @@ defmodule Rujira.Ghost.Credit do
           liquidation_max_slip: Decimal.t(),
           liquidation_threshold: Decimal.t(),
           adjustment_threshold: Decimal.t(),
-          full_liquidation_threshold: non_neg_integer(),
+          full_liquidation_threshold: non_neg_integer() | nil,
           borrows: :not_loaded | [Borrower.t()]
         }
 
   # --- Construction ---
 
   @spec new(map()) :: {:ok, t()} | {:error, term()}
-  def new(%{
-        "address" => address,
-        "code_id" => code_id,
-        "collateral_ratios" => collateral_ratios,
-        "fee_liquidation" => fee_liquidation,
-        "fee_liquidator" => fee_liquidator,
-        "fee_address" => fee_address,
-        "liquidation_max_slip" => liquidation_max_slip,
-        "liquidation_threshold" => liquidation_threshold,
-        "adjustment_threshold" => adjustment_threshold,
-        "full_liquidation_threshold" => full_liquidation_threshold
-      })
-      when is_map(collateral_ratios) do
-    with {:ok, code_id} <- Math.to_integer(code_id),
-         {:ok, collateral_ratios} <- collateral_ratios(collateral_ratios),
-         {:ok, fee_liquidation} <- Math.to_decimal(fee_liquidation),
-         {:ok, fee_liquidator} <- Math.to_decimal(fee_liquidator),
-         {:ok, liquidation_max_slip} <- Math.to_decimal(liquidation_max_slip),
-         {:ok, liquidation_threshold} <- Math.to_decimal(liquidation_threshold),
-         {:ok, adjustment_threshold} <- Math.to_decimal(adjustment_threshold),
-         {:ok, full_liquidation_threshold} <- Math.to_integer(full_liquidation_threshold) do
-      {:ok,
-       %__MODULE__{
-         id: address,
-         address: address,
-         code_id: code_id,
-         collateral_ratios: collateral_ratios,
-         fee_liquidation: fee_liquidation,
-         fee_liquidator: fee_liquidator,
-         fee_address: fee_address,
-         liquidation_max_slip: liquidation_max_slip,
-         liquidation_threshold: liquidation_threshold,
-         adjustment_threshold: adjustment_threshold,
-         full_liquidation_threshold: full_liquidation_threshold
-       }}
+  def new(%{"full_liquidation_threshold" => full_liquidation_threshold} = attrs) do
+    with {:ok, full_liquidation_threshold} <- Math.to_integer(full_liquidation_threshold) do
+      build(attrs, full_liquidation_threshold)
     end
   end
+
+  def new(attrs) when is_map(attrs) and not is_map_key(attrs, "full_liquidation_threshold"),
+    do: build(attrs, nil)
 
   def new(_), do: {:error, :invalid_attrs}
 
@@ -173,6 +156,47 @@ defmodule Rujira.Ghost.Credit do
         err
     end
   end
+
+  defp build(
+         %{
+           "address" => address,
+           "code_id" => code_id,
+           "collateral_ratios" => collateral_ratios,
+           "fee_liquidation" => fee_liquidation,
+           "fee_liquidator" => fee_liquidator,
+           "fee_address" => fee_address,
+           "liquidation_max_slip" => liquidation_max_slip,
+           "liquidation_threshold" => liquidation_threshold,
+           "adjustment_threshold" => adjustment_threshold
+         },
+         full_liquidation_threshold
+       )
+       when is_map(collateral_ratios) do
+    with {:ok, code_id} <- Math.to_integer(code_id),
+         {:ok, collateral_ratios} <- collateral_ratios(collateral_ratios),
+         {:ok, fee_liquidation} <- Math.to_decimal(fee_liquidation),
+         {:ok, fee_liquidator} <- Math.to_decimal(fee_liquidator),
+         {:ok, liquidation_max_slip} <- Math.to_decimal(liquidation_max_slip),
+         {:ok, liquidation_threshold} <- Math.to_decimal(liquidation_threshold),
+         {:ok, adjustment_threshold} <- Math.to_decimal(adjustment_threshold) do
+      {:ok,
+       %__MODULE__{
+         id: address,
+         address: address,
+         code_id: code_id,
+         collateral_ratios: collateral_ratios,
+         fee_liquidation: fee_liquidation,
+         fee_liquidator: fee_liquidator,
+         fee_address: fee_address,
+         liquidation_max_slip: liquidation_max_slip,
+         liquidation_threshold: liquidation_threshold,
+         adjustment_threshold: adjustment_threshold,
+         full_liquidation_threshold: full_liquidation_threshold
+       }}
+    end
+  end
+
+  defp build(_attrs, _full_liquidation_threshold), do: {:error, :invalid_attrs}
 
   # A `BTreeMap<denom, ratio>` on the wire - keyed by denom, so sorted by denom
   # here too rather than left to map iteration order.

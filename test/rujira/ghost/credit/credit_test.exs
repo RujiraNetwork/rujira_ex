@@ -4,6 +4,7 @@ defmodule Rujira.Ghost.CreditTest do
   # from an empty cache.
   use Rujira.Test.CacheCase, async: false
 
+  alias Rujira.Ghost
   alias Rujira.Ghost.Credit
   alias Rujira.Ghost.Credit.CollateralRatio
   alias Rujira.Ghost.Vault.Borrower
@@ -148,6 +149,52 @@ defmodule Rujira.Ghost.CreditTest do
     end
   end
 
+  # One fixture per config shape the contract has served, built from the
+  # upstream `schema/rujira-ghost-credit.json` at the shape's commit (no archive
+  # node is available to capture real historical responses).
+  describe "config shapes" do
+    test "C1 (v1.0.0-v1.0.1) parses with full_liquidation_threshold nil" do
+      MockNode.expect(fn %{"config" => _} -> MockNode.ok(c1_config()) end)
+
+      assert {:ok, %Credit{full_liquidation_threshold: nil, fee_address: "thor1fee"} = credit} =
+               Ghost.get_credit("thor1credit", height: @height)
+
+      assert [%CollateralRatio{}, %CollateralRatio{}] = credit.collateral_ratios
+      assert Decimal.equal?(credit.adjustment_threshold, Decimal.new("0.9"))
+    end
+
+    test "C2 (v1.0.2+) parses full_liquidation_threshold" do
+      MockNode.expect(fn %{"config" => _} -> MockNode.ok(c2_config()) end)
+
+      assert {:ok, %Credit{full_liquidation_threshold: 100}} =
+               Ghost.get_credit("thor1credit", height: @height)
+    end
+
+    test "list_credits/1 lists C1 and C2 contracts together" do
+      {:ok, agent} = Agent.start_link(fn -> [c1_config(), c2_config()] end)
+
+      MockNode.expect(fn
+        %QueryContractInfosRequest{} ->
+          {:ok, %{infos: [info("thor1credita"), info("thor1creditb")]}}
+
+        %{"config" => _} ->
+          MockNode.ok(Agent.get_and_update(agent, fn [next | rest] -> {next, rest} end))
+      end)
+
+      assert {:ok, credits} = Ghost.list_credits(height: @height)
+
+      assert credits |> Enum.map(& &1.full_liquidation_threshold) |> Enum.sort() == [100, nil]
+    end
+
+    test "a config matching no known shape is invalid_attrs" do
+      MockNode.expect(fn %{"config" => _} ->
+        MockNode.ok(Map.delete(c1_config(), "liquidation_threshold"))
+      end)
+
+      assert {:error, :invalid_attrs} = Ghost.get_credit("thor1credit", height: @height)
+    end
+  end
+
   describe "load/2" do
     test "loads the contract's own vault borrower positions" do
       MockNode.expect(fn %{"borrows" => %{}} ->
@@ -201,6 +248,24 @@ defmodule Rujira.Ghost.CreditTest do
 
   defp info(address),
     do: %ContractInfo{address: address, contract: "rujira-ghost-credit", version: "1.0.4"}
+
+  # C1: v1.0.0 (`355aafa`) and v1.0.1 (`e099bac`), without
+  # `full_liquidation_threshold`.
+  defp c1_config do
+    %{
+      "code_id" => 12,
+      "collateral_ratios" => %{"btc-btc" => "0.8", "eth-eth" => "0.7"},
+      "fee_liquidation" => "0.01",
+      "fee_liquidator" => "0.02",
+      "fee_address" => "thor1fee",
+      "liquidation_max_slip" => "0.3",
+      "liquidation_threshold" => "1",
+      "adjustment_threshold" => "0.9"
+    }
+  end
+
+  # C2: v1.0.2 (`8ba0d25`) onwards, adding `full_liquidation_threshold` (Uint128).
+  defp c2_config, do: Map.put(c1_config(), "full_liquidation_threshold", "100")
 
   defp config(overrides \\ %{}) do
     Map.merge(

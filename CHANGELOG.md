@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Fixed
+
+- **Breaking:** `Rujira.Ghost.Credit.new/1` parses the pre-v1.0.2 credit
+  config (C1, v1.0.0 to v1.0.1), which has no `full_liquidation_threshold`,
+  so `Rujira.Ghost.get_credit/2` and `list_credits/1` work at heights before
+  about 26.05M. `full_liquidation_threshold` is now
+  `non_neg_integer() | nil`, `nil` for C1 (and the struct default). The
+  `Credit` moduledoc has a version table (#40).
+
 ## 0.7.3
 
 ### Changed
