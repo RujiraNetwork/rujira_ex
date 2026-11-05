@@ -29,27 +29,27 @@ defmodule Rujira.ThorchainArb.Guard do
 
   defstruct id: nil,
             address: nil,
-            markets: nil,
-            denoms: nil,
-            max_queue: nil,
-            max_offer_bps: nil,
-            reserve_fee: nil,
-            fee: nil,
+            markets: [],
+            denoms: [],
+            max_queue: 0,
+            max_offer_bps: 0,
+            reserve_fee: Decimal.new(0),
+            fee: Decimal.new(0),
             fee_address: nil,
-            chain_defaults: nil,
+            chain_defaults: %{},
             prepared_fin_checksum: nil
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
           address: String.t() | nil,
-          markets: [String.t()] | nil,
-          denoms: [String.t()] | nil,
-          max_queue: non_neg_integer() | nil,
-          max_offer_bps: non_neg_integer() | nil,
-          reserve_fee: Decimal.t() | nil,
-          fee: Decimal.t() | nil,
+          markets: [String.t()],
+          denoms: [String.t()],
+          max_queue: non_neg_integer(),
+          max_offer_bps: non_neg_integer(),
+          reserve_fee: Decimal.t(),
+          fee: Decimal.t(),
           fee_address: String.t() | nil,
-          chain_defaults: %{String.t() => integer()} | nil,
+          chain_defaults: %{String.t() => integer()},
           prepared_fin_checksum: binary() | nil
         }
 
