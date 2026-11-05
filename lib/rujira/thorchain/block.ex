@@ -80,12 +80,19 @@ defmodule Rujira.Thorchain.Block do
     would look exactly like a good one, and an indexer could not tell it had a
     gap to backfill.
 
-  The same holds at every event stage. Each failure is warned about with its
-  height, stage, `tx_idx` and `event_idx`. With several failures, the one
-  reported is the first in `{tx_idx, event_idx}` order: a unit stops at its
-  first failing event, every unit runs to completion - none is cancelled - and
-  the units' results are then read in block order, so which unit happened to
-  finish first never decides the answer.
+  The same holds at every event stage, and for a transaction's messages - see
+  `Rujira.Thorchain.Block.Messages`: a malformed message degrades to the
+  generic message, and a message whose coin read failed fails the block. Each
+  failure is warned about with its slot: height, stage, `tx_idx` and
+  `event_idx` for an event, height, `tx_idx` and `msg_idx` for a message.
+
+  With several failures, the one reported is the first in block order:
+  `{tx_idx, event_idx}` order, where within one transaction its messages, in
+  `msg_idx` order, come before all of its events - a transaction's messages run
+  before it emits its events. A unit stops at its first failure, every unit
+  runs to completion - none is cancelled - and the units' results are then
+  read in block order, so which unit happened to finish first never decides
+  the answer.
 
   This is the one fan-out in the library that does not go through
   `Rujira.Enum.reduce_async_while_ok/4`: that helper's policy is a per-item
@@ -361,9 +368,13 @@ defmodule Rujira.Thorchain.Block do
          do: {:ok, {nil, events}}
   end
 
+  # A transaction's messages parse before its events - the order the node ran
+  # them in - so a message failure is reported ahead of an event failure in the
+  # same transaction.
   defp unit({:tx, idx, %QueryBlockTx{hash: hash, result: result} = tx}, height) do
-    with {:ok, events} <- stage_events(:tx, idx, hash, result_events(result), height),
-         do: {:ok, {Tx.new(tx, idx, height), events}}
+    with {:ok, tx} <- Tx.new(tx, idx, height),
+         {:ok, events} <- stage_events(:tx, idx, hash, result_events(result), height),
+         do: {:ok, {tx, events}}
   end
 
   # Every unit has run to completion by now, and the units are in block order -

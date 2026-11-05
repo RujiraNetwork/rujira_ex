@@ -48,7 +48,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the block is not cached, so the next call retries. With several failures the
   first in `{tx_idx, event_idx}` order is returned. Treat an `{:error, _}` as a
   gap to retry or backfill. Pre-block, begin-block, tx and end-block events
-  are covered; transaction messages are not yet (#27, #38).
+  are covered, and so are transaction messages (#27, #38, #39).
+- **Breaking:** a transaction message whose parse fails for a reason other
+  than its data - a failed `x/` denom-metadata read for one of its coins, say -
+  now fails the block the same way, instead of degrading to the generic
+  `Rujira.Thorchain.Block.Messages.Message`. A malformed message still
+  degrades, with its `unparsed message` warning. Within one transaction its
+  messages come before its events in block order, so a message failure is
+  reported ahead of an event failure in the same transaction. Direct callers
+  of `Rujira.Thorchain.Block.Messages.parse/4` now get `{:ok, message}` or
+  `{:error, reason}` instead of a bare message, and of
+  `Rujira.Thorchain.Block.Tx.new/3` `{:ok, tx}` or `{:error, reason}` instead
+  of a bare `Tx` (#39).
 - `Rujira.Coin.parse/1` returns a failed denom-metadata read unchanged rather
   than as `{:error, :invalid_coin_format}`, which hid an `x/` denom's node
   failure as malformed data (#38).

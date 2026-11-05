@@ -32,7 +32,9 @@ defmodule Rujira.Thorchain.Block.Tx do
 
   A transaction whose JSON does not decode keeps its `hash` and `code` with no
   messages, after a warning: a transaction the library cannot read costs that
-  transaction's detail, never the block. A transaction the node sent no JSON
+  transaction's detail, never the block. A message that fails to parse for a
+  reason other than its data - a node read - fails the transaction instead;
+  see `Rujira.Thorchain.Block.Messages`. A transaction the node sent no JSON
   for at all is not an error and is not warned about - there was nothing to
   decode.
   """
@@ -60,18 +62,28 @@ defmodule Rujira.Thorchain.Block.Tx do
 
   # --- Construction ---
 
-  @doc "The transaction at `idx` of the block at `height`. Never fails."
-  @spec new(raw(), non_neg_integer(), non_neg_integer()) :: t()
+  @doc """
+  The transaction at `idx` of the block at `height`.
+
+  Data that does not parse never fails it - see the moduledoc. A message whose
+  parse fails for any other reason, such as a node read, is
+  `{:error, reason}`: the first such message in `msg_idx` order, and the
+  messages after it are not parsed.
+  """
+  @spec new(raw(), non_neg_integer(), non_neg_integer()) :: {:ok, t()} | {:error, term()}
   def new(%QueryBlockTx{hash: hash, tx: raw, result: result}, idx, height) do
     body = decode(raw, height, idx)
 
-    %__MODULE__{
-      idx: idx,
-      hash: String.nil_if_empty(hash),
-      code: code(result),
-      memo: memo(body),
-      messages: messages(body, height, idx)
-    }
+    with {:ok, messages} <- messages(body, height, idx) do
+      {:ok,
+       %__MODULE__{
+         idx: idx,
+         hash: String.nil_if_empty(hash),
+         code: code(result),
+         memo: memo(body),
+         messages: messages
+       }}
+    end
   end
 
   # --- Private ---
@@ -105,11 +117,13 @@ defmodule Rujira.Thorchain.Block.Tx do
   defp messages(%{"body" => %{"messages" => msgs}}, height, idx) when is_list(msgs),
     do: parse(msgs, height, idx)
 
-  defp messages(_body, _height, _idx), do: []
+  defp messages(_body, _height, _idx), do: {:ok, []}
 
   defp parse(msgs, height, idx) do
     msgs
     |> Enum.with_index()
-    |> Enum.map(fn {msg, msg_idx} -> Messages.parse(msg, height, idx, msg_idx) end)
+    |> Rujira.Enum.reduce_while_ok(fn {msg, msg_idx} ->
+      Messages.parse(msg, height, idx, msg_idx)
+    end)
   end
 end
