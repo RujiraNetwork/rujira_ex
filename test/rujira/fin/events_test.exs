@@ -4,6 +4,7 @@ defmodule Rujira.Fin.EventsTest do
   alias Rujira.Events.Event
   alias Rujira.Fin.Events
   alias Rujira.Fin.Events.Arb
+  alias Rujira.Fin.Events.ArbLot
   alias Rujira.Fin.Events.Event, as: FinEvent
   alias Rujira.Fin.Events.OrderCreate
   alias Rujira.Fin.Events.OrderIncrease
@@ -562,6 +563,56 @@ defmodule Rujira.Fin.EventsTest do
     test "arb" do
       assert {:ok, %FinEvent{data: %Arb{base: 100, quote: 200}}} =
                parse("wasm-rujira-fin/arb", %{"base" => "100", "quote" => "200"})
+    end
+  end
+
+  describe "arb_lot" do
+    # Attributes as `arb_lot.rs` on `feat/optimize` emits them: coins via
+    # cosmwasm `Coin::to_string` (`<amount><denom>`), values as `Decimal256`.
+    @arb_lot %{
+      "provider" => "thor1provider",
+      "offer" => "150000000btc-btc",
+      "ask" => "100000000rune",
+      "protocol_range_fee_value" => "12.5",
+      "fin_surplus_value" => "340.75",
+      "total_surplus_value" => "1000",
+      "arb_objective" => "total_rujira_surplus",
+      "valuation" => "0.0125"
+    }
+
+    defp parse_arb_lot(attrs) do
+      Rujira.Events.parse(%{
+        type: "wasm-rujira-fin/arb_lot",
+        attributes: Map.put(attrs, "_contract_address", "thor1fin")
+      })
+    end
+
+    test "parses every field" do
+      assert {:ok, %FinEvent{address: "thor1fin", data: %ArbLot{} = lot}} =
+               parse_arb_lot(@arb_lot)
+
+      assert lot.provider == "thor1provider"
+      assert %Rujira.Coin{amount: 150_000_000, asset: %{id: "BTC-BTC"}} = lot.offer
+      assert %Rujira.Coin{amount: 100_000_000, asset: %{id: "THOR.RUNE"}} = lot.ask
+      assert lot.protocol_range_fee_value == 12
+      assert lot.fin_surplus_value == 340
+      assert lot.total_surplus_value == 1000
+      assert lot.arb_objective == :total_rujira_surplus
+      assert Decimal.equal?(lot.valuation, Decimal.new("0.0125"))
+    end
+
+    test "parses the fin_surplus objective" do
+      assert {:ok, %FinEvent{data: %ArbLot{arb_objective: :fin_surplus}}} =
+               parse_arb_lot(%{@arb_lot | "arb_objective" => "fin_surplus"})
+    end
+
+    test "an unknown objective fails with an invalid reason" do
+      assert {:error, reason} = parse_arb_lot(%{@arb_lot | "arb_objective" => "max_volume"})
+      assert reason |> Atom.to_string() |> String.starts_with?("invalid_")
+    end
+
+    test "a missing attribute fails with an invalid reason" do
+      assert {:error, :invalid_attrs} = parse_arb_lot(Map.delete(@arb_lot, "valuation"))
     end
   end
 
