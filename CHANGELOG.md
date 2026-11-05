@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+
+- FIN's `wasm-rujira-fin/arb_lot` event parses into
+  `Rujira.Fin.Events.ArbLot` (provider, `offer`/`ask` coins, the three
+  surplus/fee values as amounts, `arb_objective` as `:fin_surplus` or
+  `:total_rujira_surplus`, and `valuation` as a decimal). It was a generic
+  event before. An unknown `arb_objective` fails the parse with
+  `{:error, :invalid_arb_objective}` (#33).
+
 ## 0.7.3
 
 ### Changed
