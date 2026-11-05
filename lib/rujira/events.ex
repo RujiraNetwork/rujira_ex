@@ -101,6 +101,35 @@ defmodule Rujira.Events do
 
   def parse(_), do: {:error, :invalid_event}
 
+  @doc """
+  Whether a parse failure's `reason` is the data's fault.
+
+  True for an `:invalid_*` atom and an `{:invalid_*, detail}` tuple - the
+  reasons a parser gives for input it cannot read. Anything else is not:
+  a node, transport or timeout failure, `{:height_unavailable, height}`, and
+  any reason nobody anticipated.
+
+  A block parse uses this to choose between degrading a slot and failing the
+  block: data the parser cannot read degrades to the generic struct, but a
+  failure that is not the data's fault may succeed on a retry, so it is
+  returned rather than hidden. See `Rujira.Thorchain.Block`.
+
+      iex> Rujira.Events.data_error?(:invalid_attrs)
+      true
+      iex> Rujira.Events.data_error?({:invalid_message, 42})
+      true
+      iex> Rujira.Events.data_error?(:timeout)
+      false
+      iex> Rujira.Events.data_error?({:height_unavailable, 100})
+      false
+  """
+  @spec data_error?(term()) :: boolean()
+  def data_error?(reason) when is_atom(reason), do: invalid?(reason)
+  def data_error?({reason, _detail}) when is_atom(reason), do: invalid?(reason)
+  def data_error?(_reason), do: false
+
+  defp invalid?(reason), do: match?("invalid_" <> _, Atom.to_string(reason))
+
   defp route(%Event{type: "wasm-rujira-fin/" <> _} = event),
     do: Rujira.Fin.Events.parse(event)
 
