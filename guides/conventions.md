@@ -271,6 +271,7 @@ Use consistent error atoms across the codebase:
 | `:invalid_price` | `Fin.Price.parse/1`, `parse_order/1` or `from_query/1` given a shape it doesn't recognise |
 | `:invalid_range` | `Fin.Events.TradeRange.parse/1` given a log entry it can't parse |
 | `:invalid_ranges` | `Fin.Events.TradeRange.parse_list/1` given a range-list attribute it can't parse |
+| `:invalid_arb_objective` | `Fin.Events.ArbLot.new/1` got an `arb_objective` other than `fin_surplus` or `total_rujira_surplus` |
 | `:unexpected_result` | `Rujira.Enum.reduce_async_while_ok/4`'s fallback clause - a task result matched none of the expected shapes |
 | `:no_native_denom` | `Assets.to_native/1` on an asset that is not held as a bank denom |
 | `:invalid_coin_format` | `Coin.parse/1` cannot tokenize the input |
