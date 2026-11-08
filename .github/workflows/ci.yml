@@ -84,6 +84,14 @@ jobs:
         if: matrix.primary
         run: mix dialyzer
 
+      # Hex is a Mix archive, not a dependency: neither mix.lock nor
+      # .tool-versions pins it, and setup-beam installs whatever is latest.
+      # Hex < 2.5.0 reports no advisories, so an unpinned Hex can change what the
+      # audit below checks between runs with no commit here. Bump deliberately.
+      - name: Pin Hex
+        if: matrix.primary
+        run: mix local.hex 2.6.0 --force
+
       # Reports retired packages and known security advisories. Blocking: this
       # library is published to Hex, so its dependency tree is every
       # consumer's. The findings also go to the run summary.

@@ -57,10 +57,11 @@ On top of the five, CI also runs a few checks that need no local discipline:
 | `mix hex.audit` | Flags retired packages and security advisories — this library is published to Hex. Blocking. |
 | `mix docs --warnings-as-errors` | Fails on any broken documentation reference — the docs ship to HexDocs. |
 
-> **Note:** `mix hex.audit` only reports security advisories on Hex 2.5 and
-> later. On older Hex it checks retired packages alone and prints
-> `No retired packages found` — a false all-clear. Trust the CI run, not a
-> local audit, unless you have checked your Hex version with `mix hex --version`.
+> **Note:** CI pins Hex 2.6.0 (`mix local.hex 2.6.0 --force`). Hex is a Mix
+> archive, so neither `mix.lock` nor `.tool-versions` pins it; each Elixir
+> install carries its own. Hex < 2.5.0 does not report security advisories —
+> it checks retired packages alone and prints `No retired packages found`, a
+> false all-clear. Check `mix hex --version` before trusting a local audit.
 
 ## Test coverage
 
